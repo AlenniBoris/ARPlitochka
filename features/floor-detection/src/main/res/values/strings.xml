@@ -19,4 +19,9 @@
     <string name="yes">yes</string>
     <string name="no">no</string>
     <string name="area_format">%.2f м²</string>
+    <string name="btn_add_point">Поставить точку</string>
+    <string name="btn_undo">Отменить</string>
+    <string name="btn_ok">ОК</string>
+    <string name="btn_clear_section">Удалить секцию</string>
+    <string name="polygon_closed">Контур замкнут</string>
 </resources>

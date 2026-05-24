@@ -2,12 +2,18 @@ package com.example.arplitka.features.floordetection.domain.model
 
 import com.example.arplitka.features.floordetection.R
 import com.example.arplitka.shared.ui.UiText
+import com.google.ar.core.Pose
 import com.google.ar.core.TrackingState
 
 enum class FloorDetectionState {
     SearchingFloor,
     CandidateFound
 }
+
+data class ArPoint(
+    val pose: Pose,
+    val id: Long = System.nanoTime()
+)
 
 data class FloorUiState(
     val detectionState: FloorDetectionState = FloorDetectionState.SearchingFloor,
@@ -17,7 +23,12 @@ data class FloorUiState(
     val hasCenterHit: Boolean = false,
     val isDepthEnabled: Boolean = false,
     val statusText: UiText = UiText.StringResource(R.string.initialization),
-    val instructionText: UiText = UiText.StringResource(R.string.please_wait)
+    val instructionText: UiText = UiText.StringResource(R.string.please_wait),
+    val points: List<ArPoint> = emptyList(),
+    val isPolygonClosed: Boolean = false,
+    val isFinalized: Boolean = false,
+    val currentHitPose: Pose? = null,
+    val snappedPointIndex: Int? = null // Index of the point we are currently snapping to
 )
 
 /**
@@ -30,5 +41,6 @@ data class ArFrameResult(
     val selectedArea: Float,
     val hasCenterHit: Boolean,
     val isFloorDetected: Boolean,
-    val isDepthEnabled: Boolean
+    val isDepthEnabled: Boolean,
+    val hitPose: Pose? = null
 )

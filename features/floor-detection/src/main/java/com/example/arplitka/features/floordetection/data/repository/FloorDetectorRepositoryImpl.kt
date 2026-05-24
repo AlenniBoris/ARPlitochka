@@ -47,7 +47,8 @@ class FloorDetectorRepositoryImpl @Inject constructor() : IFloorDetectorReposito
             selectedArea = selectedPlane?.area() ?: (allHorizontalPlanes.maxOfOrNull { it.area() } ?: 0f),
             hasCenterHit = centerHit != null,
             isFloorDetected = selectedPlane != null,
-            isDepthEnabled = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
+            isDepthEnabled = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC),
+            hitPose = centerHit?.hitPose
         )
     }
 
