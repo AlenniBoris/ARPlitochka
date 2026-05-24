@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">AR Plitka</string>
+    <string name="permission_camera_title">Нужен доступ к камере</string>
+    <string name="permission_camera_message">AR Plitka использует камеру, чтобы найти поверхность пола.</string>
+    <string name="permission_camera_button">Разрешить доступ</string>
+    <string name="arcore_checking_title">Проверяем ARCore</string>
+    <string name="arcore_checking_message">Подождите несколько секунд, пока устройство проверяет поддержку AR.</string>
+    <string name="arcore_unsupported_title">ARCore не поддерживается</string>
+    <string name="arcore_unsupported_message">Это устройство не поддерживает ARCore, поэтому поиск пола в дополненной реальности недоступен.</string>
+</resources>

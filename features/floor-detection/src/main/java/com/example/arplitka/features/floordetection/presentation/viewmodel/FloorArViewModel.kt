@@ -5,9 +5,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.ViewModel
+import com.example.arplitka.features.floordetection.R
 import com.example.arplitka.features.floordetection.domain.model.FloorDetectionState
 import com.example.arplitka.features.floordetection.domain.model.FloorUiState
 import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFrameUseCase
+import com.example.arplitka.shared.ui.UiText
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
@@ -31,8 +33,8 @@ class FloorArViewModel @Inject constructor(
                 horizontalPlaneCount = result.horizontalPlaneCount,
                 hasCenterHit = false,
                 isDepthEnabled = result.isDepthEnabled,
-                statusText = "Трекинг потерян",
-                instructionText = "Медленно наведите камеру на пол",
+                statusText = UiText.StringResource(R.string.status_tracking_lost),
+                instructionText = UiText.StringResource(R.string.instruction_move_phone),
             )
         } else if (!result.isFloorDetected) {
             FloorUiState(
@@ -42,8 +44,8 @@ class FloorArViewModel @Inject constructor(
                 selectedArea = result.selectedArea,
                 hasCenterHit = result.hasCenterHit,
                 isDepthEnabled = result.isDepthEnabled,
-                statusText = "Наведите камеру на пол",
-                instructionText = "Ищем подходящую поверхность"
+                statusText = UiText.StringResource(R.string.status_searching),
+                instructionText = UiText.StringResource(R.string.instruction_searching)
             )
         } else {
             FloorUiState(
@@ -53,8 +55,8 @@ class FloorArViewModel @Inject constructor(
                 selectedArea = result.selectedArea,
                 hasCenterHit = true,
                 isDepthEnabled = result.isDepthEnabled,
-                statusText = "Пол обнаружен",
-                instructionText = "Поверхность отображается точками"
+                statusText = UiText.StringResource(R.string.status_candidate),
+                instructionText = UiText.StringResource(R.string.instruction_detected)
             )
         }
     }

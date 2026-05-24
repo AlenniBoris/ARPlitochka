@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import com.example.arplitka.features.floordetection.presentation.screen.FloorArScreen
@@ -78,9 +79,9 @@ private fun CameraPermissionGate(content: @Composable () -> Unit) {
         content()
     } else {
         BlockingMessage(
-            title = "Нужен доступ к камере",
-            message = "AR Plitka использует камеру, чтобы найти поверхность пола.",
-            actionText = "Разрешить доступ",
+            title = stringResource(R.string.permission_camera_title),
+            message = stringResource(R.string.permission_camera_message),
+            actionText = stringResource(R.string.permission_camera_button),
             onAction = { permissionLauncher.launch(Manifest.permission.CAMERA) }
         )
     }
@@ -105,12 +106,12 @@ private fun ArCoreAvailabilityGate(content: @Composable () -> Unit) {
     when {
         availability.isSupported -> content()
         availability.isTransient -> BlockingMessage(
-            title = "Проверяем ARCore",
-            message = "Подождите несколько секунд, пока устройство проверяет поддержку AR.",
+            title = stringResource(R.string.arcore_checking_title),
+            message = stringResource(R.string.arcore_checking_message),
         )
         else -> BlockingMessage(
-            title = "ARCore не поддерживается",
-            message = "Это устройство не поддерживает ARCore, поэтому поиск пола в дополненной реальности недоступен.",
+            title = stringResource(R.string.arcore_unsupported_title),
+            message = stringResource(R.string.arcore_unsupported_message),
         )
     }
 }

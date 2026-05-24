@@ -10,23 +10,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.arplitka.features.floordetection.domain.model.FloorDetectionState
+import com.example.arplitka.features.floordetection.BuildConfig
+import com.example.arplitka.features.floordetection.R
 import com.example.arplitka.features.floordetection.presentation.viewmodel.FloorArViewModel
 import com.example.arplitka.shared.ui.BlockingMessage
 import com.example.arplitka.shared.ui.CenterReticle
 import com.example.arplitka.shared.ui.DebugPanel
 import com.example.arplitka.shared.ui.StatusPanel
+import com.example.arplitka.shared.ui.UiText
 import com.google.ar.core.Config
 import io.github.sceneview.ar.ARSceneView
-import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.ar.rememberARCameraNode
-import io.github.sceneview.math.Size
-import io.github.sceneview.node.PlaneNode
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberMaterialLoader
 import io.github.sceneview.rememberModelLoader
@@ -40,7 +39,7 @@ fun FloorArScreen(
     val materialLoader = rememberMaterialLoader(engine)
     val cameraNode = rememberARCameraNode(engine)
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
-    var sessionError by remember { mutableStateOf<String?>(null) }
+    var sessionError by remember { mutableStateOf<UiText?>(null) }
 
     Box(
         modifier = Modifier
@@ -64,7 +63,9 @@ fun FloorArScreen(
                 config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
             },
             onSessionFailed = { exception ->
-                sessionError = exception.localizedMessage ?: "Не удалось запустить AR-сессию"
+                sessionError = UiText.DynamicString(
+                    exception.localizedMessage ?: "AR session failed"
+                )
             },
             onSessionUpdated = { session, frame ->
                 viewModel.onSessionUpdated(
@@ -81,30 +82,32 @@ fun FloorArScreen(
         )
 
         StatusPanel(
-            statusText = viewModel.uiState.statusText,
-            instructionText = viewModel.uiState.instructionText,
+            statusText = viewModel.uiState.statusText.asString(),
+            instructionText = viewModel.uiState.instructionText.asString(),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(horizontal = 16.dp, vertical = 36.dp)
         )
 
-        DebugPanel(
-            debugLines = mapOf(
-                "Плоскости" to viewModel.uiState.horizontalPlaneCount.toString(),
-                "Площадь" to "%.2f м²".format(viewModel.uiState.selectedArea),
-                "Tracking" to viewModel.uiState.trackingState.name,
-                "Depth API" to if (viewModel.uiState.isDepthEnabled) "On" else "Off",
-                "Center hit" to if (viewModel.uiState.hasCenterHit) "yes" else "no"
-            ),
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(12.dp)
-        )
+        if (BuildConfig.DEBUG) {
+            DebugPanel(
+                debugLines = mapOf(
+                    stringResource(R.string.debug_planes) to viewModel.uiState.horizontalPlaneCount.toString(),
+                    stringResource(R.string.debug_area) to stringResource(R.string.area_format, viewModel.uiState.selectedArea),
+                    stringResource(R.string.debug_tracking) to viewModel.uiState.trackingState.name,
+                    stringResource(R.string.debug_depth_api) to if (viewModel.uiState.isDepthEnabled) stringResource(R.string.on) else stringResource(R.string.off),
+                    stringResource(R.string.debug_center_hit) to if (viewModel.uiState.hasCenterHit) stringResource(R.string.yes) else stringResource(R.string.no)
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(12.dp)
+            )
+        }
 
         if (sessionError != null) {
             BlockingMessage(
-                title = "AR недоступен",
-                message = sessionError ?: "Не удалось запустить AR-сессию",
+                title = stringResource(R.string.ar_not_available),
+                message = sessionError?.asString() ?: stringResource(R.string.ar_session_failed),
                 modifier = Modifier.fillMaxSize()
             )
         }

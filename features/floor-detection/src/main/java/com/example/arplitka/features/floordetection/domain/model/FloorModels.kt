@@ -1,5 +1,7 @@
 package com.example.arplitka.features.floordetection.domain.model
 
+import com.example.arplitka.features.floordetection.R
+import com.example.arplitka.shared.ui.UiText
 import com.google.ar.core.TrackingState
 
 enum class FloorDetectionState {
@@ -14,8 +16,8 @@ data class FloorUiState(
     val selectedArea: Float = 0f,
     val hasCenterHit: Boolean = false,
     val isDepthEnabled: Boolean = false,
-    val statusText: String = "Инициализация...",
-    val instructionText: String = "Пожалуйста, подождите"
+    val statusText: UiText = UiText.StringResource(R.string.initialization),
+    val instructionText: UiText = UiText.StringResource(R.string.please_wait)
 )
 
 /**

@@ -1,0 +1,22 @@
+<resources>
+    <string name="status_searching">Наведите камеру на пол</string>
+    <string name="status_candidate">Пол обнаружен</string>
+    <string name="status_tracking_lost">Трекинг потерян</string>
+    <string name="instruction_move_phone">Медленно наведите камеру на пол</string>
+    <string name="instruction_searching">Ищем подходящую поверхность</string>
+    <string name="instruction_detected">Поверхность отображается точками</string>
+    <string name="initialization">Инициализация…</string>
+    <string name="please_wait">Пожалуйста, подождите</string>
+    <string name="ar_session_failed">Не удалось запустить AR-сессию</string>
+    <string name="debug_planes">Плоскости</string>
+    <string name="debug_area">Площадь</string>
+    <string name="debug_tracking">Tracking</string>
+    <string name="debug_depth_api">Depth API</string>
+    <string name="debug_center_hit">Center hit</string>
+    <string name="ar_not_available">AR недоступен</string>
+    <string name="on">On</string>
+    <string name="off">Off</string>
+    <string name="yes">yes</string>
+    <string name="no">no</string>
+    <string name="area_format">%.2f м²</string>
+</resources>
