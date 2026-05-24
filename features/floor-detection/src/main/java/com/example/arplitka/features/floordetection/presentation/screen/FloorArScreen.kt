@@ -74,7 +74,7 @@ fun FloorArScreen(
     val snappingPointMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF69F0AE)) }
     val lineMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF2196F3)) }
     val previewLineMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF00A2FF)) }
-    val fillMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0x332196F3)) }
+    val fillMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0x802196F3)) }
 
     Box(
         modifier = Modifier
@@ -87,7 +87,7 @@ fun FloorArScreen(
             modelLoader = modelLoader,
             materialLoader = materialLoader,
             cameraNode = cameraNode,
-            planeRenderer = true,
+            planeRenderer = !uiState.isFinalized,
             sessionConfiguration = { session, config ->
                 config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
                 config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
@@ -104,10 +104,11 @@ fun FloorArScreen(
                 viewModel.onSessionUpdated(session, frame, viewportSize)
             }
         ) {
+            val sectionFloorY = uiState.points.firstOrNull()?.pose?.ty()
+
             // Render filled area below lines and points
             if (uiState.isPolygonClosed && uiState.points.size >= MIN_POINTS_TO_FILL) {
                 val centroidX = uiState.points.map { it.pose.tx() }.average().toFloat()
-                val centroidY = uiState.points.map { it.pose.ty() }.average().toFloat()
                 val centroidZ = uiState.points.map { it.pose.tz() }.average().toFloat()
                 ShapeNode(
                     polygonPath = uiState.points.map { point ->
@@ -119,7 +120,7 @@ fun FloorArScreen(
                     materialInstance = fillMaterial,
                     position = Position(
                         x = centroidX,
-                        y = centroidY + FILL_VISUAL_OFFSET_M,
+                        y = (sectionFloorY ?: 0f) + FILL_VISUAL_OFFSET_M,
                         z = centroidZ
                     ),
                     rotation = Rotation(x = -90f)
@@ -134,7 +135,7 @@ fun FloorArScreen(
                     val segment = createSegmentGeometry(
                         rawStart = Position(p1.tx(), p1.ty(), p1.tz()),
                         rawEnd = Position(p2.tx(), p2.ty(), p2.tz()),
-                        y = p1.ty() + LINE_VISUAL_OFFSET_M,
+                        y = (sectionFloorY ?: p1.ty()) + LINE_VISUAL_OFFSET_M,
                         startInset = POINT_RADIUS_M,
                         endInset = POINT_RADIUS_M
                     )
@@ -165,7 +166,7 @@ fun FloorArScreen(
                     val segment = createSegmentGeometry(
                         rawStart = Position(p1.tx(), p1.ty(), p1.tz()),
                         rawEnd = Position(p2.tx(), p2.ty(), p2.tz()),
-                        y = p1.ty() + LINE_VISUAL_OFFSET_M,
+                        y = (sectionFloorY ?: p1.ty()) + LINE_VISUAL_OFFSET_M,
                         startInset = POINT_RADIUS_M,
                         endInset = POINT_RADIUS_M
                     )
@@ -200,7 +201,7 @@ fun FloorArScreen(
                 val segment = createSegmentGeometry(
                     rawStart = Position(start.tx(), start.ty(), start.tz()),
                     rawEnd = Position(endPose.tx(), endPose.ty(), endPose.tz()),
-                    y = start.ty() + PREVIEW_LINE_VISUAL_OFFSET_M,
+                    y = (sectionFloorY ?: start.ty()) + PREVIEW_LINE_VISUAL_OFFSET_M,
                     startInset = POINT_RADIUS_M,
                     endInset = 0f
                 )
@@ -226,7 +227,11 @@ fun FloorArScreen(
                     } else {
                         pointMaterial
                     },
-                    position = Position(pose.tx(), pose.ty() + POINT_VISUAL_OFFSET_M, pose.tz())
+                    position = Position(
+                        x = pose.tx(),
+                        y = (sectionFloorY ?: pose.ty()) + POINT_VISUAL_OFFSET_M,
+                        z = pose.tz()
+                    )
                 )
             }
         }

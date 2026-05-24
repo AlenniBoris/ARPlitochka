@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
+import kotlin.math.abs
 import kotlin.math.sqrt
 
 @HiltViewModel
@@ -39,6 +40,7 @@ class FloorArViewModel @Inject constructor(
                     statusText = UiText.StringResource(R.string.status_tracking_lost),
                     instructionText = UiText.StringResource(R.string.instruction_move_phone),
                     currentHitPose = null,
+                    currentHitResult = null,
                     snappedPointIndex = null
                 )
             } else if (!result.isFloorDetected) {
@@ -52,6 +54,7 @@ class FloorArViewModel @Inject constructor(
                     statusText = UiText.StringResource(R.string.status_searching),
                     instructionText = UiText.StringResource(R.string.instruction_searching),
                     currentHitPose = result.hitPose,
+                    currentHitResult = result.hitResult,
                     snappedPointIndex = null
                 )
             } else {
@@ -66,7 +69,8 @@ class FloorArViewModel @Inject constructor(
                         UiText.StringResource(R.string.polygon_closed) 
                         else UiText.StringResource(R.string.status_candidate),
                     instructionText = UiText.StringResource(R.string.instruction_detected),
-                    currentHitPose = result.hitPose
+                    currentHitPose = result.hitPose,
+                    currentHitResult = result.hitResult
                 )
             }
             
@@ -125,16 +129,12 @@ class FloorArViewModel @Inject constructor(
                 return@update state.copy(isFinalized = true)
             }
 
-            val snappedIndex = state.snappedPointIndex
-            if (snappedIndex != null && snappedIndex == state.points.lastIndex) {
+            if (state.snappedPointIndex != null) {
                 return@update state
             }
 
-            val poseToAdd = if (snappedIndex != null) {
-                state.points[snappedIndex].pose
-            } else {
-                state.currentHitPose
-            } ?: return@update state
+            val hitResult = state.currentHitResult ?: return@update state
+            val poseToAdd = hitResult.hitPose
 
             val lastPose = state.points.lastOrNull()?.pose
             if (lastPose != null) {
@@ -150,8 +150,16 @@ class FloorArViewModel @Inject constructor(
                     return@update state
                 }
             }
+
+            val floorY = state.points.firstOrNull()?.pose?.ty()
+            if (floorY != null && abs(poseToAdd.ty() - floorY) > MAX_POINT_HEIGHT_DELTA_M) {
+                return@update state
+            }
+
+            val anchor = runCatching { hitResult.createAnchor() }.getOrNull()
+                ?: return@update state
             
-            state.copy(points = state.points + ArPoint(poseToAdd))
+            state.copy(points = state.points + ArPoint(anchor))
         }
     }
     
@@ -159,6 +167,7 @@ class FloorArViewModel @Inject constructor(
         _uiState.update { state ->
             if (state.isFinalized) return@update state
             if (state.points.isNotEmpty()) {
+                state.points.last().anchor.detach()
                 state.copy(
                     points = state.points.dropLast(1),
                     isPolygonClosed = false
@@ -171,6 +180,7 @@ class FloorArViewModel @Inject constructor(
 
     fun clearSection() {
         _uiState.update { state ->
+            state.points.forEach { point -> point.anchor.detach() }
             state.copy(
                 points = emptyList(),
                 isPolygonClosed = false,
@@ -181,7 +191,15 @@ class FloorArViewModel @Inject constructor(
     }
     
     fun reset() {
-        _uiState.update { FloorUiState() }
+        _uiState.update { state ->
+            state.points.forEach { point -> point.anchor.detach() }
+            FloorUiState()
+        }
+    }
+
+    override fun onCleared() {
+        _uiState.value.points.forEach { point -> point.anchor.detach() }
+        super.onCleared()
     }
     
     private fun calculateDistance(x1: Float, y1: Float, z1: Float, x2: Float, y2: Float, z2: Float): Float {
@@ -191,6 +209,6 @@ class FloorArViewModel @Inject constructor(
     companion object {
         private const val CLOSE_THRESHOLD_M = 0.10f // 10cm to close the loop
         private const val SNAP_THRESHOLD_M = 0.05f  // 5cm for visual snapping
-        private const val REOPEN_THRESHOLD_M = 0.15f
+        private const val MAX_POINT_HEIGHT_DELTA_M = 0.08f
     }
 }
