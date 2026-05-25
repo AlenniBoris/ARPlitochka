@@ -1,6 +1,7 @@
 package com.example.arplitka.features.floordetection.presentation.screen
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
@@ -19,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -40,9 +43,14 @@ import com.example.arplitka.shared.ui.CenterReticle
 import com.example.arplitka.shared.ui.DebugPanel
 import com.example.arplitka.shared.ui.StatusPanel
 import com.example.arplitka.shared.ui.UiText
+import com.google.android.filament.MaterialInstance
+import com.google.android.filament.Texture
+import com.google.android.filament.TextureSampler
 import com.google.ar.core.Config
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.rememberARCameraNode
+import io.github.sceneview.material.setBaseColorMap
+import dev.romainguy.kotlin.math.Float2
 import io.github.sceneview.math.Position2
 import io.github.sceneview.math.Rotation
 import io.github.sceneview.math.Position
@@ -54,9 +62,12 @@ import io.github.sceneview.node.ShapeNode
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberMaterialLoader
 import io.github.sceneview.rememberModelLoader
+import io.github.sceneview.texture.setBitmap
 import kotlin.math.atan2
 import kotlin.math.sqrt
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun FloorArScreen(
@@ -69,12 +80,40 @@ fun FloorArScreen(
     val cameraNode = rememberARCameraNode(engine)
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var sessionError by remember { mutableStateOf<UiText?>(null) }
+    val context = LocalContext.current
 
     val pointMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF00E676)) }
     val snappingPointMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF69F0AE)) }
     val lineMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF2196F3)) }
     val previewLineMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF00A2FF)) }
     val fillMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0x802196F3)) }
+
+    var pavingMaterial by remember { mutableStateOf<MaterialInstance?>(null) }
+    LaunchedEffect(materialLoader, context, engine) {
+        runCatching {
+            val bitmap = withContext(Dispatchers.IO) {
+                val inputStream = context.assets.open("textures/paving_stones.png")
+                BitmapFactory.decodeStream(inputStream)
+            }
+            
+            if (bitmap != null) {
+                val texture = Texture.Builder()
+                    .width(bitmap.width)
+                    .height(bitmap.height)
+                    .sampler(Texture.Sampler.SAMPLER_2D)
+                    .format(Texture.InternalFormat.SRGB8_A8)
+                    .levels(1)
+                    .build(engine)
+                
+                texture.setBitmap(engine, bitmap)
+                
+                // Самый базовый способ создания материала с текстурой в SceneView
+                pavingMaterial = materialLoader.createTextureInstance(texture)
+            }
+        }.onFailure { 
+            android.util.Log.e("FloorArScreen", "Async texture load failed", it)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -110,6 +149,26 @@ fun FloorArScreen(
             if (uiState.isPolygonClosed && uiState.points.size >= MIN_POINTS_TO_FILL) {
                 val centroidX = uiState.points.map { it.pose.tx() }.average().toFloat()
                 val centroidZ = uiState.points.map { it.pose.tz() }.average().toFloat()
+
+                val useTexture = uiState.isFinalized
+                val material = if (useTexture) (pavingMaterial ?: fillMaterial) else fillMaterial
+                
+                val uvScale = if (useTexture) {
+                    // Calculate bounding box for UV scaling
+                    val minX = uiState.points.minOf { it.pose.tx() }
+                    val maxX = uiState.points.maxOf { it.pose.tx() }
+                    val minZ = uiState.points.minOf { it.pose.tz() }
+                    val maxZ = uiState.points.maxOf { it.pose.tz() }
+                    val width = maxX - minX
+                    val height = maxZ - minZ
+                    
+                    // Physical texture size: 0.78m x 1.04m (780mm x 1040mm)
+                    Float2(width / 0.78f, height / 1.04f)
+                } else {
+                    Float2(1f, 1f)
+                }
+
+                // Применяем масштаб UV через конструктор ShapeNode (безопаснее)
                 ShapeNode(
                     polygonPath = uiState.points.map { point ->
                         Position2(
@@ -117,7 +176,8 @@ fun FloorArScreen(
                             y = centroidZ - point.pose.tz()
                         )
                     },
-                    materialInstance = fillMaterial,
+                    materialInstance = material,
+                    uvScale = uvScale,
                     position = Position(
                         x = centroidX,
                         y = (sectionFloorY ?: 0f) + FILL_VISUAL_OFFSET_M,
