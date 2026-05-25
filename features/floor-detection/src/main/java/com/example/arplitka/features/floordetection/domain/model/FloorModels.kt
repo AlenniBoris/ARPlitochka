@@ -14,11 +14,9 @@ enum class FloorDetectionState {
 
 data class ArPoint(
     val anchor: Anchor,
+    val pose: Pose,
     val id: Long = System.nanoTime()
-) {
-    val pose: Pose
-        get() = anchor.pose
-}
+)
 
 data class FloorUiState(
     val detectionState: FloorDetectionState = FloorDetectionState.SearchingFloor,

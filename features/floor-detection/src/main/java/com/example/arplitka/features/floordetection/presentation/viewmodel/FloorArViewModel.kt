@@ -31,6 +31,12 @@ class FloorArViewModel @Inject constructor(
         val result = processArFrameUseCase(session, frame, viewportSize)
         
         _uiState.update { currentState ->
+            // Update all points with their current anchor poses
+            // This ensures Compose sees the changes and updates the UI
+            val updatedPoints = currentState.points.map { point ->
+                point.copy(pose = point.anchor.pose)
+            }
+
             var newState = if (result.trackingState != TrackingState.TRACKING) {
                 currentState.copy(
                     trackingState = result.trackingState,
@@ -41,7 +47,8 @@ class FloorArViewModel @Inject constructor(
                     instructionText = UiText.StringResource(R.string.instruction_move_phone),
                     currentHitPose = null,
                     currentHitResult = null,
-                    snappedPointIndex = null
+                    snappedPointIndex = null,
+                    points = updatedPoints
                 )
             } else if (!result.isFloorDetected) {
                 currentState.copy(
@@ -55,7 +62,8 @@ class FloorArViewModel @Inject constructor(
                     instructionText = UiText.StringResource(R.string.instruction_searching),
                     currentHitPose = result.hitPose,
                     currentHitResult = result.hitResult,
-                    snappedPointIndex = null
+                    snappedPointIndex = null,
+                    points = updatedPoints
                 )
             } else {
                 currentState.copy(
@@ -70,7 +78,8 @@ class FloorArViewModel @Inject constructor(
                         else UiText.StringResource(R.string.status_candidate),
                     instructionText = UiText.StringResource(R.string.instruction_detected),
                     currentHitPose = result.hitPose,
-                    currentHitResult = result.hitResult
+                    currentHitResult = result.hitResult,
+                    points = updatedPoints
                 )
             }
             
@@ -159,7 +168,7 @@ class FloorArViewModel @Inject constructor(
             val anchor = runCatching { hitResult.createAnchor() }.getOrNull()
                 ?: return@update state
             
-            state.copy(points = state.points + ArPoint(anchor))
+            state.copy(points = state.points + ArPoint(anchor, anchor.pose))
         }
     }
     
