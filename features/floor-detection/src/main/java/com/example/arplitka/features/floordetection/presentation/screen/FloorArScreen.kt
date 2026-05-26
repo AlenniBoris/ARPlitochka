@@ -2,11 +2,6 @@ package com.example.arplitka.features.floordetection.presentation.screen
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.BitmapShader
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.RectF
-import android.graphics.Shader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,7 +53,6 @@ import com.google.ar.core.Config
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.rememberARCameraNode
 import dev.romainguy.kotlin.math.Float2
-import io.github.sceneview.math.Position2
 import io.github.sceneview.math.Rotation
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Size
@@ -70,9 +64,6 @@ import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberMaterialLoader
 import io.github.sceneview.rememberModelLoader
 import io.github.sceneview.texture.setBitmap
-import kotlin.math.atan2
-import kotlin.math.sqrt
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -144,13 +135,11 @@ fun FloorArScreen(
                 val centroidZ = uiState.points.map { it.pose.tz() }.average().toFloat()
 
                 val useTexture = uiState.isFinalized
-                val localPolygonPath = uiState.points.map { point ->
-                    Position2(
-                        x = point.pose.tx() - centroidX,
-                        y = centroidZ - point.pose.tz()
-                    )
-                }
-                val polygonBounds = localPolygonPath.bounds()
+                val sectionGeometry = uiState.points.toAlignedSectionGeometry(
+                    centroidX = centroidX,
+                    centroidZ = centroidZ
+                )
+                val polygonBounds = sectionGeometry.polygonPath.bounds()
                 var sectionMaterials by remember { mutableStateOf<Map<TextureRotation, MaterialInstance>>(emptyMap()) }
 
                 LaunchedEffect(
@@ -191,7 +180,7 @@ fun FloorArScreen(
                 }
 
                 ShapeNode(
-                    polygonPath = localPolygonPath,
+                    polygonPath = sectionGeometry.polygonPath,
                     materialInstance = material,
                     uvScale = Float2(1f, 1f),
                     position = Position(
@@ -199,7 +188,7 @@ fun FloorArScreen(
                         y = (sectionFloorY ?: 0f) + FILL_VISUAL_OFFSET_M,
                         z = centroidZ
                     ),
-                    rotation = Rotation(x = -90f)
+                    rotation = Rotation(x = -90f, y = sectionGeometry.rotationY)
                 )
             }
 
@@ -470,165 +459,3 @@ fun FloorArScreen(
         }
     }
 }
-
-private fun lineRotationYDegrees(dx: Float, dz: Float): Float {
-    return -Math.toDegrees(atan2(dz, dx).toDouble()).toFloat()
-}
-
-private fun readableLineRotationYDegrees(dx: Float, dz: Float): Float {
-    val angle = lineRotationYDegrees(dx, dz)
-    return when {
-        angle > 90f -> angle - 180f
-        angle < -90f -> angle + 180f
-        else -> angle
-    }
-}
-
-private data class PolygonBounds(
-    val width: Float,
-    val height: Float
-)
-
-private fun List<Position2>.bounds(): PolygonBounds {
-    val minX = minOf { it.x }
-    val maxX = maxOf { it.x }
-    val minY = minOf { it.y }
-    val maxY = maxOf { it.y }
-    return PolygonBounds(
-        width = maxX - minX,
-        height = maxY - minY
-    )
-}
-
-private fun Float.roundToMillimeters(): Int {
-    return (this * 1000f).toInt()
-}
-
-private fun Bitmap.toSectionPatternBitmap(
-    widthMeters: Float,
-    heightMeters: Float,
-    rotationDegrees: Int
-): Bitmap {
-    val outputWidth = ((width / TILE_TEXTURE_WIDTH_M) * widthMeters)
-        .toInt()
-        .coerceIn(MIN_SECTION_TEXTURE_SIZE_PX, MAX_SECTION_TEXTURE_SIZE_PX)
-    val outputHeight = ((height / TILE_TEXTURE_HEIGHT_M) * heightMeters)
-        .toInt()
-        .coerceIn(MIN_SECTION_TEXTURE_SIZE_PX, MAX_SECTION_TEXTURE_SIZE_PX)
-
-    val output = Bitmap.createBitmap(outputWidth, outputHeight, config ?: Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(output)
-    val shader = BitmapShader(this, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.shader = shader
-    }
-    val diagonal = sqrt((outputWidth * outputWidth + outputHeight * outputHeight).toFloat())
-    canvas.rotate(rotationDegrees.toFloat(), outputWidth / 2f, outputHeight / 2f)
-    canvas.drawRect(-diagonal, -diagonal, outputWidth + diagonal, outputHeight + diagonal, paint)
-    return output
-}
-
-private data class SegmentGeometry(
-    val measuredLength: Float,
-    val visualLength: Float,
-    val midPosition: Position,
-    val dx: Float,
-    val dz: Float,
-    val rotationY: Float
-)
-
-private fun createSegmentGeometry(
-    rawStart: Position,
-    rawEnd: Position,
-    y: Float,
-    startInset: Float,
-    endInset: Float
-): SegmentGeometry? {
-    val dx = rawEnd.x - rawStart.x
-    val dz = rawEnd.z - rawStart.z
-    val measuredLength = sqrt(dx * dx + dz * dz)
-    val visualLength = measuredLength - startInset - endInset
-    if (visualLength <= MIN_LINE_LENGTH_M) return null
-
-    val ux = dx / measuredLength
-    val uz = dz / measuredLength
-    val start = Position(
-        x = rawStart.x + ux * startInset,
-        y = y,
-        z = rawStart.z + uz * startInset
-    )
-    val end = Position(
-        x = rawEnd.x - ux * endInset,
-        y = y,
-        z = rawEnd.z - uz * endInset
-    )
-
-    return SegmentGeometry(
-        measuredLength = measuredLength,
-        visualLength = visualLength,
-        midPosition = Position(
-            x = (start.x + end.x) / 2f,
-            y = y,
-            z = (start.z + end.z) / 2f
-        ),
-        dx = dx,
-        dz = dz,
-        rotationY = lineRotationYDegrees(dx, dz)
-    )
-}
-
-private fun createDistanceLabelBitmap(text: String): Bitmap {
-    val width = 320
-    val height = 112
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.WHITE
-    }
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.BLACK
-        textSize = 38f
-        textAlign = Paint.Align.CENTER
-        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-    }
-    canvas.drawRoundRect(
-        RectF(0f, 0f, width.toFloat(), height.toFloat()),
-        28f,
-        28f,
-        backgroundPaint
-    )
-    val textBaseline = height / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
-    canvas.drawText(text, width / 2f, textBaseline, textPaint)
-    return bitmap
-}
-
-private fun Float.formatMeters(): String {
-    return String.format(Locale.getDefault(), "%.2f м", this)
-}
-
-private fun TextureRotation.toDegrees(): Int = when (this) {
-    TextureRotation.DEGREES_0 -> 0
-    TextureRotation.DEGREES_45 -> 45
-    TextureRotation.DEGREES_90 -> 90
-    TextureRotation.DEGREES_135 -> 135
-}
-
-private const val MIN_POINTS_TO_FILL = 3
-private const val POINT_RADIUS_M = 0.016f
-private const val POINT_HEIGHT_M = 0.002f
-private const val POINT_VISUAL_OFFSET_M = 0.008f
-private const val LINE_WIDTH_M = 0.012f
-private const val LINE_HEIGHT_M = 0.002f
-private const val LINE_VISUAL_OFFSET_M = 0.003f
-private const val PREVIEW_LINE_WIDTH_M = 0.016f
-private const val PREVIEW_LINE_HEIGHT_M = 0.002f
-private const val PREVIEW_LINE_VISUAL_OFFSET_M = 0.005f
-private const val FILL_VISUAL_OFFSET_M = 0.001f
-private const val LABEL_WIDTH_M = 0.13f
-private const val LABEL_HEIGHT_M = 0.045f
-private const val LABEL_VISUAL_OFFSET_M = 0.018f
-private const val MIN_LINE_LENGTH_M = 0.001f
-private const val TILE_TEXTURE_WIDTH_M = 0.78f
-private const val TILE_TEXTURE_HEIGHT_M = 1.04f
-private const val MIN_SECTION_TEXTURE_SIZE_PX = 64
-private const val MAX_SECTION_TEXTURE_SIZE_PX = 2048
