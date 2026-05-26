@@ -2,13 +2,20 @@ package com.example.arplitka.features.floordetection.presentation.screen
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +26,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +45,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.arplitka.features.floordetection.BuildConfig
 import com.example.arplitka.features.floordetection.R
+import com.example.arplitka.features.floordetection.domain.model.TextureRotation
 import com.example.arplitka.features.floordetection.presentation.viewmodel.FloorArViewModel
 import com.example.arplitka.shared.ui.BlockingMessage
 import com.example.arplitka.shared.ui.CenterReticle
@@ -45,11 +54,9 @@ import com.example.arplitka.shared.ui.StatusPanel
 import com.example.arplitka.shared.ui.UiText
 import com.google.android.filament.MaterialInstance
 import com.google.android.filament.Texture
-import com.google.android.filament.TextureSampler
 import com.google.ar.core.Config
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.rememberARCameraNode
-import io.github.sceneview.material.setBaseColorMap
 import dev.romainguy.kotlin.math.Float2
 import io.github.sceneview.math.Position2
 import io.github.sceneview.math.Rotation
@@ -88,27 +95,13 @@ fun FloorArScreen(
     val previewLineMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF00A2FF)) }
     val fillMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0x802196F3)) }
 
-    var pavingMaterial by remember { mutableStateOf<MaterialInstance?>(null) }
-    LaunchedEffect(materialLoader, context, engine) {
+    var pavingBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(context, uiState.selectedTileType) {
         runCatching {
-            val bitmap = withContext(Dispatchers.IO) {
-                val inputStream = context.assets.open("textures/paving_stones.png")
-                BitmapFactory.decodeStream(inputStream)
-            }
-            
-            if (bitmap != null) {
-                val texture = Texture.Builder()
-                    .width(bitmap.width)
-                    .height(bitmap.height)
-                    .sampler(Texture.Sampler.SAMPLER_2D)
-                    .format(Texture.InternalFormat.SRGB8_A8)
-                    .levels(1)
-                    .build(engine)
-                
-                texture.setBitmap(engine, bitmap)
-                
-                // Самый базовый способ создания материала с текстурой в SceneView
-                pavingMaterial = materialLoader.createTextureInstance(texture)
+            pavingBitmap = withContext(Dispatchers.IO) {
+                context.assets.open(uiState.selectedTileType.assetPath).use { inputStream ->
+                    BitmapFactory.decodeStream(inputStream)
+                }
             }
         }.onFailure { 
             android.util.Log.e("FloorArScreen", "Async texture load failed", it)
@@ -151,33 +144,56 @@ fun FloorArScreen(
                 val centroidZ = uiState.points.map { it.pose.tz() }.average().toFloat()
 
                 val useTexture = uiState.isFinalized
-                val material = if (useTexture) (pavingMaterial ?: fillMaterial) else fillMaterial
-                
-                val uvScale = if (useTexture) {
-                    // Calculate bounding box for UV scaling
-                    val minX = uiState.points.minOf { it.pose.tx() }
-                    val maxX = uiState.points.maxOf { it.pose.tx() }
-                    val minZ = uiState.points.minOf { it.pose.tz() }
-                    val maxZ = uiState.points.maxOf { it.pose.tz() }
-                    val width = maxX - minX
-                    val height = maxZ - minZ
-                    
-                    // Physical texture size: 0.78m x 1.04m (780mm x 1040mm)
-                    Float2(width / 0.78f, height / 1.04f)
-                } else {
-                    Float2(1f, 1f)
+                val localPolygonPath = uiState.points.map { point ->
+                    Position2(
+                        x = point.pose.tx() - centroidX,
+                        y = centroidZ - point.pose.tz()
+                    )
+                }
+                val polygonBounds = localPolygonPath.bounds()
+                var sectionMaterials by remember { mutableStateOf<Map<TextureRotation, MaterialInstance>>(emptyMap()) }
+
+                LaunchedEffect(
+                    engine,
+                    materialLoader,
+                    pavingBitmap,
+                    polygonBounds.width.roundToMillimeters(),
+                    polygonBounds.height.roundToMillimeters()
+                ) {
+                    val sourceBitmap = pavingBitmap ?: return@LaunchedEffect
+                    sectionMaterials = withContext(Dispatchers.IO) {
+                        TextureRotation.entries.associateWith { rotation ->
+                            sourceBitmap.toSectionPatternBitmap(
+                                widthMeters = polygonBounds.width,
+                                heightMeters = polygonBounds.height,
+                                rotationDegrees = rotation.toDegrees()
+                            )
+                        }
+                    }.mapValues { (_, bitmap) ->
+                        val texture = Texture.Builder()
+                            .width(bitmap.width)
+                            .height(bitmap.height)
+                            .sampler(Texture.Sampler.SAMPLER_2D)
+                            .format(Texture.InternalFormat.SRGB8_A8)
+                            .levels(1)
+                            .build(engine)
+
+                        texture.setBitmap(engine, bitmap)
+
+                        materialLoader.createTextureInstance(texture)
+                    }
                 }
 
-                // Применяем масштаб UV через конструктор ShapeNode (безопаснее)
+                val material = if (useTexture) {
+                    sectionMaterials[uiState.textureRotation] ?: fillMaterial
+                } else {
+                    fillMaterial
+                }
+
                 ShapeNode(
-                    polygonPath = uiState.points.map { point ->
-                        Position2(
-                            x = point.pose.tx() - centroidX,
-                            y = centroidZ - point.pose.tz()
-                        )
-                    },
+                    polygonPath = localPolygonPath,
                     materialInstance = material,
-                    uvScale = uvScale,
+                    uvScale = Float2(1f, 1f),
                     position = Position(
                         x = centroidX,
                         y = (sectionFloorY ?: 0f) + FILL_VISUAL_OFFSET_M,
@@ -359,23 +375,73 @@ fun FloorArScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 120.dp)
+                    .padding(horizontal = 16.dp, vertical = 36.dp)
             ) {
-                Button(
-                    onClick = { viewModel.clearSection() },
-                    shape = RoundedCornerShape(32.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color.Black
-                    ),
-                    modifier = Modifier.size(72.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = stringResource(R.string.btn_clear_section),
-                        modifier = Modifier.size(32.dp)
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
+                            .padding(horizontal = 18.dp, vertical = 14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${stringResource(R.string.texture_rotation_title)}: ${
+                                    stringResource(
+                                        R.string.texture_rotation_format,
+                                        uiState.textureRotation.toDegrees()
+                                    )
+                                }",
+                                color = Color.White
+                            )
+                            Button(
+                                onClick = { viewModel.rotateTexture() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Text(text = stringResource(R.string.btn_rotate_texture))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = { viewModel.toggleTileType() },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White.copy(alpha = 0.8f),
+                                contentColor = Color.Black
+                            )
+                        ) {
+                            Text(text = stringResource(R.string.btn_toggle_tile))
+                        }
+                    }
+
+                    Button(
+                        onClick = { viewModel.clearSection() },
+                        shape = RoundedCornerShape(32.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor = Color.Black
+                        ),
+                        modifier = Modifier.size(72.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.btn_clear_section),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                 }
             }
         }
@@ -388,7 +454,8 @@ fun FloorArScreen(
                     stringResource(R.string.debug_tracking) to uiState.trackingState.name,
                     "Points" to uiState.points.size.toString(),
                     "Closed" to uiState.isPolygonClosed.toString(),
-                    "Finalized" to uiState.isFinalized.toString()
+                    "Finalized" to uiState.isFinalized.toString(),
+                    "Texture rotation" to uiState.textureRotation.toDegrees().toString()
                 ),
                 modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
             )
@@ -415,6 +482,50 @@ private fun readableLineRotationYDegrees(dx: Float, dz: Float): Float {
         angle < -90f -> angle + 180f
         else -> angle
     }
+}
+
+private data class PolygonBounds(
+    val width: Float,
+    val height: Float
+)
+
+private fun List<Position2>.bounds(): PolygonBounds {
+    val minX = minOf { it.x }
+    val maxX = maxOf { it.x }
+    val minY = minOf { it.y }
+    val maxY = maxOf { it.y }
+    return PolygonBounds(
+        width = maxX - minX,
+        height = maxY - minY
+    )
+}
+
+private fun Float.roundToMillimeters(): Int {
+    return (this * 1000f).toInt()
+}
+
+private fun Bitmap.toSectionPatternBitmap(
+    widthMeters: Float,
+    heightMeters: Float,
+    rotationDegrees: Int
+): Bitmap {
+    val outputWidth = ((width / TILE_TEXTURE_WIDTH_M) * widthMeters)
+        .toInt()
+        .coerceIn(MIN_SECTION_TEXTURE_SIZE_PX, MAX_SECTION_TEXTURE_SIZE_PX)
+    val outputHeight = ((height / TILE_TEXTURE_HEIGHT_M) * heightMeters)
+        .toInt()
+        .coerceIn(MIN_SECTION_TEXTURE_SIZE_PX, MAX_SECTION_TEXTURE_SIZE_PX)
+
+    val output = Bitmap.createBitmap(outputWidth, outputHeight, config ?: Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(output)
+    val shader = BitmapShader(this, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.shader = shader
+    }
+    val diagonal = sqrt((outputWidth * outputWidth + outputHeight * outputHeight).toFloat())
+    canvas.rotate(rotationDegrees.toFloat(), outputWidth / 2f, outputHeight / 2f)
+    canvas.drawRect(-diagonal, -diagonal, outputWidth + diagonal, outputHeight + diagonal, paint)
+    return output
 }
 
 private data class SegmentGeometry(
@@ -495,6 +606,13 @@ private fun Float.formatMeters(): String {
     return String.format(Locale.getDefault(), "%.2f м", this)
 }
 
+private fun TextureRotation.toDegrees(): Int = when (this) {
+    TextureRotation.DEGREES_0 -> 0
+    TextureRotation.DEGREES_45 -> 45
+    TextureRotation.DEGREES_90 -> 90
+    TextureRotation.DEGREES_135 -> 135
+}
+
 private const val MIN_POINTS_TO_FILL = 3
 private const val POINT_RADIUS_M = 0.016f
 private const val POINT_HEIGHT_M = 0.002f
@@ -510,3 +628,7 @@ private const val LABEL_WIDTH_M = 0.13f
 private const val LABEL_HEIGHT_M = 0.045f
 private const val LABEL_VISUAL_OFFSET_M = 0.018f
 private const val MIN_LINE_LENGTH_M = 0.001f
+private const val TILE_TEXTURE_WIDTH_M = 0.78f
+private const val TILE_TEXTURE_HEIGHT_M = 1.04f
+private const val MIN_SECTION_TEXTURE_SIZE_PX = 64
+private const val MAX_SECTION_TEXTURE_SIZE_PX = 2048

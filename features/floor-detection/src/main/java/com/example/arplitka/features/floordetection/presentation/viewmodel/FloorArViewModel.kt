@@ -6,6 +6,8 @@ import com.example.arplitka.features.floordetection.R
 import com.example.arplitka.features.floordetection.domain.model.ArPoint
 import com.example.arplitka.features.floordetection.domain.model.FloorDetectionState
 import com.example.arplitka.features.floordetection.domain.model.FloorUiState
+import com.example.arplitka.features.floordetection.domain.model.TextureRotation
+import com.example.arplitka.features.floordetection.domain.model.TileType
 import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFrameUseCase
 import com.example.arplitka.shared.ui.UiText
 import com.google.ar.core.Frame
@@ -194,7 +196,26 @@ class FloorArViewModel @Inject constructor(
                 points = emptyList(),
                 isPolygonClosed = false,
                 isFinalized = false,
+                textureRotation = TextureRotation.DEGREES_0,
                 snappedPointIndex = null
+            )
+        }
+    }
+
+    fun rotateTexture() {
+        _uiState.update { state ->
+            val nextOrdinal = (state.textureRotation.ordinal + 1) % TextureRotation.entries.size
+            state.copy(
+                textureRotation = TextureRotation.entries[nextOrdinal]
+            )
+        }
+    }
+
+    fun toggleTileType() {
+        _uiState.update { state ->
+            val nextOrdinal = (state.selectedTileType.ordinal + 1) % TileType.entries.size
+            state.copy(
+                selectedTileType = TileType.entries[nextOrdinal]
             )
         }
     }

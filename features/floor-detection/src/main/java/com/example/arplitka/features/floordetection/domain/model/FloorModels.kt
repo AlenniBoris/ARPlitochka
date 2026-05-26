@@ -12,6 +12,18 @@ enum class FloorDetectionState {
     CandidateFound
 }
 
+enum class TextureRotation {
+    DEGREES_0,
+    DEGREES_45,
+    DEGREES_90,
+    DEGREES_135
+}
+
+enum class TileType(val assetPath: String) {
+    CLASSIC("textures/paving_stones.png"),
+    MODERN("textures/paving_stones_v2.png")
+}
+
 data class ArPoint(
     val anchor: Anchor,
     val pose: Pose,
@@ -30,6 +42,8 @@ data class FloorUiState(
     val points: List<ArPoint> = emptyList(),
     val isPolygonClosed: Boolean = false,
     val isFinalized: Boolean = false,
+    val textureRotation: TextureRotation = TextureRotation.DEGREES_0,
+    val selectedTileType: TileType = TileType.MODERN,
     val currentHitPose: Pose? = null,
     val currentHitResult: HitResult? = null,
     val snappedPointIndex: Int? = null // Index of the point we are currently snapping to

@@ -13,7 +13,7 @@ Application-модуль Android-приложения AR Plitka.
 - проверка поддержки ARCore;
 - подключение основного feature-модуля `:features:floor-detection`.
 
-В этом модуле не должна находиться бизнес-логика определения пола, разметки контура или будущего взаимодействия с backend. Он должен оставаться тонким слоем сборки и запуска приложения.
+В этом модуле не должна находиться бизнес-логика определения пола, разметки контура, выбора плитки, вращения текстуры или будущего взаимодействия с backend. Он должен оставаться тонким слоем сборки и запуска приложения.
 
 ## Основные Файлы
 
@@ -47,6 +47,8 @@ Application class с аннотацией `@HiltAndroidApp`. Запускает 
 - `ArCoreAvailabilityGate`;
 - запуск `FloorArScreen`.
 
+`MainActivity` не знает о точках, полигонах, текстурах и ARCore frame processing. Эти детали принадлежат модулю `:features:floor-detection`.
+
 ## Manifest
 
 Модуль объявляет:
@@ -56,6 +58,8 @@ Application class с аннотацией `@HiltAndroidApp`. Запускает 
 - обязательную AR-камеру `android.hardware.camera.ar`;
 - ARCore metadata `com.google.ar.core = required`;
 - portrait orientation для `MainActivity`.
+
+Так как приложение является AR-фронтом, ARCore указан как обязательный. На устройствах без поддержки ARCore пользовательский сценарий разметки пола недоступен.
 
 ## Зависимости Модуля
 
@@ -92,12 +96,15 @@ implementation(project(":shared:ui"))
 - application-wide DI;
 - theme setup;
 - permission gates;
-- app-level error screens.
+- app-level error screens;
+- application-wide configuration.
 
 В `:app` не стоит добавлять:
 
 - расчет геометрии;
 - работу с ARCore frame/plane/hit-test;
+- SceneView nodes конкретной фичи;
+- выбор и вращение плитки;
 - сетевые запросы конкретной фичи;
 - логику выбора и хранения точек;
 - backend DTO конкретной фичи.

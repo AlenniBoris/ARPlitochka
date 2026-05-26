@@ -24,4 +24,8 @@
     <string name="btn_ok">ОК</string>
     <string name="btn_clear_section">Удалить секцию</string>
     <string name="polygon_closed">Контур замкнут</string>
+    <string name="texture_rotation_title">Угол плитки</string>
+    <string name="texture_rotation_format">%d°</string>
+    <string name="btn_rotate_texture">Повернуть на 45°</string>
+    <string name="btn_toggle_tile">Сменить плитку</string>
 </resources>
