@@ -25,3 +25,4 @@
 - [Архитектура](docs/ARCHITECTURE.md)
 - [Модуляризация](docs/MODULARIZATION.md)
 - [Навигация](docs/NAVIGATION.md)
+- [Тестирование](docs/TESTING.md)

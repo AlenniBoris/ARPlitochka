@@ -14,6 +14,8 @@
     - `domain`: Модели, репозитории (интерфейсы), Use Cases.
     - `data`: Реализация репозиториев, API, БД.
     - `presentation`: UI (Compose), ViewModel, Mappers, Utils.
+    - `test`: Unit-тесты для ViewModel, Use Cases и Utils.
+    - `androidTest`: UI-тесты для экранов (Kaspresso) и тесты мапперов.
 
 ### 3. Shared Модули (`:shared:*`)
 Переиспользуемый код, разбитый на микро-модули.
