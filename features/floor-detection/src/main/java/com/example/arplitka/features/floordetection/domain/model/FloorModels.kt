@@ -1,7 +1,5 @@
 package com.example.arplitka.features.floordetection.domain.model
 
-import com.example.arplitka.features.floordetection.R
-import com.example.arplitka.shared.ui.UiText
 import com.google.ar.core.Anchor
 import com.google.ar.core.HitResult
 import com.google.ar.core.Pose
@@ -24,6 +22,22 @@ enum class TileType(val assetPath: String) {
     MODERN("textures/paving_stones_v2.png")
 }
 
+enum class ArStatus {
+    INITIALIZATION,
+    SEARCHING_FLOOR,
+    FLOOR_DETECTED,
+    TRACKING_LOST,
+    POLYGON_CLOSED
+}
+
+enum class ArInstruction {
+    PLEASE_WAIT,
+    SEARCHING,
+    MOVE_PHONE,
+    DETECTED,
+    EMPTY
+}
+
 data class ArPoint(
     val anchor: Anchor,
     val pose: Pose,
@@ -37,8 +51,8 @@ data class FloorUiState(
     val selectedArea: Float = 0f,
     val hasCenterHit: Boolean = false,
     val isDepthEnabled: Boolean = false,
-    val statusText: UiText = UiText.StringResource(R.string.initialization),
-    val instructionText: UiText = UiText.StringResource(R.string.please_wait),
+    val status: ArStatus = ArStatus.INITIALIZATION,
+    val instruction: ArInstruction = ArInstruction.PLEASE_WAIT,
     val points: List<ArPoint> = emptyList(),
     val isPolygonClosed: Boolean = false,
     val isFinalized: Boolean = false,
@@ -46,13 +60,9 @@ data class FloorUiState(
     val selectedTileType: TileType = TileType.MODERN,
     val currentHitPose: Pose? = null,
     val currentHitResult: HitResult? = null,
-    val snappedPointIndex: Int? = null // Index of the point we are currently snapping to
+    val snappedPointIndex: Int? = null
 )
 
-/**
- * Domain model representing the result of processing an AR frame.
- * This is what the Repository returns to the Domain/Presentation layer.
- */
 data class ArFrameResult(
     val trackingState: TrackingState,
     val horizontalPlaneCount: Int,

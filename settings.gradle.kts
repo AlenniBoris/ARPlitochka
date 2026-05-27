@@ -17,5 +17,8 @@ dependencyResolutionManagement {
 rootProject.name = "AR Plitka"
 include(":app")
 include(":features:floor-detection")
-include(":shared:ar")
-include(":shared:ui")
+include(":features:catalog")
+include(":shared:ar:core")
+include(":shared:ui:core")
+include(":shared:ui:navigation")
+include(":shared:ui:kit")

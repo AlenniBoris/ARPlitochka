@@ -3,9 +3,9 @@ package com.example.arplitka.features.floordetection.data.repository
 import androidx.compose.ui.unit.IntSize
 import com.example.arplitka.features.floordetection.domain.model.ArFrameResult
 import com.example.arplitka.features.floordetection.domain.repository.IFloorDetectorRepository
-import com.example.arplitka.shared.ar.area
-import com.example.arplitka.shared.ar.centerPlaneHit
-import com.example.arplitka.shared.ar.isUsableHorizontalPlane
+import com.example.arplitka.shared.ar.core.area
+import com.example.arplitka.shared.ar.core.centerPlaneHit
+import com.example.arplitka.shared.ar.core.isUsableHorizontalPlane
 import com.google.ar.core.Config
 import com.google.ar.core.Frame
 import com.google.ar.core.Plane

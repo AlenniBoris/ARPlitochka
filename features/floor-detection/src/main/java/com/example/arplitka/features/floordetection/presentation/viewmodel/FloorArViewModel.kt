@@ -2,14 +2,14 @@ package com.example.arplitka.features.floordetection.presentation.viewmodel
 
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.ViewModel
-import com.example.arplitka.features.floordetection.R
+import com.example.arplitka.features.floordetection.domain.model.ArInstruction
 import com.example.arplitka.features.floordetection.domain.model.ArPoint
+import com.example.arplitka.features.floordetection.domain.model.ArStatus
 import com.example.arplitka.features.floordetection.domain.model.FloorDetectionState
 import com.example.arplitka.features.floordetection.domain.model.FloorUiState
 import com.example.arplitka.features.floordetection.domain.model.TextureRotation
 import com.example.arplitka.features.floordetection.domain.model.TileType
 import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFrameUseCase
-import com.example.arplitka.shared.ui.UiText
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
@@ -33,8 +33,6 @@ class FloorArViewModel @Inject constructor(
         val result = processArFrameUseCase(session, frame, viewportSize)
         
         _uiState.update { currentState ->
-            // Update all points with their current anchor poses
-            // This ensures Compose sees the changes and updates the UI
             val updatedPoints = currentState.points.map { point ->
                 point.copy(pose = point.anchor.pose)
             }
@@ -45,8 +43,8 @@ class FloorArViewModel @Inject constructor(
                     horizontalPlaneCount = result.horizontalPlaneCount,
                     hasCenterHit = false,
                     isDepthEnabled = result.isDepthEnabled,
-                    statusText = UiText.StringResource(R.string.status_tracking_lost),
-                    instructionText = UiText.StringResource(R.string.instruction_move_phone),
+                    status = ArStatus.TRACKING_LOST,
+                    instruction = ArInstruction.MOVE_PHONE,
                     currentHitPose = null,
                     currentHitResult = null,
                     snappedPointIndex = null,
@@ -60,8 +58,8 @@ class FloorArViewModel @Inject constructor(
                     selectedArea = result.selectedArea,
                     hasCenterHit = result.hasCenterHit,
                     isDepthEnabled = result.isDepthEnabled,
-                    statusText = UiText.StringResource(R.string.status_searching),
-                    instructionText = UiText.StringResource(R.string.instruction_searching),
+                    status = ArStatus.SEARCHING_FLOOR,
+                    instruction = ArInstruction.SEARCHING,
                     currentHitPose = result.hitPose,
                     currentHitResult = result.hitResult,
                     snappedPointIndex = null,
@@ -75,21 +73,16 @@ class FloorArViewModel @Inject constructor(
                     selectedArea = result.selectedArea,
                     hasCenterHit = true,
                     isDepthEnabled = result.isDepthEnabled,
-                    statusText = if (currentState.isPolygonClosed) 
-                        UiText.StringResource(R.string.polygon_closed) 
-                        else UiText.StringResource(R.string.status_candidate),
-                    instructionText = UiText.StringResource(R.string.instruction_detected),
+                    status = if (currentState.isPolygonClosed) ArStatus.POLYGON_CLOSED else ArStatus.FLOOR_DETECTED,
+                    instruction = ArInstruction.DETECTED,
                     currentHitPose = result.hitPose,
                     currentHitResult = result.hitResult,
                     points = updatedPoints
                 )
             }
             
-            // Snapping and Polygon Closing logic
             if (!newState.isFinalized && newState.hasCenterHit && newState.currentHitPose != null && newState.points.isNotEmpty()) {
                 val currentPose = newState.currentHitPose!!
-                
-                // Check snapping to the FIRST point (for closing)
                 val firstPoint = newState.points.first().pose
                 val distToFirst = calculateDistance(firstPoint.tx(), firstPoint.ty(), firstPoint.tz(), 
                                                    currentPose.tx(), currentPose.ty(), currentPose.tz())
@@ -105,7 +98,6 @@ class FloorArViewModel @Inject constructor(
                         isPolygonClosed = false
                     )
                 } else {
-                    // Check snapping to ANY other point (optional, but requested "if point and reticle are at insignificant distance")
                     var foundSnap = false
                     for (i in 1 until newState.points.size) {
                         val p = newState.points[i].pose
@@ -237,8 +229,8 @@ class FloorArViewModel @Inject constructor(
     }
     
     companion object {
-        private const val CLOSE_THRESHOLD_M = 0.10f // 10cm to close the loop
-        private const val SNAP_THRESHOLD_M = 0.05f  // 5cm for visual snapping
+        private const val CLOSE_THRESHOLD_M = 0.10f
+        private const val SNAP_THRESHOLD_M = 0.05f
         private const val MAX_POINT_HEIGHT_DELTA_M = 0.08f
     }
 }
