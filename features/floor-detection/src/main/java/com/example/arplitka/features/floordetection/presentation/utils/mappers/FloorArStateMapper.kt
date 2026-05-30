@@ -3,16 +3,17 @@ package com.example.arplitka.features.floordetection.presentation.utils.mappers
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.example.arplitka.features.floordetection.R
-import com.example.arplitka.features.floordetection.domain.model.ArInstruction
-import com.example.arplitka.features.floordetection.domain.model.ArStatus
+import com.example.arplitka.shared.ar.contracts.model.ArInstruction
+import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 
 @Composable
-fun ArStatus.toText(): String = when (this) {
-    ArStatus.INITIALIZATION -> stringResource(R.string.initialization)
-    ArStatus.SEARCHING_FLOOR -> stringResource(R.string.status_searching)
-    ArStatus.FLOOR_DETECTED -> stringResource(R.string.status_candidate)
-    ArStatus.TRACKING_LOST -> stringResource(R.string.status_tracking_lost)
-    ArStatus.POLYGON_CLOSED -> stringResource(R.string.polygon_closed)
+fun ArTrackingStatus.toText(): String = when (this) {
+    ArTrackingStatus.INITIALIZING -> stringResource(R.string.initialization)
+    ArTrackingStatus.SEARCHING_FLOOR -> stringResource(R.string.status_searching)
+    ArTrackingStatus.FLOOR_DETECTED -> stringResource(R.string.status_candidate)
+    ArTrackingStatus.TRACKING_LOST -> stringResource(R.string.status_tracking_lost)
+    ArTrackingStatus.POLYGON_CLOSED -> stringResource(R.string.polygon_closed)
+    ArTrackingStatus.FINALIZED -> "" // Or some other string
 }
 
 @Composable

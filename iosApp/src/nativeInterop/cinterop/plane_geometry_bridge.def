@@ -1,0 +1,213 @@
+headers = PlaneGeometryBridge.h
+headerFilter = PlaneGeometryBridge.h
+package = com.example.arplitka.iosapp.bridge
+language = Objective-C
+compilerOpts = -framework ARKit -framework Foundation
+linkerOpts = -framework ARKit -framework Foundation
+
+---
+
+#import <ARKit/ARKit.h>
+#import <math.h>
+#import <stdint.h>
+#import <string.h>
+#import "PlaneGeometryBridge.h"
+
+static ARPlaneAnchor *PGCast(void *planeAnchor) {
+    if (planeAnchor == NULL) {
+        return NULL;
+    }
+    return (__bridge ARPlaneAnchor *)planeAnchor;
+}
+
+static uint32_t PGHashFloat(float value) {
+    uint32_t bits = 0;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+static BOOL PGReadExtentBoundary(ARPlaneAnchor *anchor, vector_float3 *outVertices, NSUInteger *outCount) {
+    if (anchor == NULL || outVertices == NULL || outCount == NULL) {
+        return NO;
+    }
+
+    float width = 0.0f;
+    float depth = 0.0f;
+    float centerX = 0.0f;
+    float centerZ = 0.0f;
+
+    if (@available(iOS 16.0, *)) {
+        width = anchor.planeExtent.width;
+        depth = anchor.planeExtent.height;
+    } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        width = anchor.extent.x;
+        depth = anchor.extent.z;
+        centerX = anchor.center.x;
+        centerZ = anchor.center.z;
+#pragma clang diagnostic pop
+    }
+
+    if (width <= 0.0f || depth <= 0.0f) {
+        return NO;
+    }
+
+    float halfX = width * 0.5f;
+    float halfZ = depth * 0.5f;
+    outVertices[0] = (vector_float3){ centerX - halfX, 0.0f, centerZ - halfZ };
+    outVertices[1] = (vector_float3){ centerX + halfX, 0.0f, centerZ - halfZ };
+    outVertices[2] = (vector_float3){ centerX + halfX, 0.0f, centerZ + halfZ };
+    outVertices[3] = (vector_float3){ centerX - halfX, 0.0f, centerZ + halfZ };
+    *outCount = 4;
+    return YES;
+}
+
+static BOOL PGReadBoundary(ARPlaneAnchor *anchor, const vector_float3 **outVertices, NSUInteger *outCount, vector_float3 *fallbackVertices) {
+    if (anchor == NULL || outVertices == NULL || outCount == NULL) {
+        return NO;
+    }
+
+    ARPlaneGeometry *geometry = anchor.geometry;
+    if (geometry != NULL && geometry.boundaryVertexCount >= 3 && geometry.boundaryVertices != NULL) {
+        *outVertices = geometry.boundaryVertices;
+        *outCount = geometry.boundaryVertexCount;
+        return YES;
+    }
+
+    if (PGReadExtentBoundary(anchor, fallbackVertices, outCount)) {
+        *outVertices = fallbackVertices;
+        return YES;
+    }
+    return NO;
+}
+
+static BOOL PGPointInPolygonXZ(float x, float z, const vector_float3 *vertices, NSUInteger count) {
+    if (vertices == NULL || count < 3) {
+        return NO;
+    }
+
+    BOOL inside = NO;
+    for (NSUInteger i = 0, j = count - 1; i < count; j = i++) {
+        float xi = vertices[i].x;
+        float zi = vertices[i].z;
+        float xj = vertices[j].x;
+        float zj = vertices[j].z;
+        BOOL intersect = ((zi > z) != (zj > z)) &&
+            (x < (xj - xi) * (z - zi) / ((zj - zi) + 1e-6f) + xi);
+        if (intersect) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+static float PGPolygonArea(const vector_float3 *vertices, NSUInteger count) {
+    if (vertices == NULL || count < 3) {
+        return 0.0f;
+    }
+
+    float sum = 0.0f;
+    for (NSUInteger i = 0; i < count; i++) {
+        NSUInteger next = (i + 1) % count;
+        sum += vertices[i].x * vertices[next].z - vertices[next].x * vertices[i].z;
+    }
+    return fabsf(sum) * 0.5f;
+}
+
+bool pg_local_point_in_polygon(void *planeAnchor, float localX, float localZ) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    vector_float3 fallback[4];
+    const vector_float3 *vertices = NULL;
+    NSUInteger count = 0;
+    if (!PGReadBoundary(anchor, &vertices, &count, fallback)) {
+        return false;
+    }
+    return PGPointInPolygonXZ(localX, localZ, vertices, count);
+}
+
+uint32_t pg_geometry_signature(void *planeAnchor) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    vector_float3 fallback[4];
+    const vector_float3 *vertices = NULL;
+    NSUInteger count = 0;
+    if (!PGReadBoundary(anchor, &vertices, &count, fallback)) {
+        return 0;
+    }
+
+    uint32_t hash = (uint32_t)count;
+    for (NSUInteger i = 0; i < count; i++) {
+        hash = hash * 31u + PGHashFloat(vertices[i].x);
+        hash = hash * 31u + PGHashFloat(vertices[i].z);
+    }
+    return hash;
+}
+
+int pg_generate_dot_points(
+    void *planeAnchor,
+    float stepM,
+    float refX,
+    float refZ,
+    float maxRadiusM,
+    float *outLocalX,
+    float *outLocalZ,
+    int maxPoints
+) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    if (anchor == NULL || stepM <= 0.0f || maxPoints <= 0 || outLocalX == NULL || outLocalZ == NULL) {
+        return 0;
+    }
+
+    vector_float3 fallback[4];
+    const vector_float3 *vertices = NULL;
+    NSUInteger count = 0;
+    if (!PGReadBoundary(anchor, &vertices, &count, fallback)) {
+        return 0;
+    }
+
+    float minX = INFINITY;
+    float maxX = -INFINITY;
+    float minZ = INFINITY;
+    float maxZ = -INFINITY;
+    for (NSUInteger i = 0; i < count; i++) {
+        float x = vertices[i].x;
+        float z = vertices[i].z;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+    }
+
+    float radiusSq = maxRadiusM * maxRadiusM;
+    int written = 0;
+    for (float x = floorf(minX / stepM) * stepM; x <= maxX + stepM * 0.5f; x += stepM) {
+        for (float z = floorf(minZ / stepM) * stepM; z <= maxZ + stepM * 0.5f; z += stepM) {
+            float dx = x - refX;
+            float dz = z - refZ;
+            if ((dx * dx + dz * dz) > radiusSq) {
+                continue;
+            }
+            if (!PGPointInPolygonXZ(x, z, vertices, count)) {
+                continue;
+            }
+            outLocalX[written] = x;
+            outLocalZ[written] = z;
+            written++;
+            if (written >= maxPoints) {
+                return written;
+            }
+        }
+    }
+    return written;
+}
+
+float pg_polygon_area(void *planeAnchor) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    vector_float3 fallback[4];
+    const vector_float3 *vertices = NULL;
+    NSUInteger count = 0;
+    if (!PGReadBoundary(anchor, &vertices, &count, fallback)) {
+        return 0.0f;
+    }
+    return PGPolygonArea(vertices, count);
+}

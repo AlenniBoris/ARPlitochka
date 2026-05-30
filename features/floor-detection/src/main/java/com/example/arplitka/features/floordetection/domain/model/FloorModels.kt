@@ -1,5 +1,7 @@
 package com.example.arplitka.features.floordetection.domain.model
 
+import com.example.arplitka.shared.ar.contracts.model.ArInstruction
+import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.google.ar.core.Anchor
 import com.google.ar.core.HitResult
 import com.google.ar.core.Pose
@@ -22,22 +24,6 @@ enum class TileType(val assetPath: String) {
     MODERN("textures/paving_stones_v2.png")
 }
 
-enum class ArStatus {
-    INITIALIZATION,
-    SEARCHING_FLOOR,
-    FLOOR_DETECTED,
-    TRACKING_LOST,
-    POLYGON_CLOSED
-}
-
-enum class ArInstruction {
-    PLEASE_WAIT,
-    SEARCHING,
-    MOVE_PHONE,
-    DETECTED,
-    EMPTY
-}
-
 data class ArPoint(
     val anchor: Anchor,
     val pose: Pose,
@@ -51,7 +37,7 @@ data class FloorUiState(
     val selectedArea: Float = 0f,
     val hasCenterHit: Boolean = false,
     val isDepthEnabled: Boolean = false,
-    val status: ArStatus = ArStatus.INITIALIZATION,
+    val status: ArTrackingStatus = ArTrackingStatus.INITIALIZING,
     val instruction: ArInstruction = ArInstruction.PLEASE_WAIT,
     val points: List<ArPoint> = emptyList(),
     val isPolygonClosed: Boolean = false,

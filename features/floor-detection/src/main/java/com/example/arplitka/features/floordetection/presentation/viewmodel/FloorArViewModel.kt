@@ -2,9 +2,9 @@ package com.example.arplitka.features.floordetection.presentation.viewmodel
 
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.ViewModel
-import com.example.arplitka.features.floordetection.domain.model.ArInstruction
+import com.example.arplitka.shared.ar.contracts.model.ArInstruction
+import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.features.floordetection.domain.model.ArPoint
-import com.example.arplitka.features.floordetection.domain.model.ArStatus
 import com.example.arplitka.features.floordetection.domain.model.FloorDetectionState
 import com.example.arplitka.features.floordetection.domain.model.FloorUiState
 import com.example.arplitka.features.floordetection.domain.model.TextureRotation
@@ -43,7 +43,7 @@ class FloorArViewModel @Inject constructor(
                     horizontalPlaneCount = result.horizontalPlaneCount,
                     hasCenterHit = false,
                     isDepthEnabled = result.isDepthEnabled,
-                    status = ArStatus.TRACKING_LOST,
+                    status = ArTrackingStatus.TRACKING_LOST,
                     instruction = ArInstruction.MOVE_PHONE,
                     currentHitPose = null,
                     currentHitResult = null,
@@ -58,7 +58,7 @@ class FloorArViewModel @Inject constructor(
                     selectedArea = result.selectedArea,
                     hasCenterHit = result.hasCenterHit,
                     isDepthEnabled = result.isDepthEnabled,
-                    status = ArStatus.SEARCHING_FLOOR,
+                    status = ArTrackingStatus.SEARCHING_FLOOR,
                     instruction = ArInstruction.SEARCHING,
                     currentHitPose = result.hitPose,
                     currentHitResult = result.hitResult,
@@ -73,7 +73,7 @@ class FloorArViewModel @Inject constructor(
                     selectedArea = result.selectedArea,
                     hasCenterHit = true,
                     isDepthEnabled = result.isDepthEnabled,
-                    status = if (currentState.isPolygonClosed) ArStatus.POLYGON_CLOSED else ArStatus.FLOOR_DETECTED,
+                    status = if (currentState.isPolygonClosed) ArTrackingStatus.POLYGON_CLOSED else ArTrackingStatus.FLOOR_DETECTED,
                     instruction = ArInstruction.DETECTED,
                     currentHitPose = result.hitPose,
                     currentHitResult = result.hitResult,

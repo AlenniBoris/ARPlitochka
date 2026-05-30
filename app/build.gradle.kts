@@ -51,6 +51,8 @@ dependencies {
     implementation(project(":shared:ui:navigation"))
     implementation(project(":shared:ui:core"))
     implementation(project(":shared:ui:kit"))
+    implementation(project(":shared:app"))
+    implementation(project(":network:core"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -69,4 +71,6 @@ dependencies {
     implementation(libs.sceneview.ar)
 
     debugImplementation(libs.androidx.ui.tooling)
+    debugImplementation(project(":mock:core"))
+    debugImplementation(project(":mock:tiles"))
 }

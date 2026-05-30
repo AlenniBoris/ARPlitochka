@@ -31,6 +31,7 @@ android {
 
 dependencies {
     implementation(project(":shared:ui:core"))
+    implementation(project(":shared:tiles"))
 
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))

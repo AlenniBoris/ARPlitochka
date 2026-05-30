@@ -5,14 +5,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.arplitka.features.floordetection.domain.model.ArInstruction
-import com.example.arplitka.features.floordetection.domain.model.ArStatus
+import com.example.arplitka.shared.ar.contracts.model.ArInstruction
+import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.features.floordetection.presentation.utils.mappers.toText
 import com.example.arplitka.shared.ui.kit.StatusPanel
 
 @Composable
 fun ArStatusOverlay(
-    status: ArStatus,
+    status: ArTrackingStatus,
     instruction: ArInstruction,
     modifier: Modifier = Modifier
 ) {

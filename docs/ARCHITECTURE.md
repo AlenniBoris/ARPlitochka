@@ -2,6 +2,14 @@
 
 Проект следует принципам Clean Architecture и MVVM.
 
+## Multiplatform
+- Общие бизнес-сущности, DTO, use cases, mock contracts и UI shell проектируются как KMP/CMP-ready код.
+- Android и iOS должны поддерживать одинаковые пользовательские сценарии.
+- Новые пользовательские фичи проектируются shared-first: сначала общий contract/state/UI в KMP/CMP, затем platform-specific реализации только для SDK-зависимых частей.
+- Android и iOS entry points должны запускать один `:shared:app` root. Разные корневые navigation shell для платформ запрещены.
+- AR-движок является platform-specific: Android использует ARCore/SceneView, iOS использует ARKit/native interop.
+- Общий AR-контракт хранится отдельно от platform rendering слоя.
+
 ## Слой Presentation
 
 ### UI (Compose)
