@@ -1,4 +1,4 @@
-package com.example.arplitka.features.floordetection.presentation.components
+package com.example.arplitka.shared.ui.kit
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth

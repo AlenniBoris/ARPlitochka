@@ -47,6 +47,28 @@ internal object HitTransformReader {
         scratchNode.transform = SCNMatrix4FromMat4(hitResult.localTransform)
         return scratchNode.position.useContents { x.toFloat() to z.toFloat() }
     }
+
+    fun worldFloorPoint(hitResult: ARHitTestResult): com.example.arplitka.shared.ar.contracts.model.ArPoint3D {
+        scratchNode.transform = SCNMatrix4FromMat4(hitResult.worldTransform)
+        return scratchNode.position.useContents {
+            com.example.arplitka.shared.ar.contracts.model.ArPoint3D(
+                xMeters = x.toFloat(),
+                yMeters = y.toFloat(),
+                zMeters = z.toFloat()
+            )
+        }
+    }
+
+    fun worldPointFromAnchor(anchor: platform.ARKit.ARAnchor): com.example.arplitka.shared.ar.contracts.model.ArPoint3D {
+        scratchNode.transform = SCNMatrix4FromMat4(anchor.transform)
+        return scratchNode.position.useContents {
+            com.example.arplitka.shared.ar.contracts.model.ArPoint3D(
+                xMeters = x.toFloat(),
+                yMeters = y.toFloat(),
+                zMeters = z.toFloat()
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalForeignApi::class)

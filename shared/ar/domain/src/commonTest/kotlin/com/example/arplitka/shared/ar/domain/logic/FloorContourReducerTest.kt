@@ -1,0 +1,73 @@
+package com.example.arplitka.shared.ar.domain.logic
+
+import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
+import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
+import com.example.arplitka.shared.ar.domain.model.PlacedContourPoint
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+
+class FloorContourReducerTest {
+    private fun point(x: Float, y: Float = 0f, z: Float = 0f) = ArPoint3D(x, y, z)
+
+    private fun stateWithPoints(vararg coords: Pair<Float, Float>): FloorContourUiState {
+        val placed = coords.mapIndexed { index, (x, z) ->
+            PlacedContourPoint(id = "p$index", position = point(x, z = z))
+        }
+        return FloorContourUiState(
+            hasCenterHit = true,
+            isFloorDetected = true,
+            placedPoints = placed,
+            currentHitPoint = point(0f, 0f, 0f)
+        )
+    }
+
+    @Test
+    fun tryAddPoint_rejectsWhenTooCloseToLastPoint() {
+        val state = stateWithPoints(0f to 0f).copy(
+            currentHitPoint = point(0.02f, 0f, 0f)
+        )
+        assertNull(FloorContourReducer.tryAddPoint(state))
+    }
+
+    @Test
+    fun tryAddPoint_rejectsWhenHeightDeltaTooLarge() {
+        val state = stateWithPoints(0f to 0f, 1f to 0f).copy(
+            currentHitPoint = point(2f, 0.2f, 0f)
+        )
+        assertNull(FloorContourReducer.tryAddPoint(state))
+    }
+
+    @Test
+    fun tryAddPoint_acceptsValidPoint() {
+        val state = stateWithPoints(0f to 0f).copy(
+            currentHitPoint = point(1f, 0f, 0f)
+        )
+        assertEquals(point(1f, 0f, 0f), FloorContourReducer.tryAddPoint(state))
+    }
+
+    @Test
+    fun snapReducer_closesPolygonNearFirstPoint() {
+        val state = stateWithPoints(
+            0f to 0f,
+            1f to 0f,
+            1f to 1f
+        ).copy(currentHitPoint = point(0.05f, 0f, 0.05f))
+
+        val snapped = FloorSnapReducer.applySnap(state)
+        assertEquals(true, snapped.isPolygonClosed)
+        assertEquals(0, snapped.snappedPointIndex)
+    }
+
+    @Test
+    fun snapReducer_snapsToExistingPoint() {
+        val state = stateWithPoints(
+            0f to 0f,
+            1f to 0f
+        ).copy(currentHitPoint = point(1f, 0f, 0.03f))
+
+        val snapped = FloorSnapReducer.applySnap(state)
+        assertEquals(false, snapped.isPolygonClosed)
+        assertEquals(1, snapped.snappedPointIndex)
+    }
+}

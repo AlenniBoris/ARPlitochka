@@ -29,6 +29,7 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
+            implementation(compose.materialIconsExtended)
             implementation(compose.ui)
         }
         androidMain.dependencies {
@@ -42,6 +43,9 @@ android {
     compileSdk = 36
     defaultConfig {
         minSdk = 26
+    }
+    buildFeatures {
+        buildConfig = true
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

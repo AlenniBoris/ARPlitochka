@@ -235,7 +235,21 @@ hasCenterHit = centerHit.confirmed || centerHit.previewHitResult != null
 | `SEARCHING_FLOOR` | «Наведите прицел на поверхность» |
 | `FLOOR_DETECTED` | «Поверхность под прицелом» |
 
-Debug: Planes, **Focused** (число точек), Area, Tracking, Center hit. На iOS debug-панель показывается **всегда** (на Android — только в `BuildConfig.DEBUG`).
+Debug: Planes, **Focused** (число точек), Area, Tracking, Center hit, Points, Closed. Debug-панель на обеих платформах только в debug-сборке (`isDebugBuild()` из `shared/ui/kit`).
+
+### Контурные точки (iOS, shared domain)
+
+После detection пользователь может ставить **контурные точки** — логика вынесена в `:shared:ar:domain`:
+
+| Компонент | Роль |
+|-----------|------|
+| `FloorArController` | Состояние контура, события Add/Undo/Reset |
+| `FloorContourReducer` / `FloorSnapReducer` | Snap 0.05 m, close 0.10 m, max height Δ 0.08 m |
+| `IosFloorAnchorStore` | `ARAnchor` на каждую точку |
+| `IosArContourRenderer` | SceneKit: зелёные цилиндры, синие линии, preview-линия |
+| `ArContourActionButtons` | Кнопки «+» / Undo / OK (shared UI kit) |
+
+Пока **не** реализовано на iOS: текстура, finalize UI, rotate tile (Android-only).
 
 ### Отличительные черты iOS
 
@@ -249,7 +263,9 @@ Debug: Planes, **Focused** (число точек), Area, Tracking, Center hit. 
 
 | Файл | Роль |
 |------|------|
-| `IosArScreen.ios.kt` | Сессия, coordinator, UI, center hit |
+| `IosArScreen.ios.kt` | Сессия, coordinator, UI, center hit, contour |
+| `IosArContourRenderer.kt` | SceneKit: точки контура, линии, preview |
+| `IosFloorAnchorStore.kt` | CRUD `ARAnchor` для точек |
 | `IosArPlaneRenderer.kt` | Geometry reader, polygon dot generation, focus, SCN dots |
 | `PlaneGeometryBridge.h` | C API для ARKit geometry |
 | `plane_geometry_bridge.def` | ObjC реализация и Kotlin cinterop |
@@ -269,6 +285,7 @@ Debug: Planes, **Focused** (число точек), Area, Tracking, Center hit. 
 | Horizontal filter | `HORIZONTAL_UPWARD_FACING` | `ARPlaneAnchorAlignmentHorizontal` |
 | Min area | 0.15 m² | 0.15 m² |
 | Depth | Automatic, если есть | Не используется в detection |
+| Контурные точки | ✅ `FloorArViewModel` | ✅ `FloorArController` + SceneKit |
 
 ---
 

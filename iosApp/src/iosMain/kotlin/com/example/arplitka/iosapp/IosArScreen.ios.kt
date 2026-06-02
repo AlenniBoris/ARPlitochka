@@ -4,8 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -19,9 +17,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitView
 import com.example.arplitka.shared.ar.contracts.model.ArInstruction
 import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
+import com.example.arplitka.shared.ar.contracts.state.FloorArEvent
+import com.example.arplitka.shared.ar.domain.FloorArController
+import com.example.arplitka.shared.ar.domain.FloorArEffect
+import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
+import com.example.arplitka.shared.ar.domain.model.FloorFrameSnapshot
+import com.example.arplitka.shared.ui.kit.ArContourActionButtons
+import com.example.arplitka.shared.ui.kit.ArTopBar
 import com.example.arplitka.shared.ui.kit.CenterReticle
 import com.example.arplitka.shared.ui.kit.DebugPanel
 import com.example.arplitka.shared.ui.kit.StatusPanel
+import com.example.arplitka.shared.ui.kit.isDebugBuild
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCSignatureOverride
 import kotlinx.cinterop.useContents
@@ -37,39 +43,20 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalForeignApi::class)
 @Composable
 actual fun IosArScreen(onBack: () -> Unit) {
-    var trackingStatus by remember { mutableStateOf(ArTrackingStatus.INITIALIZING) }
-    var instruction by remember { mutableStateOf(ArInstruction.PLEASE_WAIT) }
-    var hasCenterHit by remember { mutableStateOf(false) }
-
-    var planeCount by remember { mutableStateOf(0) }
-    var floorArea by remember { mutableStateOf(0f) }
+    var contourState by remember { mutableStateOf(FloorContourUiState()) }
     var trackingStateName by remember { mutableStateOf("INITIALIZING") }
-    var focusedLabel by remember { mutableStateOf("No") }
+
+    val floorArController = remember {
+        FloorArController(
+            onStateChanged = { contourState = it }
+        )
+    }
 
     val coordinator = remember {
         IosArSessionCoordinator(
-            onTrackingChanged = { status, nextInstruction, trackingName ->
-                trackingStatus = status
-                instruction = nextInstruction
-                trackingStateName = trackingName
-            },
-            onFrameUpdated = { horizontalPlaneCount, centerHit, floorDetected, selectedArea, nextFocusedLabel ->
-                planeCount = horizontalPlaneCount
-                hasCenterHit = centerHit
-                floorArea = selectedArea
-                focusedLabel = nextFocusedLabel
-                when {
-                    trackingStatus == ArTrackingStatus.TRACKING_LOST -> Unit
-                    floorDetected -> {
-                        trackingStatus = ArTrackingStatus.FLOOR_DETECTED
-                        instruction = ArInstruction.DETECTED
-                    }
-                    trackingStatus == ArTrackingStatus.FLOOR_DETECTED -> {
-                        trackingStatus = ArTrackingStatus.SEARCHING_FLOOR
-                        instruction = ArInstruction.SEARCHING
-                    }
-                }
-            }
+            floorArController = floorArController,
+            onStateChanged = { contourState = it },
+            onTrackingNameChanged = { trackingStateName = it }
         )
     }
 
@@ -94,8 +81,8 @@ actual fun IosArScreen(onBack: () -> Unit) {
         )
 
         StatusPanel(
-            statusText = trackingStatus.toIosText(),
-            instructionText = instruction.toIosText(),
+            statusText = contourState.trackingStatus.toIosText(),
+            instructionText = contourState.instruction.toIosText(),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(horizontal = 16.dp, vertical = 36.dp)
@@ -103,57 +90,70 @@ actual fun IosArScreen(onBack: () -> Unit) {
 
         CenterReticle(
             modifier = Modifier.align(Alignment.Center),
-            isActive = hasCenterHit
+            isActive = contourState.hasCenterHit
         )
 
-        DebugPanel(
-            debugLines = mapOf(
-                "Planes" to planeCount.toString(),
-                "Focused" to focusedLabel,
-                "Area" to "${(floorArea * 100).roundToInt() / 100.0} m²",
-                "Tracking" to trackingStateName,
-                "Center hit" to if (hasCenterHit) "Yes" else "No"
-            ),
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(12.dp)
-                .padding(bottom = 100.dp)
-        )
-
-        Button(
-            onClick = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(24.dp)
-        ) {
-            Text("Назад")
+        if (!contourState.isFinalized) {
+            ArContourActionButtons(
+                hasCenterHit = contourState.hasCenterHit,
+                isPolygonClosed = contourState.isPolygonClosed,
+                hasPoints = contourState.placedPoints.isNotEmpty(),
+                onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
+                onUndoPoint = { coordinator.dispatchEvent(FloorArEvent.UndoPoint) },
+                addContentDescription = "Добавить точку",
+                undoContentDescription = "Отменить",
+                okContentDescription = "Готово",
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
+
+        if (isDebugBuild()) {
+            DebugPanel(
+                debugLines = mapOf(
+                    "Planes" to contourState.horizontalPlaneCount.toString(),
+                    "Focused" to contourState.focusedLabel,
+                    "Area" to "${(contourState.selectedArea * 100).roundToInt() / 100.0} m²",
+                    "Tracking" to trackingStateName,
+                    "Center hit" to if (contourState.hasCenterHit) "Yes" else "No",
+                    "Points" to contourState.placedPoints.size.toString(),
+                    "Closed" to if (contourState.isPolygonClosed) "Yes" else "No"
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(12.dp)
+                    .padding(bottom = 100.dp)
+            )
+        }
+
+        ArTopBar(
+            onBack = onBack,
+            modifier = Modifier.align(Alignment.TopStart)
+        )
     }
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private class IosArSessionCoordinator(
-    private val onTrackingChanged: (ArTrackingStatus, ArInstruction, String) -> Unit,
-    private val onFrameUpdated: (
-        horizontalPlaneCount: Int,
-        centerHit: Boolean,
-        floorDetected: Boolean,
-        selectedArea: Float,
-        focusedLabel: String
-    ) -> Unit
+    private val floorArController: FloorArController,
+    private val onStateChanged: (FloorContourUiState) -> Unit,
+    private val onTrackingNameChanged: (String) -> Unit
 ) : NSObject(), ARSCNViewDelegateProtocol, ARSessionDelegateProtocol {
 
     private var sceneView: ARSCNView? = null
+    private var isSessionTracking = false
     private var lastPlaneCount: Int = -1
     private var lastConfirmedCenterHit: Boolean = false
     private var lastFloorDetected: Boolean = false
     private var lastSelectedArea: Float = -1f
     private var lastFocusedLabel: String = ""
+    private var lastConfirmedHitResult: ARHitTestResult? = null
     private var floorDotMaterial = createFloorDotMaterial()
     private val planeFingerprints: PlaneFingerprints = mutableMapOf()
     private val planeAreas: PlaneAreas = mutableMapOf()
     private val planeDotCounts: PlaneDotCounts = mutableMapOf()
     private val focusedPlaneTracker = FocusedPlaneTracker()
+    private val anchorStore = IosFloorAnchorStore()
+    private val contourRenderer = IosArContourRenderer()
     private var lastCenterLocal: Pair<Float, Float>? = null
     private var lastRenderedFocusedAnchorId: NSUUID? = null
     private var dotGridSyncProgress: DotGridSyncProgress? = null
@@ -172,10 +172,13 @@ private class IosArSessionCoordinator(
         lastFloorDetected = false
         lastSelectedArea = -1f
         lastFocusedLabel = ""
+        lastConfirmedHitResult = null
+        isSessionTracking = false
         floorDotMaterial = createFloorDotMaterial()
         sceneView.debugOptions = 0UL
         sceneView.delegate = this
         sceneView.session.delegate = this
+        sceneView.scene?.rootNode?.let { contourRenderer.attach(it) }
         sceneView.session.runWithConfiguration(
             createConfiguration(),
             ARSessionRunOptionResetTracking or ARSessionRunOptionRemoveExistingAnchors
@@ -183,6 +186,10 @@ private class IosArSessionCoordinator(
     }
 
     fun pause() {
+        sceneView?.session?.let { session ->
+            anchorStore.detachAll(session, session.currentFrame)
+        }
+        contourRenderer.detach()
         sceneView?.session?.pause()
         sceneView?.delegate = null
         sceneView?.session?.delegate = null
@@ -193,6 +200,13 @@ private class IosArSessionCoordinator(
         lastRenderedFocusedAnchorId = null
         dotGridSyncProgress = null
         sceneView = null
+    }
+
+    fun dispatchEvent(event: FloorArEvent) {
+        val effects = floorArController.onEvent(event)
+        applyEffects(effects)
+        syncContourRenderer()
+        onStateChanged(floorArController.currentState())
     }
 
     @ObjCSignatureOverride
@@ -226,6 +240,7 @@ private class IosArSessionCoordinator(
             .filter { it.isHorizontalTracking() }
 
         val centerHit = view.centerPlaneHit()
+        lastConfirmedHitResult = centerHit.confirmedHitResult
         val focusedAnchorId = focusedPlaneTracker.update(centerHit.anchor?.identifier)
         updatePlaneDotVisualization(view, didUpdateFrame, focusedAnchorId, centerHit)
         val hasVisualCenterHit = centerHit.confirmed || centerHit.previewHitResult != null
@@ -237,6 +252,19 @@ private class IosArSessionCoordinator(
             dotCount = focusedAnchorId?.let { planeDotCounts[it] } ?: 0,
             inGracePeriod = focusedPlaneTracker.isInGracePeriod()
         )
+
+        val snapshot = FloorFrameSnapshot(
+            isTracking = isSessionTracking,
+            horizontalPlaneCount = horizontalPlanes.size,
+            selectedArea = selectedArea,
+            hasCenterHit = hasVisualCenterHit,
+            isFloorDetected = floorDetected,
+            currentHitPoint = centerHit.confirmedHitResult?.let { HitTransformReader.worldFloorPoint(it) },
+            focusedLabel = focusedLabel
+        )
+        val updatedPoints = anchorStore.readPositions(didUpdateFrame)
+        floorArController.onFrame(snapshot, updatedPoints)
+        syncContourRenderer()
 
         if (
             lastPlaneCount != horizontalPlanes.size ||
@@ -250,39 +278,55 @@ private class IosArSessionCoordinator(
             lastFloorDetected = floorDetected
             lastSelectedArea = selectedArea
             lastFocusedLabel = focusedLabel
-            onFrameUpdated(
-                horizontalPlanes.size,
-                hasVisualCenterHit,
-                floorDetected,
-                selectedArea,
-                focusedLabel
-            )
+            onStateChanged(floorArController.currentState())
         }
     }
 
     override fun session(session: ARSession, cameraDidChangeTrackingState: ARCamera) {
         when (cameraDidChangeTrackingState.trackingState) {
-            ARTrackingState.ARTrackingStateNotAvailable -> onTrackingChanged(
-                ArTrackingStatus.TRACKING_LOST,
-                ArInstruction.MOVE_PHONE,
-                "NOT_AVAILABLE"
-            )
-            ARTrackingState.ARTrackingStateLimited -> onTrackingChanged(
-                ArTrackingStatus.SEARCHING_FLOOR,
-                ArInstruction.MOVE_PHONE,
-                "LIMITED"
-            )
-            ARTrackingState.ARTrackingStateNormal -> onTrackingChanged(
-                ArTrackingStatus.SEARCHING_FLOOR,
-                ArInstruction.SEARCHING,
-                "TRACKING"
-            )
-            else -> onTrackingChanged(
-                ArTrackingStatus.SEARCHING_FLOOR,
-                ArInstruction.SEARCHING,
-                "UNKNOWN"
-            )
+            ARTrackingState.ARTrackingStateNotAvailable -> {
+                isSessionTracking = false
+                onTrackingNameChanged("NOT_AVAILABLE")
+            }
+            ARTrackingState.ARTrackingStateLimited -> {
+                isSessionTracking = true
+                onTrackingNameChanged("LIMITED")
+            }
+            ARTrackingState.ARTrackingStateNormal -> {
+                isSessionTracking = true
+                onTrackingNameChanged("TRACKING")
+            }
+            else -> {
+                isSessionTracking = true
+                onTrackingNameChanged("UNKNOWN")
+            }
         }
+    }
+
+    private fun applyEffects(effects: List<FloorArEffect>) {
+        val session = sceneView?.session ?: return
+        val frame = session.currentFrame
+        effects.forEach { effect ->
+            when (effect) {
+                is FloorArEffect.CreateAnchorAt -> {
+                    val hit = lastConfirmedHitResult ?: return@forEach
+                    val logicalId = NSUUID().UUIDString()
+                    val anchor = ARAnchor(transform = hit.worldTransform)
+                    session.addAnchor(anchor)
+                    anchorStore.register(logicalId, anchor)
+                    floorArController.onPointAdded(
+                        logicalId,
+                        HitTransformReader.worldFloorPoint(hit)
+                    )
+                }
+                is FloorArEffect.DetachAnchor -> anchorStore.detachLast(session, frame)
+                FloorArEffect.DetachAllAnchors -> anchorStore.detachAll(session, frame)
+            }
+        }
+    }
+
+    private fun syncContourRenderer() {
+        contourRenderer.sync(floorArController.currentState())
     }
 
     private fun updatePlaneDotVisualization(
@@ -382,6 +426,7 @@ private class IosArSessionCoordinator(
             confirmed = confirmed,
             anchor = if (confirmed) anchor else null,
             localPoint = if (confirmed) localPoint else null,
+            confirmedHitResult = if (confirmed) hitResult else null,
             previewHitResult = if (confirmed) {
                 null
             } else {
@@ -401,6 +446,7 @@ private data class CenterPlaneHit(
     val confirmed: Boolean = false,
     val anchor: ARPlaneAnchor? = null,
     val localPoint: Pair<Float, Float>? = null,
+    val confirmedHitResult: ARHitTestResult? = null,
     val previewHitResult: ARHitTestResult? = null
 )
 

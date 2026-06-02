@@ -20,16 +20,16 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.arplitka.features.floordetection.BuildConfig
 import com.example.arplitka.features.floordetection.R
 import com.example.arplitka.features.floordetection.presentation.components.ArActionButtons
 import com.example.arplitka.features.floordetection.presentation.components.ArSceneLayer
 import com.example.arplitka.features.floordetection.presentation.components.ArStatusOverlay
-import com.example.arplitka.features.floordetection.presentation.components.ArTopBar
 import com.example.arplitka.features.floordetection.presentation.viewmodel.FloorArViewModel
+import com.example.arplitka.shared.ui.kit.ArTopBar
 import com.example.arplitka.shared.ui.kit.BlockingMessage
 import com.example.arplitka.shared.ui.kit.CenterReticle
 import com.example.arplitka.shared.ui.kit.DebugPanel
+import com.example.arplitka.shared.ui.kit.isDebugBuild
 import androidx.compose.foundation.layout.padding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -98,7 +98,7 @@ fun FloorArScreen(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
-        if (BuildConfig.DEBUG) {
+        if (isDebugBuild()) {
             DebugPanel(
                 debugLines = mapOf(
                     stringResource(R.string.debug_planes) to uiState.horizontalPlaneCount.toString(),
