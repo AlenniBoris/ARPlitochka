@@ -464,5 +464,8 @@ private fun ArInstruction.toIosText(): String = when (this) {
     ArInstruction.SEARCHING -> "Наведите прицел на нужную поверхность"
     ArInstruction.MOVE_PHONE -> "Медленно наведите камеру на поверхность"
     ArInstruction.DETECTED -> "Точки показывают поверхность под прицелом"
+    ArInstruction.CONTOUR_CLOSED -> "Нажмите OK, чтобы завершить разметку"
+    ArInstruction.CONTOUR_CONFIRMED -> "Нажмите «Добавить плитку» для предпросмотра"
+    ArInstruction.TILE_VISIBLE -> "Плитка наложена. Можно повернуть или сменить"
     ArInstruction.EMPTY -> ""
 }

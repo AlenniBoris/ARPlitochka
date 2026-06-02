@@ -24,12 +24,6 @@ import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.rememberARCameraNode
 import io.github.sceneview.math.Position
-import io.github.sceneview.math.Rotation
-import io.github.sceneview.math.Size
-import io.github.sceneview.node.CubeNode as _CubeNode
-import io.github.sceneview.node.CylinderNode as _CylinderNode
-import io.github.sceneview.node.ImageNode as _ImageNode
-import io.github.sceneview.node.ShapeNode as _ShapeNode
 import io.github.sceneview.node.*
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberMaterialLoader
@@ -64,7 +58,7 @@ fun ArSceneLayer(
         modelLoader = modelLoader,
         materialLoader = materialLoader,
         cameraNode = cameraNode,
-        planeRenderer = !uiState.isFinalized,
+        planeRenderer = uiState.showPlaneRenderer,
         sessionConfiguration = { session, config ->
             config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
             config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
@@ -80,35 +74,37 @@ fun ArSceneLayer(
         val sectionFloorY = uiState.points.firstOrNull()?.pose?.ty()
 
         // Render filled area
-        if (uiState.isPolygonClosed && uiState.points.size >= MIN_POINTS_TO_FILL) {
+        if (uiState.showSectionFill) {
             val centroidX = uiState.points.map { it.pose.tx() }.average().toFloat()
             val centroidZ = uiState.points.map { it.pose.tz() }.average().toFloat()
 
-            val useTexture = uiState.isFinalized
+            val useTexture = uiState.isTileVisible
             val sectionGeometry = uiState.points.toAlignedSectionGeometry(centroidX, centroidZ)
             val polygonBounds = sectionGeometry.polygonPath.bounds()
             var sectionMaterials by remember { mutableStateOf<Map<TextureRotation, MaterialInstance>>(emptyMap()) }
 
-            LaunchedEffect(engine, materialLoader, pavingBitmap, polygonBounds.width, polygonBounds.height) {
-                val sourceBitmap = pavingBitmap ?: return@LaunchedEffect
-                sectionMaterials = withContext(Dispatchers.IO) {
-                    TextureRotation.entries.associateWith { rotation ->
-                        sourceBitmap.toSectionPatternBitmap(
-                            widthMeters = polygonBounds.width,
-                            heightMeters = polygonBounds.height,
-                            rotationDegrees = rotation.ordinal * 45
-                        )
+            if (useTexture) {
+                LaunchedEffect(engine, materialLoader, pavingBitmap, polygonBounds.width, polygonBounds.height) {
+                    val sourceBitmap = pavingBitmap ?: return@LaunchedEffect
+                    sectionMaterials = withContext(Dispatchers.IO) {
+                        TextureRotation.entries.associateWith { rotation ->
+                            sourceBitmap.toSectionPatternBitmap(
+                                widthMeters = polygonBounds.width,
+                                heightMeters = polygonBounds.height,
+                                rotationDegrees = rotation.ordinal * 45
+                            )
+                        }
+                    }.mapValues { (_, bitmap) ->
+                        val texture = Texture.Builder()
+                            .width(bitmap.width)
+                            .height(bitmap.height)
+                            .sampler(Texture.Sampler.SAMPLER_2D)
+                            .format(Texture.InternalFormat.SRGB8_A8)
+                            .levels(1)
+                            .build(engine)
+                        texture.setBitmap(engine, bitmap)
+                        materialLoader.createTextureInstance(texture)
                     }
-                }.mapValues { (_, bitmap) ->
-                    val texture = Texture.Builder()
-                        .width(bitmap.width)
-                        .height(bitmap.height)
-                        .sampler(Texture.Sampler.SAMPLER_2D)
-                        .format(Texture.InternalFormat.SRGB8_A8)
-                        .levels(1)
-                        .build(engine)
-                    texture.setBitmap(engine, bitmap)
-                    materialLoader.createTextureInstance(texture)
                 }
             }
 
@@ -124,7 +120,7 @@ fun ArSceneLayer(
         }
 
         // Render Lines
-        if (uiState.points.size >= 2) {
+        if (uiState.showContourLines) {
             for (i in 0 until uiState.points.size - 1) {
                 val p1 = uiState.points[i].pose
                 val p2 = uiState.points[i+1].pose
@@ -182,7 +178,7 @@ fun ArSceneLayer(
         }
 
         // Render Preview Line
-        if (!uiState.isFinalized && uiState.points.isNotEmpty() && !uiState.isPolygonClosed && uiState.currentHitPose != null) {
+        if (uiState.showPreviewLine) {
             val start = uiState.points.last().pose
             val endPose = uiState.currentHitPose!!
             val segment = createSegmentGeometry(
@@ -203,15 +199,17 @@ fun ArSceneLayer(
         }
 
         // Render points
-        uiState.points.forEachIndexed { index, point ->
-            val pose = point.pose
-            CylinderNode(
-                radius = POINT_RADIUS_M,
-                height = POINT_HEIGHT_M,
-                sideCount = 32,
-                materialInstance = if (uiState.snappedPointIndex == index) snappingPointMaterial else pointMaterial,
-                position = Float3(pose.tx(), (sectionFloorY ?: pose.ty()) + POINT_VISUAL_OFFSET_M, pose.tz())
-            )
+        if (uiState.showContourPoints) {
+            uiState.points.forEachIndexed { index, point ->
+                val pose = point.pose
+                CylinderNode(
+                    radius = POINT_RADIUS_M,
+                    height = POINT_HEIGHT_M,
+                    sideCount = 32,
+                    materialInstance = if (uiState.snappedPointIndex == index) snappingPointMaterial else pointMaterial,
+                    position = Float3(pose.tx(), (sectionFloorY ?: pose.ty()) + POINT_VISUAL_OFFSET_M, pose.tz())
+                )
+            }
         }
     }
 }

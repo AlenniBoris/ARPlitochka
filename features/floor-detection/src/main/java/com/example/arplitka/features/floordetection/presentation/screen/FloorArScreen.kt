@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,21 +40,34 @@ fun FloorArScreen(
     viewModel: FloorArViewModel = hiltViewModel(),
     onBack: () -> Unit = {}
 ) {
-    BackHandler(onBack = onBack)
+    BackHandler {
+        viewModel.reset()
+        onBack()
+    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.reset()
+        }
+    }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var sessionErrorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
     var pavingBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(context, uiState.selectedTileType) {
+    LaunchedEffect(context, uiState.isTileVisible, uiState.selectedTileType) {
+        if (!uiState.isTileVisible) {
+            pavingBitmap = null
+            return@LaunchedEffect
+        }
         runCatching {
             pavingBitmap = withContext(Dispatchers.IO) {
                 context.assets.open(uiState.selectedTileType.assetPath).use { inputStream ->
                     BitmapFactory.decodeStream(inputStream)
                 }
             }
-        }.onFailure { 
+        }.onFailure {
             android.util.Log.e("FloorArScreen", "Async texture load failed", it)
         }
     }
@@ -77,10 +91,13 @@ fun FloorArScreen(
 
         CenterReticle(
             modifier = Modifier.align(Alignment.Center),
-            isActive = uiState.hasCenterHit
+            isActive = uiState.hasCenterHit && !uiState.isContourConfirmed
         )
 
-        ArTopBar(onBack = onBack)
+        ArTopBar(onBack = {
+            viewModel.reset()
+            onBack()
+        })
 
         ArStatusOverlay(
             status = uiState.status,
@@ -92,8 +109,10 @@ fun FloorArScreen(
             uiState = uiState,
             onAddPoint = { viewModel.addPoint() },
             onUndoPoint = { viewModel.undoPoint() },
+            onConfirmContour = { viewModel.confirmContour() },
+            onToggleTileVisibility = { viewModel.toggleTileVisibility() },
+            onChangeTileType = { viewModel.changeTileType() },
             onRotateTexture = { viewModel.rotateTexture() },
-            onToggleTile = { viewModel.toggleTileType() },
             onClearSection = { viewModel.clearSection() },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
@@ -106,7 +125,8 @@ fun FloorArScreen(
                     stringResource(R.string.debug_tracking) to uiState.trackingState.name,
                     "Points" to uiState.points.size.toString(),
                     "Closed" to uiState.isPolygonClosed.toString(),
-                    "Finalized" to uiState.isFinalized.toString(),
+                    "Confirmed" to uiState.isContourConfirmed.toString(),
+                    "Tile" to if (uiState.isTileVisible) "On" else "Off",
                     "Texture rotation" to (uiState.textureRotation.ordinal * 45).toString()
                 ),
                 modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)

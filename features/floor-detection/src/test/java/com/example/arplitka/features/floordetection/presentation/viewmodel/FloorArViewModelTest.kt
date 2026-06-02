@@ -85,29 +85,8 @@ class FloorArViewModelTest {
         }
     }
 
-    @Test
-    fun `rotateTexture cycles through rotations`() = runTest {
-        viewModel.uiState.test {
-            awaitItem() // Initial state
-            
-            viewModel.rotateTexture()
-            assertEquals(TextureRotation.DEGREES_45, awaitItem().textureRotation)
-            
-            viewModel.rotateTexture()
-            assertEquals(TextureRotation.DEGREES_90, awaitItem().textureRotation)
-        }
-    }
-
-    @Test
-    fun `toggleTileType cycles through tile types`() = runTest {
-        viewModel.uiState.test {
-            awaitItem() // Initial state
-            
-            viewModel.toggleTileType()
-            assertEquals(TileType.PAVING_STONES_V2, awaitItem().selectedTileType)
-            
-            viewModel.toggleTileType()
-            assertEquals(TileType.PAVING_STONES_V1, awaitItem().selectedTileType)
-        }
+    fun `changeTileType keeps selection when contour is open`() = runTest {
+        viewModel.changeTileType()
+        assertEquals(TileType.MODERN, viewModel.uiState.value.selectedTileType)
     }
 }

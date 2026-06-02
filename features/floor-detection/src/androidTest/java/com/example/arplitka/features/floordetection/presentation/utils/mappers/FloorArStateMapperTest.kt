@@ -30,6 +30,9 @@ class FloorArStateMapperTest {
             assertEquals("Ищем подходящую поверхность", ArInstruction.SEARCHING.toText())
             assertEquals("Медленно наведите камеру на пол", ArInstruction.MOVE_PHONE.toText())
             assertEquals("Поверхность отображается точками", ArInstruction.DETECTED.toText())
+            assertEquals("Нажмите OK, чтобы завершить разметку", ArInstruction.CONTOUR_CLOSED.toText())
+            assertEquals("Нажмите «Добавить плитку» для предпросмотра", ArInstruction.CONTOUR_CONFIRMED.toText())
+            assertEquals("Плитка наложена. Можно повернуть или сменить", ArInstruction.TILE_VISIBLE.toText())
             assertEquals("", ArInstruction.EMPTY.toText())
         }
     }

@@ -42,5 +42,8 @@ enum class ArInstruction {
     SEARCHING,
     MOVE_PHONE,
     DETECTED,
+    CONTOUR_CLOSED,
+    CONTOUR_CONFIRMED,
+    TILE_VISIBLE,
     EMPTY
 }

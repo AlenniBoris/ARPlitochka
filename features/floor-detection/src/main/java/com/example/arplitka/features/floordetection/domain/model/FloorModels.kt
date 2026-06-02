@@ -41,13 +41,32 @@ data class FloorUiState(
     val instruction: ArInstruction = ArInstruction.PLEASE_WAIT,
     val points: List<ArPoint> = emptyList(),
     val isPolygonClosed: Boolean = false,
-    val isFinalized: Boolean = false,
+    val isContourConfirmed: Boolean = false,
+    val isTileVisible: Boolean = false,
     val textureRotation: TextureRotation = TextureRotation.DEGREES_0,
     val selectedTileType: TileType = TileType.MODERN,
     val currentHitPose: Pose? = null,
     val currentHitResult: HitResult? = null,
     val snappedPointIndex: Int? = null
-)
+) {
+    val showContourPoints: Boolean
+        get() = points.isNotEmpty() && !isContourConfirmed
+
+    val showContourLines: Boolean
+        get() = points.size >= 2 && !isTileVisible
+
+    val showPreviewLine: Boolean
+        get() = !isContourConfirmed &&
+                points.isNotEmpty() &&
+                !isPolygonClosed &&
+                currentHitPose != null
+
+    val showPlaneRenderer: Boolean
+        get() = !isContourConfirmed
+
+    val showSectionFill: Boolean
+        get() = isContourConfirmed && isPolygonClosed && points.size >= 3
+}
 
 data class ArFrameResult(
     val trackingState: TrackingState,

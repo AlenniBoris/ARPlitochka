@@ -22,5 +22,8 @@ fun ArInstruction.toText(): String = when (this) {
     ArInstruction.SEARCHING -> stringResource(R.string.instruction_searching)
     ArInstruction.MOVE_PHONE -> stringResource(R.string.instruction_move_phone)
     ArInstruction.DETECTED -> stringResource(R.string.instruction_detected)
+    ArInstruction.CONTOUR_CLOSED -> stringResource(R.string.instruction_contour_closed)
+    ArInstruction.CONTOUR_CONFIRMED -> stringResource(R.string.instruction_contour_confirmed)
+    ArInstruction.TILE_VISIBLE -> stringResource(R.string.instruction_tile_visible)
     ArInstruction.EMPTY -> ""
 }

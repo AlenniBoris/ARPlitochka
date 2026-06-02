@@ -39,7 +39,11 @@ object FloorTrackingReducer {
                 } else {
                     ArTrackingStatus.FLOOR_DETECTED
                 },
-                instruction = ArInstruction.DETECTED,
+                instruction = if (state.isPolygonClosed) {
+                    ArInstruction.CONTOUR_CLOSED
+                } else {
+                    ArInstruction.DETECTED
+                },
                 hasCenterHit = true,
                 currentHitPoint = snapshot.currentHitPoint,
                 horizontalPlaneCount = snapshot.horizontalPlaneCount,
