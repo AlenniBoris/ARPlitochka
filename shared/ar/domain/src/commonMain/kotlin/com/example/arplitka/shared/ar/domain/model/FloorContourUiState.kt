@@ -15,6 +15,34 @@ data class FloorContourUiState(
     val placedPoints: List<PlacedContourPoint> = emptyList(),
     val isPolygonClosed: Boolean = false,
     val isFinalized: Boolean = false,
+    val isTileVisible: Boolean = false,
     val snappedPointIndex: Int? = null,
     val currentHitPoint: ArPoint3D? = null
-)
+) {
+    val showContourPoints: Boolean
+        get() = placedPoints.isNotEmpty() && !isFinalized
+
+    val showContourLines: Boolean
+        get() = placedPoints.size >= 2 && !isTileVisible && !isFinalized
+
+    val showPreviewLine: Boolean
+        get() = !isFinalized &&
+                !isPolygonClosed &&
+                placedPoints.isNotEmpty() &&
+                currentHitPoint != null
+
+    val showPlaneDots: Boolean
+        get() = !isFinalized
+
+    val showPlaneRenderer: Boolean
+        get() = showPlaneDots
+
+    val showContourActions: Boolean
+        get() = !isFinalized
+
+    val showSectionFill: Boolean
+        get() = isFinalized && isPolygonClosed && placedPoints.size >= 3
+
+    val showTileControls: Boolean
+        get() = isFinalized && isPolygonClosed && placedPoints.size >= 3
+}

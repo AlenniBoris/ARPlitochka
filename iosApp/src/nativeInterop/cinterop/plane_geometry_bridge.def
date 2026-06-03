@@ -2,12 +2,13 @@ headers = PlaneGeometryBridge.h
 headerFilter = PlaneGeometryBridge.h
 package = com.example.arplitka.iosapp.bridge
 language = Objective-C
-compilerOpts = -framework ARKit -framework Foundation
-linkerOpts = -framework ARKit -framework Foundation
+compilerOpts = -framework ARKit -framework Foundation -framework SceneKit
+linkerOpts = -framework ARKit -framework Foundation -framework SceneKit
 
 ---
 
 #import <ARKit/ARKit.h>
+#import <SceneKit/SceneKit.h>
 #import <math.h>
 #import <stdint.h>
 #import <string.h>
@@ -63,7 +64,7 @@ static BOOL PGReadExtentBoundary(ARPlaneAnchor *anchor, vector_float3 *outVertic
     return YES;
 }
 
-static BOOL PGReadBoundary(ARPlaneAnchor *anchor, const vector_float3 **outVertices, NSUInteger *outCount, vector_float3 *fallbackVertices) {
+static BOOL PGReadPolygonBoundary(ARPlaneAnchor *anchor, const vector_float3 **outVertices, NSUInteger *outCount) {
     if (anchor == NULL || outVertices == NULL || outCount == NULL) {
         return NO;
     }
@@ -72,6 +73,17 @@ static BOOL PGReadBoundary(ARPlaneAnchor *anchor, const vector_float3 **outVerti
     if (geometry != NULL && geometry.boundaryVertexCount >= 3 && geometry.boundaryVertices != NULL) {
         *outVertices = geometry.boundaryVertices;
         *outCount = geometry.boundaryVertexCount;
+        return YES;
+    }
+    return NO;
+}
+
+static BOOL PGReadBoundary(ARPlaneAnchor *anchor, const vector_float3 **outVertices, NSUInteger *outCount, vector_float3 *fallbackVertices) {
+    if (anchor == NULL || outVertices == NULL || outCount == NULL) {
+        return NO;
+    }
+
+    if (PGReadPolygonBoundary(anchor, outVertices, outCount)) {
         return YES;
     }
 
@@ -115,6 +127,88 @@ static float PGPolygonArea(const vector_float3 *vertices, NSUInteger count) {
     return fabsf(sum) * 0.5f;
 }
 
+#define PG_DOT_CIRCLE_SEGMENTS 12
+#define PG_DOT_VERTICES_PER_DISC (1 + PG_DOT_CIRCLE_SEGMENTS)
+
+typedef struct {
+    float x;
+    float y;
+    float z;
+} PGDotVertex;
+
+static void PGWriteDotDisc(NSMutableData *vertexData, NSMutableData *indexData, int dotIndex, float x, float z, float dotRadiusM, float yOffsetM) {
+    PGDotVertex center = { x, yOffsetM, z };
+    PGDotVertex rim[PG_DOT_CIRCLE_SEGMENTS];
+    for (int segment = 0; segment < PG_DOT_CIRCLE_SEGMENTS; segment++) {
+        float angle = (float)segment * (2.0f * (float)M_PI / (float)PG_DOT_CIRCLE_SEGMENTS);
+        rim[segment].x = x + cosf(angle) * dotRadiusM;
+        rim[segment].y = yOffsetM;
+        rim[segment].z = z + sinf(angle) * dotRadiusM;
+    }
+
+    uint16_t base = (uint16_t)(dotIndex * PG_DOT_VERTICES_PER_DISC);
+    [vertexData appendBytes:&center length:sizeof(center)];
+    [vertexData appendBytes:rim length:sizeof(rim)];
+
+    for (int segment = 0; segment < PG_DOT_CIRCLE_SEGMENTS; segment++) {
+        uint16_t indices[3] = {
+            base,
+            (uint16_t)(base + 1 + segment),
+            (uint16_t)(base + 1 + ((segment + 1) % PG_DOT_CIRCLE_SEGMENTS))
+        };
+        [indexData appendBytes:indices length:sizeof(indices)];
+    }
+}
+
+static SCNGeometry *PGCreateDotGeometryFromBuffers(NSMutableData *vertexData, NSMutableData *indexData, int dotCount) {
+    if (dotCount <= 0 || vertexData.length == 0 || indexData.length == 0) {
+        return nil;
+    }
+
+    SCNGeometrySource *source = [SCNGeometrySource geometrySourceWithData:vertexData
+                                                                 semantic:SCNGeometrySourceSemanticVertex
+                                                              vectorCount:(NSInteger)dotCount * PG_DOT_VERTICES_PER_DISC
+                                                          floatComponents:YES
+                                                      componentsPerVector:3
+                                                        bytesPerComponent:sizeof(float)
+                                                               dataOffset:0
+                                                               dataStride:sizeof(PGDotVertex)];
+    SCNGeometryElement *element = [SCNGeometryElement geometryElementWithData:indexData
+                                                                primitiveType:SCNGeometryPrimitiveTypeTriangles
+                                                               primitiveCount:(NSInteger)dotCount * PG_DOT_CIRCLE_SEGMENTS
+                                                                bytesPerIndex:sizeof(uint16_t)];
+    return [SCNGeometry geometryWithSources:@[source] elements:@[element]];
+}
+
+bool pg_anchor_has_polygon_boundary(void *planeAnchor) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    const vector_float3 *vertices = NULL;
+    NSUInteger count = 0;
+    return PGReadPolygonBoundary(anchor, &vertices, &count);
+}
+
+bool pg_local_point_in_render_boundary(void *planeAnchor, int boundaryMode, float localX, float localZ) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    vector_float3 fallback[4];
+    const vector_float3 *vertices = NULL;
+    NSUInteger count = 0;
+    if (boundaryMode == PG_DOT_BOUNDARY_POLYGON) {
+        if (!PGReadPolygonBoundary(anchor, &vertices, &count) &&
+            !PGReadExtentBoundary(anchor, fallback, &count)) {
+            return false;
+        }
+        if (vertices == NULL) {
+            vertices = fallback;
+        }
+    } else {
+        if (!PGReadExtentBoundary(anchor, fallback, &count)) {
+            return false;
+        }
+        vertices = fallback;
+    }
+    return PGPointInPolygonXZ(localX, localZ, vertices, count);
+}
+
 bool pg_local_point_in_polygon(void *planeAnchor, float localX, float localZ) {
     ARPlaneAnchor *anchor = PGCast(planeAnchor);
     vector_float3 fallback[4];
@@ -126,6 +220,15 @@ bool pg_local_point_in_polygon(void *planeAnchor, float localX, float localZ) {
     return PGPointInPolygonXZ(localX, localZ, vertices, count);
 }
 
+static uint32_t PGSignatureFromVertices(const vector_float3 *vertices, NSUInteger count) {
+    uint32_t hash = (uint32_t)count;
+    for (NSUInteger i = 0; i < count; i++) {
+        hash = hash * 31u + PGHashFloat(vertices[i].x);
+        hash = hash * 31u + PGHashFloat(vertices[i].z);
+    }
+    return hash;
+}
+
 uint32_t pg_geometry_signature(void *planeAnchor) {
     ARPlaneAnchor *anchor = PGCast(planeAnchor);
     vector_float3 fallback[4];
@@ -134,13 +237,86 @@ uint32_t pg_geometry_signature(void *planeAnchor) {
     if (!PGReadBoundary(anchor, &vertices, &count, fallback)) {
         return 0;
     }
+    return PGSignatureFromVertices(vertices, count);
+}
 
-    uint32_t hash = (uint32_t)count;
-    for (NSUInteger i = 0; i < count; i++) {
-        hash = hash * 31u + PGHashFloat(vertices[i].x);
-        hash = hash * 31u + PGHashFloat(vertices[i].z);
+uint32_t pg_geometry_signature_extent(void *planeAnchor) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    vector_float3 fallback[4];
+    NSUInteger count = 0;
+    if (!PGReadExtentBoundary(anchor, fallback, &count)) {
+        return 0;
     }
-    return hash;
+    return PGSignatureFromVertices(fallback, count);
+}
+
+static int PGCollectWindowDotPoints(
+    ARPlaneAnchor *anchor,
+    int boundaryMode,
+    float stepM,
+    float refX,
+    float refZ,
+    float maxRadiusM,
+    float *outLocalX,
+    float *outLocalZ,
+    int maxPoints
+) {
+    if (anchor == NULL || stepM <= 0.0f || maxPoints <= 0 || outLocalX == NULL || outLocalZ == NULL) {
+        return 0;
+    }
+
+    vector_float3 extentFallback[4];
+    const vector_float3 *vertices = NULL;
+    NSUInteger count = 0;
+    if (boundaryMode == PG_DOT_BOUNDARY_POLYGON) {
+        if (!PGReadPolygonBoundary(anchor, &vertices, &count) &&
+            !PGReadExtentBoundary(anchor, extentFallback, &count)) {
+            return 0;
+        }
+        if (vertices == NULL) {
+            vertices = extentFallback;
+        }
+    } else {
+        if (!PGReadExtentBoundary(anchor, extentFallback, &count)) {
+            return 0;
+        }
+        vertices = extentFallback;
+    }
+
+    float minX = INFINITY;
+    float maxX = -INFINITY;
+    float minZ = INFINITY;
+    float maxZ = -INFINITY;
+    for (NSUInteger i = 0; i < count; i++) {
+        float x = vertices[i].x;
+        float z = vertices[i].z;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+    }
+
+    float radiusSq = maxRadiusM * maxRadiusM;
+    int written = 0;
+    for (float x = floorf(minX / stepM) * stepM; x <= maxX + stepM * 0.5f; x += stepM) {
+        for (float z = floorf(minZ / stepM) * stepM; z <= maxZ + stepM * 0.5f; z += stepM) {
+            float dx = x - refX;
+            float dz = z - refZ;
+            if ((dx * dx + dz * dz) > radiusSq) {
+                continue;
+            }
+            if (!PGPointInPolygonXZ(x, z, vertices, count)) {
+                continue;
+            }
+            outLocalX[written] = x;
+            outLocalZ[written] = z;
+            written++;
+            if (written >= maxPoints) {
+                return written;
+            }
+        }
+    }
+    return written;
 }
 
 int pg_generate_dot_points(
@@ -201,6 +377,30 @@ int pg_generate_dot_points(
     return written;
 }
 
+int pg_collect_window_dot_points(
+    void *planeAnchor,
+    int boundaryMode,
+    float stepM,
+    float refX,
+    float refZ,
+    float maxRadiusM,
+    float *outLocalX,
+    float *outLocalZ,
+    int maxPoints
+) {
+    return PGCollectWindowDotPoints(
+        PGCast(planeAnchor),
+        boundaryMode,
+        stepM,
+        refX,
+        refZ,
+        maxRadiusM,
+        outLocalX,
+        outLocalZ,
+        maxPoints
+    );
+}
+
 float pg_polygon_area(void *planeAnchor) {
     ARPlaneAnchor *anchor = PGCast(planeAnchor);
     vector_float3 fallback[4];
@@ -210,4 +410,226 @@ float pg_polygon_area(void *planeAnchor) {
         return 0.0f;
     }
     return PGPolygonArea(vertices, count);
+}
+
+static SCNGeometry *PGCreateDotMeshFromVertices(
+    const vector_float3 *vertices,
+    NSUInteger count,
+    float stepM,
+    float refX,
+    float refZ,
+    float maxRadiusM,
+    float dotRadiusM,
+    float yOffsetM,
+    int maxPoints,
+    int *outDotCount
+) {
+    if (outDotCount != NULL) {
+        *outDotCount = 0;
+    }
+    if (vertices == NULL || count < 3 || stepM <= 0.0f || maxPoints <= 0 || dotRadiusM <= 0.0f) {
+        return nil;
+    }
+
+    float minX = INFINITY;
+    float maxX = -INFINITY;
+    float minZ = INFINITY;
+    float maxZ = -INFINITY;
+    for (NSUInteger i = 0; i < count; i++) {
+        float x = vertices[i].x;
+        float z = vertices[i].z;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+    }
+
+    NSMutableData *vertexData = [NSMutableData dataWithCapacity:(NSUInteger)maxPoints * PG_DOT_VERTICES_PER_DISC * sizeof(PGDotVertex)];
+    NSMutableData *indexData = [NSMutableData dataWithCapacity:(NSUInteger)maxPoints * PG_DOT_CIRCLE_SEGMENTS * 3 * sizeof(uint16_t)];
+    float radiusSq = maxRadiusM * maxRadiusM;
+    int written = 0;
+    for (float x = floorf(minX / stepM) * stepM; x <= maxX + stepM * 0.5f; x += stepM) {
+        for (float z = floorf(minZ / stepM) * stepM; z <= maxZ + stepM * 0.5f; z += stepM) {
+            float dx = x - refX;
+            float dz = z - refZ;
+            if ((dx * dx + dz * dz) > radiusSq) {
+                continue;
+            }
+            if (!PGPointInPolygonXZ(x, z, vertices, count)) {
+                continue;
+            }
+            PGWriteDotDisc(vertexData, indexData, written, x, z, dotRadiusM, yOffsetM);
+            written++;
+            if (written >= maxPoints) {
+                if (outDotCount != NULL) {
+                    *outDotCount = written;
+                }
+                return PGCreateDotGeometryFromBuffers(vertexData, indexData, written);
+            }
+        }
+    }
+
+    if (outDotCount != NULL) {
+        *outDotCount = written;
+    }
+    return PGCreateDotGeometryFromBuffers(vertexData, indexData, written);
+}
+
+SCNGeometry *pg_create_dot_mesh_geometry(
+    void *planeAnchor,
+    int boundaryMode,
+    float stepM,
+    float refX,
+    float refZ,
+    float maxRadiusM,
+    float dotRadiusM,
+    float yOffsetM,
+    int maxPoints,
+    int *outDotCount
+) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    if (anchor == NULL) {
+        if (outDotCount != NULL) {
+            *outDotCount = 0;
+        }
+        return nil;
+    }
+
+    vector_float3 extentFallback[4];
+    const vector_float3 *vertices = NULL;
+    NSUInteger count = 0;
+    if (boundaryMode == PG_DOT_BOUNDARY_POLYGON) {
+        if (!PGReadPolygonBoundary(anchor, &vertices, &count) &&
+            !PGReadExtentBoundary(anchor, extentFallback, &count)) {
+            if (outDotCount != NULL) {
+                *outDotCount = 0;
+            }
+            return nil;
+        }
+        if (vertices == NULL) {
+            vertices = extentFallback;
+        }
+    } else {
+        if (!PGReadExtentBoundary(anchor, extentFallback, &count)) {
+            if (outDotCount != NULL) {
+                *outDotCount = 0;
+            }
+            return nil;
+        }
+        vertices = extentFallback;
+    }
+
+    return PGCreateDotMeshFromVertices(
+        vertices,
+        count,
+        stepM,
+        refX,
+        refZ,
+        maxRadiusM,
+        dotRadiusM,
+        yOffsetM,
+        maxPoints,
+        outDotCount
+    );
+}
+
+SCNGeometry *pg_create_dot_mesh_local_disc(
+    float centerX,
+    float centerZ,
+    float radiusM,
+    float stepM,
+    float dotRadiusM,
+    float yOffsetM,
+    int *outDotCount
+) {
+    if (outDotCount != NULL) {
+        *outDotCount = 0;
+    }
+    if (radiusM <= 0.0f || stepM <= 0.0f || dotRadiusM <= 0.0f) {
+        return nil;
+    }
+
+    int maxPoints = (int)(((radiusM * 2.0f / stepM) + 2.0f) * ((radiusM * 2.0f / stepM) + 2.0f));
+    NSMutableData *vertexData = [NSMutableData dataWithCapacity:(NSUInteger)maxPoints * PG_DOT_VERTICES_PER_DISC * sizeof(PGDotVertex)];
+    NSMutableData *indexData = [NSMutableData dataWithCapacity:(NSUInteger)maxPoints * PG_DOT_CIRCLE_SEGMENTS * 3 * sizeof(uint16_t)];
+    float radiusSq = radiusM * radiusM;
+    int written = 0;
+    for (float x = -radiusM; x <= radiusM + stepM * 0.5f; x += stepM) {
+        for (float z = -radiusM; z <= radiusM + stepM * 0.5f; z += stepM) {
+            if ((x * x + z * z) > radiusSq) {
+                continue;
+            }
+            PGWriteDotDisc(vertexData, indexData, written, centerX + x, centerZ + z, dotRadiusM, yOffsetM);
+            written++;
+        }
+    }
+
+    if (outDotCount != NULL) {
+        *outDotCount = written;
+    }
+    return PGCreateDotGeometryFromBuffers(vertexData, indexData, written);
+}
+
+SCNGeometry *pg_create_dot_mesh_from_points(
+    const float *localX,
+    const float *localZ,
+    int pointCount,
+    float dotRadiusM,
+    float yOffsetM,
+    int *outDotCount
+) {
+    if (outDotCount != NULL) {
+        *outDotCount = 0;
+    }
+    if (localX == NULL || localZ == NULL || pointCount <= 0 || dotRadiusM <= 0.0f) {
+        return nil;
+    }
+
+    NSMutableData *vertexData = [NSMutableData dataWithCapacity:(NSUInteger)pointCount * PG_DOT_VERTICES_PER_DISC * sizeof(PGDotVertex)];
+    NSMutableData *indexData = [NSMutableData dataWithCapacity:(NSUInteger)pointCount * PG_DOT_CIRCLE_SEGMENTS * 3 * sizeof(uint16_t)];
+    int written = 0;
+    for (int index = 0; index < pointCount; index++) {
+        PGWriteDotDisc(vertexData, indexData, written, localX[index], localZ[index], dotRadiusM, yOffsetM);
+        written++;
+    }
+
+    if (outDotCount != NULL) {
+        *outDotCount = written;
+    }
+    return PGCreateDotGeometryFromBuffers(vertexData, indexData, written);
+}
+
+SCNGeometry *pg_create_preview_dot_mesh_geometry(
+    float radiusM,
+    float stepM,
+    float dotRadiusM,
+    float yOffsetM,
+    int *outDotCount
+) {
+    if (outDotCount != NULL) {
+        *outDotCount = 0;
+    }
+    if (radiusM <= 0.0f || stepM <= 0.0f || dotRadiusM <= 0.0f) {
+        return nil;
+    }
+
+    int maxPreviewPoints = (int)(((radiusM * 2.0f / stepM) + 2.0f) * ((radiusM * 2.0f / stepM) + 2.0f));
+    NSMutableData *vertexData = [NSMutableData dataWithCapacity:(NSUInteger)maxPreviewPoints * PG_DOT_VERTICES_PER_DISC * sizeof(PGDotVertex)];
+    NSMutableData *indexData = [NSMutableData dataWithCapacity:(NSUInteger)maxPreviewPoints * PG_DOT_CIRCLE_SEGMENTS * 3 * sizeof(uint16_t)];
+    float radiusSq = radiusM * radiusM;
+    int written = 0;
+    for (float x = -radiusM; x <= radiusM + stepM * 0.5f; x += stepM) {
+        for (float z = -radiusM; z <= radiusM + stepM * 0.5f; z += stepM) {
+            if ((x * x + z * z) > radiusSq) {
+                continue;
+            }
+            PGWriteDotDisc(vertexData, indexData, written, x, z, dotRadiusM, yOffsetM);
+            written++;
+        }
+    }
+
+    if (outDotCount != NULL) {
+        *outDotCount = written;
+    }
+    return PGCreateDotGeometryFromBuffers(vertexData, indexData, written);
 }

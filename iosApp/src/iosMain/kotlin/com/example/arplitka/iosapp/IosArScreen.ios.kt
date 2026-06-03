@@ -32,6 +32,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCSignatureOverride
 import kotlinx.cinterop.useContents
 import platform.ARKit.*
+import platform.CoreFoundation.CFAbsoluteTimeGetCurrent
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSUUID
@@ -45,6 +46,7 @@ import kotlin.math.roundToInt
 actual fun IosArScreen(onBack: () -> Unit) {
     var contourState by remember { mutableStateOf(FloorContourUiState()) }
     var trackingStateName by remember { mutableStateOf("INITIALIZING") }
+    var planeDebugMetrics by remember { mutableStateOf(IosPlaneDebugMetrics()) }
 
     val floorArController = remember {
         FloorArController(
@@ -55,8 +57,8 @@ actual fun IosArScreen(onBack: () -> Unit) {
     val coordinator = remember {
         IosArSessionCoordinator(
             floorArController = floorArController,
-            onStateChanged = { contourState = it },
-            onTrackingNameChanged = { trackingStateName = it }
+            onTrackingNameChanged = { trackingStateName = it },
+            onPlaneDebugMetricsChanged = { planeDebugMetrics = it }
         )
     }
 
@@ -90,10 +92,10 @@ actual fun IosArScreen(onBack: () -> Unit) {
 
         CenterReticle(
             modifier = Modifier.align(Alignment.Center),
-            isActive = contourState.hasCenterHit
+            isActive = contourState.hasCenterHit && contourState.showPlaneDots
         )
 
-        if (!contourState.isFinalized) {
+        if (contourState.showContourActions) {
             ArContourActionButtons(
                 hasCenterHit = contourState.hasCenterHit,
                 isPolygonClosed = contourState.isPolygonClosed,
@@ -116,7 +118,15 @@ actual fun IosArScreen(onBack: () -> Unit) {
                     "Tracking" to trackingStateName,
                     "Center hit" to if (contourState.hasCenterHit) "Yes" else "No",
                     "Points" to contourState.placedPoints.size.toString(),
-                    "Closed" to if (contourState.isPolygonClosed) "Yes" else "No"
+                    "Closed" to if (contourState.isPolygonClosed) "Yes" else "No",
+                    "Plane renderer" to planeDebugMetrics.rendererMode,
+                    "Plane FPS" to planeDebugMetrics.fps.toString(),
+                    "Plane dots" to "${planeDebugMetrics.dotCount}/${planeDebugMetrics.nodeCount}",
+                    "Scan buckets" to planeDebugMetrics.bucketCount.toString(),
+                    "Dot gen/sync" to "${planeDebugMetrics.generateMs} / ${planeDebugMetrics.syncMs} ms",
+                    "Dot latency" to "${planeDebugMetrics.previewLatencyMs} / ${planeDebugMetrics.anchorLatencyMs} ms",
+                    "AR features" to planeDebugMetrics.sessionFeatures,
+                    "Hit path" to planeDebugMetrics.hitPath
                 ),
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -135,8 +145,8 @@ actual fun IosArScreen(onBack: () -> Unit) {
 @OptIn(ExperimentalForeignApi::class)
 private class IosArSessionCoordinator(
     private val floorArController: FloorArController,
-    private val onStateChanged: (FloorContourUiState) -> Unit,
-    private val onTrackingNameChanged: (String) -> Unit
+    private val onTrackingNameChanged: (String) -> Unit,
+    private val onPlaneDebugMetricsChanged: (IosPlaneDebugMetrics) -> Unit
 ) : NSObject(), ARSCNViewDelegateProtocol, ARSessionDelegateProtocol {
 
     private var sceneView: ARSCNView? = null
@@ -146,41 +156,69 @@ private class IosArSessionCoordinator(
     private var lastFloorDetected: Boolean = false
     private var lastSelectedArea: Float = -1f
     private var lastFocusedLabel: String = ""
-    private var lastConfirmedHitResult: ARHitTestResult? = null
+    private var lastCenterHit: CenterPlaneHit = CenterPlaneHit()
+    private var sessionFeatures: Set<IosArSessionFeature> = emptySet()
     private var floorDotMaterial = createFloorDotMaterial()
     private val planeFingerprints: PlaneFingerprints = mutableMapOf()
     private val planeAreas: PlaneAreas = mutableMapOf()
     private val planeDotCounts: PlaneDotCounts = mutableMapOf()
+    private val polygonStableFrames: PlanePolygonStableFrames = mutableMapOf()
+    private val dotBucketAccumulator = PlaneDotBucketAccumulator()
+    private val planeDotElevationLock = PlaneDotElevationLock()
     private val focusedPlaneTracker = FocusedPlaneTracker()
     private val anchorStore = IosFloorAnchorStore()
     private val contourRenderer = IosArContourRenderer()
     private var lastCenterLocal: Pair<Float, Float>? = null
     private var lastRenderedFocusedAnchorId: NSUUID? = null
-    private var dotGridSyncProgress: DotGridSyncProgress? = null
+    private var sessionStartTimeSeconds: Double = 0.0
+    private var fpsWindowStartSeconds: Double = 0.0
+    private var fpsFrameCount: Int = 0
+    private var currentFps: Int = 0
+    private var lastMetricsPublishSeconds: Double = 0.0
+    private var firstPreviewDotsMs: Int? = null
+    private var firstAnchorDotsMs: Int? = null
+    private var lastPlaneFrameStats = PlaneDotFrameStats()
+    private var lastMeshRebuildSeconds: Double = 0.0
+    private var lastMeshBucketFingerprint: UInt? = null
 
     fun attach(sceneView: ARSCNView) {
+        val now = currentTimeSeconds()
         this.sceneView = sceneView
         planeFingerprints.clear()
         planeAreas.clear()
         planeDotCounts.clear()
+        polygonStableFrames.clear()
+        dotBucketAccumulator.clearAll()
+        planeDotElevationLock.clearAll()
         focusedPlaneTracker.reset()
+        lastMeshRebuildSeconds = 0.0
+        lastMeshBucketFingerprint = null
         lastCenterLocal = null
         lastRenderedFocusedAnchorId = null
-        dotGridSyncProgress = null
         lastPlaneCount = -1
         lastConfirmedCenterHit = false
         lastFloorDetected = false
         lastSelectedArea = -1f
         lastFocusedLabel = ""
-        lastConfirmedHitResult = null
+        lastCenterHit = CenterPlaneHit()
         isSessionTracking = false
+        sessionStartTimeSeconds = now
+        fpsWindowStartSeconds = now
+        fpsFrameCount = 0
+        currentFps = 0
+        lastMetricsPublishSeconds = 0.0
+        firstPreviewDotsMs = null
+        firstAnchorDotsMs = null
+        lastPlaneFrameStats = PlaneDotFrameStats()
         floorDotMaterial = createFloorDotMaterial()
         sceneView.debugOptions = 0UL
         sceneView.delegate = this
         sceneView.session.delegate = this
         sceneView.scene?.rootNode?.let { contourRenderer.attach(it) }
+        val (configuration, features) = createWorldTrackingConfiguration(enableLidarMesh = true)
+        sessionFeatures = features
         sceneView.session.runWithConfiguration(
-            createConfiguration(),
+            configuration,
             ARSessionRunOptionResetTracking or ARSessionRunOptionRemoveExistingAnchors
         )
     }
@@ -196,9 +234,13 @@ private class IosArSessionCoordinator(
         planeFingerprints.clear()
         planeAreas.clear()
         planeDotCounts.clear()
+        polygonStableFrames.clear()
+        dotBucketAccumulator.clearAll()
+        planeDotElevationLock.clearAll()
         focusedPlaneTracker.reset()
+        lastMeshRebuildSeconds = 0.0
+        lastMeshBucketFingerprint = null
         lastRenderedFocusedAnchorId = null
-        dotGridSyncProgress = null
         sceneView = null
     }
 
@@ -206,7 +248,6 @@ private class IosArSessionCoordinator(
         val effects = floorArController.onEvent(event)
         applyEffects(effects)
         syncContourRenderer()
-        onStateChanged(floorArController.currentState())
     }
 
     @ObjCSignatureOverride
@@ -225,24 +266,30 @@ private class IosArSessionCoordinator(
         planeFingerprints.remove(planeAnchor.identifier)
         planeAreas.remove(planeAnchor.identifier)
         planeDotCounts.remove(planeAnchor.identifier)
+        polygonStableFrames.remove(planeAnchor.identifier)
+        dotBucketAccumulator.remove(planeAnchor.identifier)
+        planeDotElevationLock.clear(planeAnchor.identifier)
         removePlaneDotGrid(didRemoveNode)
     }
 
     override fun session(session: ARSession, didUpdateFrame: ARFrame) {
         val view = sceneView ?: return
-
-        dotGridSyncProgress?.let { progress ->
-            dotGridSyncProgress = continueDotGridSync(progress)
-        }
+        val frameStartedAt = currentTimeSeconds()
+        updateFps(frameStartedAt)
 
         val horizontalPlanes = didUpdateFrame.anchors
             .filterIsInstance<ARPlaneAnchor>()
             .filter { it.isHorizontalTracking() }
 
-        val centerHit = view.centerPlaneHit()
-        lastConfirmedHitResult = centerHit.confirmedHitResult
+        val centerHit = view.resolveCenterPlaneHit()
+        lastCenterHit = centerHit
         val focusedAnchorId = focusedPlaneTracker.update(centerHit.anchor?.identifier)
-        updatePlaneDotVisualization(view, didUpdateFrame, focusedAnchorId, centerHit)
+        lastPlaneFrameStats = if (floorArController.currentState().showPlaneDots) {
+            updatePlaneDotVisualization(view, didUpdateFrame, focusedAnchorId, centerHit, frameStartedAt)
+        } else {
+            hidePlaneDotVisualization(view, didUpdateFrame)
+            PlaneDotFrameStats(rendererMode = "hidden")
+        }
         val hasVisualCenterHit = centerHit.confirmed || centerHit.previewHitResult != null
 
         val selectedArea = focusedAnchorId?.let { planeAreas[it] } ?: 0f
@@ -259,27 +306,20 @@ private class IosArSessionCoordinator(
             selectedArea = selectedArea,
             hasCenterHit = hasVisualCenterHit,
             isFloorDetected = floorDetected,
-            currentHitPoint = centerHit.confirmedHitResult?.let { HitTransformReader.worldFloorPoint(it) },
+            currentHitPoint = centerHit.confirmedWorldFloorPoint()
+                ?: centerHit.previewWorldFloorPoint(),
             focusedLabel = focusedLabel
         )
         val updatedPoints = anchorStore.readPositions(didUpdateFrame)
         floorArController.onFrame(snapshot, updatedPoints)
         syncContourRenderer()
 
-        if (
-            lastPlaneCount != horizontalPlanes.size ||
-            lastConfirmedCenterHit != hasVisualCenterHit ||
-            lastFloorDetected != floorDetected ||
-            lastSelectedArea != selectedArea ||
-            lastFocusedLabel != focusedLabel
-        ) {
-            lastPlaneCount = horizontalPlanes.size
-            lastConfirmedCenterHit = hasVisualCenterHit
-            lastFloorDetected = floorDetected
-            lastSelectedArea = selectedArea
-            lastFocusedLabel = focusedLabel
-            onStateChanged(floorArController.currentState())
-        }
+        lastPlaneCount = horizontalPlanes.size
+        lastConfirmedCenterHit = hasVisualCenterHit
+        lastFloorDetected = floorDetected
+        lastSelectedArea = selectedArea
+        lastFocusedLabel = focusedLabel
+        publishPlaneDebugMetrics(frameStartedAt, centerHit)
     }
 
     override fun session(session: ARSession, cameraDidChangeTrackingState: ARCamera) {
@@ -309,14 +349,14 @@ private class IosArSessionCoordinator(
         effects.forEach { effect ->
             when (effect) {
                 is FloorArEffect.CreateAnchorAt -> {
-                    val hit = lastConfirmedHitResult ?: return@forEach
+                    val transform = lastCenterHit.placementWorldTransform() ?: return@forEach
                     val logicalId = NSUUID().UUIDString()
-                    val anchor = ARAnchor(transform = hit.worldTransform)
+                    val anchor = ARAnchor(transform = transform)
                     session.addAnchor(anchor)
                     anchorStore.register(logicalId, anchor)
                     floorArController.onPointAdded(
                         logicalId,
-                        HitTransformReader.worldFloorPoint(hit)
+                        lastCenterHit.confirmedWorldFloorPoint() ?: effect.point
                     )
                 }
                 is FloorArEffect.DetachAnchor -> anchorStore.detachLast(session, frame)
@@ -333,8 +373,9 @@ private class IosArSessionCoordinator(
         view: ARSCNView,
         frame: ARFrame,
         focusedAnchorId: NSUUID?,
-        centerHit: CenterPlaneHit
-    ) {
+        centerHit: CenterPlaneHit,
+        frameStartedAtSeconds: Double
+    ): PlaneDotFrameStats {
         if (centerHit.localPoint != null) {
             lastCenterLocal = centerHit.localPoint
         }
@@ -343,60 +384,221 @@ private class IosArSessionCoordinator(
 
         if (focusedAnchorId != lastRenderedFocusedAnchorId) {
             lastRenderedFocusedAnchorId?.let { previousId ->
+                planeDotElevationLock.clear(previousId)
                 frame.anchors
                     .filterIsInstance<ARPlaneAnchor>()
                     .firstOrNull { it.identifier == previousId }
                     ?.let { view.nodeForAnchor(it) }
                     ?.let { hidePlaneDotGrid(it) }
             }
-            dotGridSyncProgress = null
             lastRenderedFocusedAnchorId = focusedAnchorId
+            lastMeshRebuildSeconds = 0.0
+            lastMeshBucketFingerprint = null
         }
 
         if (focusedAnchorId == null) {
-            centerHit.previewHitResult?.let { previewHit ->
-                rootNode?.let {
+            if (centerHit.previewHitResult != null) {
+                val syncStart = currentTimeSeconds()
+                val previewDotCount = rootNode?.let {
                     syncPreviewDotGrid(
                         rootNode = it,
-                        hitResult = previewHit,
+                        centerHit = centerHit,
                         dotMaterial = floorDotMaterial
                     )
-                }
-            } ?: rootNode?.let { hidePreviewDotGrid(it) }
-            return
+                } ?: 0
+                firstPreviewDotsMs = firstPreviewDotsMs ?: elapsedMsSinceSession(frameStartedAtSeconds)
+                return PlaneDotFrameStats(
+                    rendererMode = "preview-hit",
+                    dotCount = previewDotCount,
+                    nodeCount = rootNode?.let { activePreviewDotNodeCount(it) } ?: 0,
+                    syncMs = elapsedMs(syncStart)
+                )
+            }
+            rootNode?.let { hidePreviewDotGrid(it) }
+            return PlaneDotFrameStats(rendererMode = "none")
         }
-        if (dotGridSyncProgress != null) return
         rootNode?.let { hidePreviewDotGrid(it) }
 
         val focusedAnchor = frame.anchors
             .filterIsInstance<ARPlaneAnchor>()
             .firstOrNull { it.identifier == focusedAnchorId }
-            ?: return
-        val anchorNode = view.nodeForAnchor(focusedAnchor) ?: return
+            ?: return PlaneDotFrameStats(rendererMode = "anchor-missing")
+        val anchorNode = view.nodeForAnchor(focusedAnchor)
+            ?: return PlaneDotFrameStats(rendererMode = "anchor-node-missing")
 
-        val viewFingerprint = focusedAnchor.computeViewFingerprint(ref, VISIBLE_DOT_RADIUS_M)
-        val previousFingerprint = planeFingerprints[focusedAnchor.identifier]
-        if (viewFingerprint == previousFingerprint) return
+        updatePolygonStableFrames(focusedAnchor)
 
-        val geometry = focusedAnchor.readPlaneGeometry(
-            centerLocal = ref,
-            visibleRadiusM = VISIBLE_DOT_RADIUS_M
-        ) ?: run {
-            hidePlaneDotGrid(anchorNode)
-            return
+        val boundaryMode = selectAccumulateBoundaryMode(
+            anchor = focusedAnchor,
+            polygonStableFrames = polygonStableFrames[focusedAnchor.identifier] ?: 0
+        )
+        val refForMesh = ref ?: (0f to 0f)
+        if (ref != null) {
+            dotBucketAccumulator.recordScan(
+                anchorId = focusedAnchor.identifier,
+                localX = ref.first,
+                localZ = ref.second
+            )
         }
 
-        dotGridSyncProgress = syncPlaneGeometryDots(
+        val displayFingerprint = combinedDisplayFingerprint(
+            anchor = focusedAnchor,
+            accumulator = dotBucketAccumulator,
+            boundaryMode = boundaryMode,
+            centerLocal = ref,
+            visibleRadiusM = VISIBLE_DOT_RADIUS_M
+        )
+        val previousFingerprint = planeFingerprints[focusedAnchor.identifier]
+        val storedBucketCount = dotBucketAccumulator.bucketCount(focusedAnchor.identifier)
+        if (displayFingerprint == previousFingerprint) {
+            val activeNodes = activePlaneDotNodeCount(anchorNode)
+            return finishPlaneDotFrame(
+                anchorNode,
+                focusedAnchor,
+                centerHit,
+                lastPlaneFrameStats.copy(
+                    rendererMode = "accumulate-cached",
+                    dotCount = planeDotCounts[focusedAnchor.identifier] ?: activeNodes,
+                    nodeCount = activeNodes,
+                    bucketCount = storedBucketCount
+                )
+            )
+        }
+
+        val nowSeconds = currentTimeSeconds()
+        if (
+            nowSeconds - lastMeshRebuildSeconds < MESH_REBUILD_MIN_INTERVAL_SECONDS &&
+            displayFingerprint == lastMeshBucketFingerprint
+        ) {
+            return finishPlaneDotFrame(
+                anchorNode,
+                focusedAnchor,
+                centerHit,
+                lastPlaneFrameStats.copy(
+                    rendererMode = "accumulate-throttled",
+                    bucketCount = storedBucketCount
+                )
+            )
+        }
+
+        val generateStart = currentTimeSeconds()
+        val geometry = buildCombinedPlaneGeometry(
+            anchor = focusedAnchor,
+            accumulator = dotBucketAccumulator,
+            boundaryMode = boundaryMode,
+            centerLocal = ref,
+            visibleRadiusM = VISIBLE_DOT_RADIUS_M
+        ) ?: buildHitDiscGeometry(refForMesh)
+        val generateMs = elapsedMs(generateStart)
+
+        if (geometry == null) {
+            hidePlaneDotGrid(anchorNode)
+            return finishPlaneDotFrame(
+                anchorNode,
+                focusedAnchor,
+                centerHit,
+                PlaneDotFrameStats(
+                    rendererMode = "accumulate-empty",
+                    bucketCount = storedBucketCount
+                )
+            )
+        }
+
+        val syncStart = currentTimeSeconds()
+        syncPlaneGeometryDots(
             parentNode = anchorNode,
             geometry = geometry,
             dotMaterial = floorDotMaterial,
-            previousFingerprint = previousFingerprint,
-            inProgress = dotGridSyncProgress
+            previousFingerprint = previousFingerprint
         )
+        val syncMs = elapsedMs(syncStart)
         planeFingerprints[focusedAnchor.identifier] = geometry.fingerprint
         planeAreas[focusedAnchor.identifier] = geometry.area
-        planeDotCounts[focusedAnchor.identifier] = geometry.dots.size
+        planeDotCounts[focusedAnchor.identifier] = geometry.dotCount
+        lastMeshRebuildSeconds = nowSeconds
+        lastMeshBucketFingerprint = displayFingerprint
+        if (geometry.dotCount > 0) {
+            firstAnchorDotsMs = firstAnchorDotsMs ?: elapsedMsSinceSession(frameStartedAtSeconds)
+        }
+        return finishPlaneDotFrame(
+            anchorNode,
+            focusedAnchor,
+            centerHit,
+            PlaneDotFrameStats(
+                rendererMode = "${PlaneDotMeshSource.ACCUMULATE.debugLabel}+live+${boundaryMode.debugLabel}",
+                dotCount = geometry.dotCount,
+                nodeCount = activePlaneDotNodeCount(anchorNode),
+                generateMs = generateMs,
+                syncMs = syncMs,
+                bucketCount = storedBucketCount
+            )
+        )
     }
+
+    private fun finishPlaneDotFrame(
+        anchorNode: SCNNode,
+        anchor: ARPlaneAnchor,
+        centerHit: CenterPlaneHit,
+        stats: PlaneDotFrameStats
+    ): PlaneDotFrameStats {
+        val raycastWorldY = centerHit.confirmedHitResult?.let { HitTransformReader.worldFloorPoint(it).yMeters }
+        planeDotElevationLock.apply(anchorNode, anchor, raycastWorldY)
+        return stats
+    }
+
+    private fun updatePolygonStableFrames(anchor: ARPlaneAnchor) {
+        val anchorId = anchor.identifier
+        if (anchor.hasPolygonBoundary()) {
+            val previous = polygonStableFrames[anchorId] ?: 0
+            polygonStableFrames[anchorId] = minOf(previous + 1, 30)
+        } else {
+            polygonStableFrames.remove(anchorId)
+        }
+    }
+
+    private fun hidePlaneDotVisualization(view: ARSCNView, frame: ARFrame) {
+        view.scene?.rootNode?.let { hidePreviewDotGrid(it) }
+        lastRenderedFocusedAnchorId?.let { focusedId ->
+            frame.anchors
+                .filterIsInstance<ARPlaneAnchor>()
+                .firstOrNull { it.identifier == focusedId }
+                ?.let { view.nodeForAnchor(it) }
+                ?.let { hidePlaneDotGrid(it) }
+        }
+    }
+
+    private fun updateFps(nowSeconds: Double) {
+        fpsFrameCount++
+        val elapsed = nowSeconds - fpsWindowStartSeconds
+        if (elapsed >= 1.0) {
+            currentFps = (fpsFrameCount / elapsed).roundToInt()
+            fpsFrameCount = 0
+            fpsWindowStartSeconds = nowSeconds
+        }
+    }
+
+    private fun publishPlaneDebugMetrics(nowSeconds: Double, centerHit: CenterPlaneHit) {
+        if (nowSeconds - lastMetricsPublishSeconds < METRICS_PUBLISH_INTERVAL_SECONDS) return
+        lastMetricsPublishSeconds = nowSeconds
+        onPlaneDebugMetricsChanged(
+            IosPlaneDebugMetrics(
+                fps = currentFps,
+                rendererMode = lastPlaneFrameStats.rendererMode,
+                dotCount = lastPlaneFrameStats.dotCount,
+                nodeCount = lastPlaneFrameStats.nodeCount,
+                bucketCount = lastPlaneFrameStats.bucketCount,
+                generateMs = lastPlaneFrameStats.generateMs,
+                syncMs = lastPlaneFrameStats.syncMs,
+                previewLatencyMs = firstPreviewDotsMs,
+                anchorLatencyMs = firstAnchorDotsMs,
+                sessionFeatures = sessionFeatures.debugLabel(),
+                hitPath = centerHit.hitPathDebugLabel()
+            )
+        )
+    }
+
+    private fun elapsedMsSinceSession(nowSeconds: Double): Int =
+        ((nowSeconds - sessionStartTimeSeconds) * 1000.0).roundToInt()
 
     private fun buildFocusedLabel(
         focusedAnchorId: NSUUID?,
@@ -408,47 +610,38 @@ private class IosArSessionCoordinator(
         return "$dotCount pts$suffix"
     }
 
-    private fun ARSCNView.centerPlaneHit(): CenterPlaneHit {
-        val width = bounds.useContents { size.width }
-        val height = bounds.useContents { size.height }
-        if (width <= 0.0 || height <= 0.0) return CenterPlaneHit()
-
-        val center = CGPointMake(width / 2.0, height / 2.0)
-        val hitResult = hitTest(center, ARHitTestResultTypeExistingPlaneUsingExtent)
-            .firstHorizontalFloorHitResult()
-        val anchor = hitResult?.anchor as? ARPlaneAnchor
-        val localPoint = hitResult?.let { HitTransformReader.localFloorPoint(it) }
-        val confirmed = anchor != null &&
-            localPoint != null &&
-            anchor.containsLocalPoint(localPoint.first, localPoint.second)
-
-        return CenterPlaneHit(
-            confirmed = confirmed,
-            anchor = if (confirmed) anchor else null,
-            localPoint = if (confirmed) localPoint else null,
-            confirmedHitResult = if (confirmed) hitResult else null,
-            previewHitResult = if (confirmed) {
-                null
-            } else {
-                hitTest(center, ARHitTestResultTypeEstimatedHorizontalPlane)
-                    .firstEstimatedHorizontalFloorHitResult()
-            }
-        )
-    }
-
-    private fun createConfiguration(): ARWorldTrackingConfiguration =
-        ARWorldTrackingConfiguration().apply {
-            planeDetection = ARPlaneDetectionHorizontal
-        }
 }
 
-private data class CenterPlaneHit(
-    val confirmed: Boolean = false,
-    val anchor: ARPlaneAnchor? = null,
-    val localPoint: Pair<Float, Float>? = null,
-    val confirmedHitResult: ARHitTestResult? = null,
-    val previewHitResult: ARHitTestResult? = null
+private data class IosPlaneDebugMetrics(
+    val fps: Int = 0,
+    val rendererMode: String = "none",
+    val dotCount: Int = 0,
+    val nodeCount: Int = 0,
+    val bucketCount: Int = 0,
+    val generateMs: Int = 0,
+    val syncMs: Int = 0,
+    val previewLatencyMs: Int? = null,
+    val anchorLatencyMs: Int? = null,
+    val sessionFeatures: String = "planes",
+    val hitPath: String = "none"
 )
+
+private data class PlaneDotFrameStats(
+    val rendererMode: String = "none",
+    val dotCount: Int = 0,
+    val nodeCount: Int = 0,
+    val bucketCount: Int = 0,
+    val generateMs: Int = 0,
+    val syncMs: Int = 0
+)
+
+private const val METRICS_PUBLISH_INTERVAL_SECONDS = 0.25
+
+private fun currentTimeSeconds(): Double =
+    CFAbsoluteTimeGetCurrent()
+
+private fun elapsedMs(startSeconds: Double): Int =
+    ((currentTimeSeconds() - startSeconds) * 1000.0).roundToInt()
 
 private fun ArTrackingStatus.toIosText(): String = when (this) {
     ArTrackingStatus.INITIALIZING -> "Инициализация…"

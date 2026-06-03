@@ -1,19 +1,31 @@
-# Модуль Floor Detection
+# Модуль Floor Detection (Android)
 
-Этот модуль отвечает за обнаружение горизонтальных поверхностей (пола) и визуализацию плитки.
+Эталонный AR-экран: **поиск горизонтальных поверхностей** + **разметка контура** + **заливка и плитка**.
+
+Полное описание поведения, договорённостей и чеклистов регрессии: **[docs/SURFACE_DETECTION.md](../../docs/SURFACE_DETECTION.md)** → разделы **Android — статус и договорённости** и **Android (ARCore) — реализация**.
 
 ## Структура
-- `domain`: Модели `ArPoint`, `FloorUiState` и Use Case `ProcessArFrameUseCase`.
-- `presentation`:
-    - `screen`: Точка входа `FloorArScreen`.
-    - `components`: Мелкие UI-компоненты (кнопки, слои рендеринга).
-    - `viewmodel`: `FloorArViewModel` для управления состоянием.
-    - `utils`: Логика расчетов геометрии, текстур и мапперы состояний.
 
-## Ключевые особенности
-- Обнаружение пола и установка точек.
-- Замыкание полигона и расчет площади.
-- Наложение текстуры плитки с учетом физических размеров (780x1040 мм).
-- Вращение текстуры внутри полигона.
-- Стабилизация через ARCore Anchors.
-- Безопасная навигация: использование `BackHandler` и `TransitionScreen` для плавного выхода из AR-режима.
+- `domain`: `FloorUiState`, `ArFrameResult`, `ProcessArFrameUseCase`, `IFloorDetectorRepository`
+- `data`: `FloorDetectorRepositoryImpl` — только данные кадра, без UiState
+- `presentation`:
+  - `screen/FloorArScreen.kt` — Compose UI
+  - `components/ArSceneLayer.kt` — ARCore + planeRenderer + 3D контур
+  - `viewmodel/FloorArViewModel.kt` — состояние, точки, confirm, tile
+  - `utils/` — геометрия, текстуры, константы рендера
+
+## Кратко: что не ломать
+
+- Нативный **`planeRenderer`** до `confirmContour`
+- **Нет** фиксации одной плоскости на весь сеанс
+- Center hit только с **`isPoseInPolygon`**
+- Минимальная площадь **0.15 m²**
+- Контур на **Y первой точки** (`sectionFloorY` в `ArSceneLayer`)
+
+## Сборка
+
+```bash
+./gradlew :app:installDebug
+```
+
+Требуется устройство с ARCore.

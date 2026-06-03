@@ -61,10 +61,16 @@ internal class IosArContourRenderer {
     }
 
     private fun syncPointNodes(state: FloorContourUiState, floorY: Float?) {
-        val activeIds = state.placedPoints.map { it.id }.toSet()
+        val activeIds = if (state.showContourPoints) {
+            state.placedPoints.map { it.id }.toSet()
+        } else {
+            emptySet()
+        }
         pointNodes.keys.filterNot { it in activeIds }.forEach { id ->
             pointNodes.remove(id)?.removeFromParentNode()
         }
+
+        if (!state.showContourPoints) return
 
         state.placedPoints.forEachIndexed { index, placed ->
             val y = (floorY ?: placed.position.yMeters) + POINT_VISUAL_OFFSET_M
@@ -91,7 +97,7 @@ internal class IosArContourRenderer {
         container.childNodes.mapNotNull { it as? SCNNode }.forEach { it.removeFromParentNode() }
 
         val points = state.placedPoints.map { it.position }
-        if (points.size >= 2) {
+        if (state.showContourLines) {
             for (index in 0 until points.lastIndex) {
                 addSegment(container, points[index], points[index + 1], floorY, lineMaterial, isPreview = false)
             }
@@ -101,12 +107,7 @@ internal class IosArContourRenderer {
         }
 
         val currentHitPoint = state.currentHitPoint
-        if (
-            !state.isFinalized &&
-            !state.isPolygonClosed &&
-            points.isNotEmpty() &&
-            currentHitPoint != null
-        ) {
+        if (state.showPreviewLine && currentHitPoint != null) {
             addSegment(
                 parent = container,
                 start = points.last(),

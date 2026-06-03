@@ -9,11 +9,14 @@ import com.example.arplitka.shared.ar.domain.logic.FloorTrackingReducer
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import com.example.arplitka.shared.ar.domain.model.FloorFrameSnapshot
 import com.example.arplitka.shared.ar.domain.model.PlacedContourPoint
+import com.example.arplitka.shared.ar.domain.model.FloorContourUiPublishSnapshot
+import com.example.arplitka.shared.ar.domain.model.toUiPublishSnapshot
 
 class FloorArController(
     private val onStateChanged: (FloorContourUiState) -> Unit
 ) {
     private var state = FloorContourUiState()
+    private var lastUiPublishSnapshot: FloorContourUiPublishSnapshot? = null
 
     fun currentState(): FloorContourUiState = state
 
@@ -25,7 +28,7 @@ class FloorArController(
             state = state.copy(placedPoints = updatedPoints),
             snapshot = snapshot
         )
-        publish()
+        publishIfUiChanged()
     }
 
     fun onEvent(event: FloorArEvent): List<FloorArEffect> {
@@ -91,6 +94,7 @@ class FloorArController(
             focusedLabel = state.focusedLabel,
             currentHitPoint = state.currentHitPoint
         )
+        lastUiPublishSnapshot = null
         return if (hadPoints) listOf(FloorArEffect.DetachAllAnchors) else emptyList()
     }
 
@@ -105,6 +109,14 @@ class FloorArController(
     }
 
     private fun publish() {
+        lastUiPublishSnapshot = state.toUiPublishSnapshot()
+        onStateChanged(state)
+    }
+
+    private fun publishIfUiChanged() {
+        val snapshot = state.toUiPublishSnapshot()
+        if (snapshot == lastUiPublishSnapshot) return
+        lastUiPublishSnapshot = snapshot
         onStateChanged(state)
     }
 }
