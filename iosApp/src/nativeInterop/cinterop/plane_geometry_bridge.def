@@ -2,15 +2,17 @@ headers = PlaneGeometryBridge.h
 headerFilter = PlaneGeometryBridge.h
 package = com.example.arplitka.iosapp.bridge
 language = Objective-C
-compilerOpts = -framework ARKit -framework Foundation -framework SceneKit
-linkerOpts = -framework ARKit -framework Foundation -framework SceneKit
+compilerOpts = -framework ARKit -framework Foundation -framework SceneKit -framework UIKit
+linkerOpts = -framework ARKit -framework Foundation -framework SceneKit -framework UIKit
 
 ---
 
 #import <ARKit/ARKit.h>
 #import <SceneKit/SceneKit.h>
+#import <UIKit/UIKit.h>
 #import <math.h>
 #import <stdint.h>
+#import <stdlib.h>
 #import <string.h>
 #import "PlaneGeometryBridge.h"
 
@@ -19,6 +21,178 @@ static ARPlaneAnchor *PGCast(void *planeAnchor) {
         return NULL;
     }
     return (__bridge ARPlaneAnchor *)planeAnchor;
+}
+
+static ARSession *PGSessionCast(void *sessionPtr) {
+    if (sessionPtr == NULL) {
+        return NULL;
+    }
+    return (__bridge ARSession *)sessionPtr;
+}
+
+static ARFrame *PGFrameCast(void *framePtr) {
+    if (framePtr == NULL) {
+        return NULL;
+    }
+    return (__bridge ARFrame *)framePtr;
+}
+
+static float PGDistanceBetweenTransforms(simd_float4x4 fromTransform, simd_float4x4 toTransform) {
+    simd_float4 fromPos = fromTransform.columns[3];
+    simd_float4 toPos = toTransform.columns[3];
+    float dx = toPos.x - fromPos.x;
+    float dy = toPos.y - fromPos.y;
+    float dz = toPos.z - fromPos.z;
+    return sqrtf((dx * dx) + (dy * dy) + (dz * dz));
+}
+
+static void PGCopyMatrix(simd_float4x4 matrix, float *out16) {
+    if (out16 == NULL) {
+        return;
+    }
+    for (int column = 0; column < 4; column++) {
+        simd_float4 values = matrix.columns[column];
+        out16[(column * 4) + 0] = values.x;
+        out16[(column * 4) + 1] = values.y;
+        out16[(column * 4) + 2] = values.z;
+        out16[(column * 4) + 3] = values.w;
+    }
+}
+
+// ARRaycastTargetMesh (= 1 << 2) is iOS 14+; cinterop indexer may not see the symbol.
+#define PG_RAYCAST_TARGET_MESH ((ARRaycastTarget)(1 << 2))
+
+static ARRaycastTarget PGTargetForKind(int targetKind) {
+    if (targetKind == PG_RAYCAST_ESTIMATED_PLANE) {
+        return ARRaycastTargetEstimatedPlane;
+    }
+    if (targetKind == PG_RAYCAST_MESH) {
+        if (@available(iOS 14.0, *)) {
+            return PG_RAYCAST_TARGET_MESH;
+        }
+        return ARRaycastTargetEstimatedPlane;
+    }
+    return ARRaycastTargetExistingPlaneGeometry;
+}
+
+bool pg_session_supports_mesh_raycast(void *sessionPtr) {
+    ARSession *session = PGSessionCast(sessionPtr);
+    if (session == NULL) {
+        return NO;
+    }
+    if (@available(iOS 14.0, *)) {
+        ARConfiguration *config = session.configuration;
+        if (config == NULL) {
+            return NO;
+        }
+        if ([config isKindOfClass:[ARWorldTrackingConfiguration class]]) {
+            ARWorldTrackingConfiguration *worldConfig = (ARWorldTrackingConfiguration *)config;
+            return worldConfig.sceneReconstruction == ARSceneReconstructionMesh;
+        }
+    }
+    return NO;
+}
+
+bool pg_center_raycast(
+    void *sessionPtr,
+    void *framePtr,
+    float screenX,
+    float screenY,
+    int targetKind,
+    float *outDistance,
+    float *outWorldTransform16,
+    char *outAnchorUuid,
+    int outAnchorUuidCapacity
+) {
+    if (outDistance == NULL || outWorldTransform16 == NULL) {
+        return NO;
+    }
+    *outDistance = 0.0f;
+    if (outAnchorUuid != NULL && outAnchorUuidCapacity > 0) {
+        outAnchorUuid[0] = '\0';
+    }
+    memset(outWorldTransform16, 0, sizeof(float) * 16u);
+
+    ARSession *session = PGSessionCast(sessionPtr);
+    ARFrame *frame = PGFrameCast(framePtr);
+    if (session == NULL || frame == NULL) {
+        return NO;
+    }
+    if (@available(iOS 13.0, *)) {
+        CGPoint screenPoint = CGPointMake((CGFloat)screenX, (CGFloat)screenY);
+        ARRaycastQuery *query = [frame raycastQueryFromPoint:screenPoint
+                                              allowingTarget:PGTargetForKind(targetKind)
+                                                   alignment:ARRaycastTargetAlignmentHorizontal];
+        if (query == NULL) {
+            return NO;
+        }
+        NSArray<ARRaycastResult *> *results = [session raycast:query];
+        ARRaycastResult *best = results.firstObject;
+        if (best == NULL) {
+            return NO;
+        }
+        ARAnchor *anchor = best.anchor;
+        if (anchor != NULL && outAnchorUuid != NULL && outAnchorUuidCapacity > 0) {
+            NSString *uuidString = anchor.identifier.UUIDString;
+            if (uuidString != NULL) {
+                strncpy(outAnchorUuid, uuidString.UTF8String, (size_t)(outAnchorUuidCapacity - 1));
+                outAnchorUuid[outAnchorUuidCapacity - 1] = '\0';
+            }
+        }
+        PGCopyMatrix(best.worldTransform, outWorldTransform16);
+        *outDistance = PGDistanceBetweenTransforms(frame.camera.transform, best.worldTransform);
+        return YES;
+    }
+    return NO;
+}
+
+// Raw ARPlaneAnchor.classification values (cinterop may not expose ARPlaneAnchorClassification* symbols).
+#define PG_IOS_ANCHOR_CLASS_NONE (-1)
+#define PG_IOS_ANCHOR_CLASS_UNKNOWN 0
+#define PG_IOS_ANCHOR_CLASS_WALL 1
+#define PG_IOS_ANCHOR_CLASS_FLOOR 2
+#define PG_IOS_ANCHOR_CLASS_CEILING 3
+#define PG_IOS_ANCHOR_CLASS_TABLE 4
+#define PG_IOS_ANCHOR_CLASS_SEAT 5
+#define PG_IOS_ANCHOR_CLASS_DOOR 6
+#define PG_IOS_ANCHOR_CLASS_WINDOW 7
+
+int pg_plane_classification(void *planeAnchor) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    if (anchor == NULL) {
+        return PG_PLANE_CLASSIFICATION_NONE;
+    }
+    if (@available(iOS 12.0, *)) {
+        NSInteger raw = anchor.classification;
+        switch (raw) {
+            case PG_IOS_ANCHOR_CLASS_WALL:
+                return PG_PLANE_CLASSIFICATION_WALL;
+            case PG_IOS_ANCHOR_CLASS_FLOOR:
+                return PG_PLANE_CLASSIFICATION_FLOOR;
+            case PG_IOS_ANCHOR_CLASS_CEILING:
+                return PG_PLANE_CLASSIFICATION_CEILING;
+            case PG_IOS_ANCHOR_CLASS_TABLE:
+                return PG_PLANE_CLASSIFICATION_TABLE;
+            case PG_IOS_ANCHOR_CLASS_SEAT:
+                return PG_PLANE_CLASSIFICATION_SEAT;
+            case PG_IOS_ANCHOR_CLASS_DOOR:
+            case PG_IOS_ANCHOR_CLASS_WINDOW:
+                return PG_PLANE_CLASSIFICATION_UNKNOWN;
+            case PG_IOS_ANCHOR_CLASS_NONE:
+                return PG_PLANE_CLASSIFICATION_NONE;
+            case PG_IOS_ANCHOR_CLASS_UNKNOWN:
+                return PG_PLANE_CLASSIFICATION_UNKNOWN;
+            default:
+                return PG_PLANE_CLASSIFICATION_UNKNOWN;
+        }
+    }
+    return PG_PLANE_CLASSIFICATION_NONE;
+}
+
+bool pg_plane_is_floor_like(void *planeAnchor) {
+    int classification = pg_plane_classification(planeAnchor);
+    return classification == PG_PLANE_CLASSIFICATION_FLOOR ||
+        classification == PG_PLANE_CLASSIFICATION_NONE;
 }
 
 static uint32_t PGHashFloat(float value) {
@@ -632,4 +806,572 @@ SCNGeometry *pg_create_preview_dot_mesh_geometry(
         *outDotCount = written;
     }
     return PGCreateDotGeometryFromBuffers(vertexData, indexData, written);
+}
+
+bool pg_plane_extent_dimensions(
+    void *planeAnchor,
+    float *outWidth,
+    float *outHeight,
+    float *outCenterX,
+    float *outCenterZ
+) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    if (anchor == NULL || outWidth == NULL || outHeight == NULL || outCenterX == NULL || outCenterZ == NULL) {
+        return NO;
+    }
+
+    float width = 0.0f;
+    float depth = 0.0f;
+    float centerX = 0.0f;
+    float centerZ = 0.0f;
+
+    if (@available(iOS 16.0, *)) {
+        width = anchor.planeExtent.width;
+        depth = anchor.planeExtent.height;
+    } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        width = anchor.extent.x;
+        depth = anchor.extent.z;
+#pragma clang diagnostic pop
+    }
+    // Center offset is on ARPlaneAnchor, not ARPlaneExtent (width/height only on extent).
+    centerX = anchor.center.x;
+    centerZ = anchor.center.z;
+
+    if (width <= 0.0f || depth <= 0.0f) {
+        return NO;
+    }
+
+    *outWidth = width;
+    *outHeight = depth;
+    *outCenterX = centerX;
+    *outCenterZ = centerZ;
+    return YES;
+}
+
+float pg_plane_extent_area(void *planeAnchor) {
+    float width = 0.0f;
+    float depth = 0.0f;
+    float centerX = 0.0f;
+    float centerZ = 0.0f;
+    if (!pg_plane_extent_dimensions(planeAnchor, &width, &depth, &centerX, &centerZ)) {
+        return 0.0f;
+    }
+    return width * depth;
+}
+
+static ARAnchor *PGAnchorCast(void *anchorPtr) {
+    if (anchorPtr == NULL) {
+        return NULL;
+    }
+    return (__bridge ARAnchor *)anchorPtr;
+}
+
+bool pg_world_xz_on_anchor(
+    void *anchorPtr,
+    float worldX,
+    float worldY,
+    float worldZ,
+    float *outLocalX,
+    float *outLocalZ
+) {
+    ARAnchor *anchor = PGAnchorCast(anchorPtr);
+    if (anchor == NULL || outLocalX == NULL || outLocalZ == NULL) {
+        return false;
+    }
+    simd_float4x4 transform = anchor.transform;
+    simd_float4x4 inverse = simd_inverse(transform);
+    simd_float4 world = simd_make_float4(worldX, worldY, worldZ, 1.0f);
+    simd_float4 local = simd_mul(inverse, world);
+    *outLocalX = local.x;
+    *outLocalZ = local.z;
+    return true;
+}
+
+#define PG_MAX_GRID_LINES_PER_AXIS 52
+
+typedef struct {
+    float x;
+    float y;
+    float z;
+} PGGridVertex;
+
+static void PGGridAppendQuad(
+    NSMutableData *vertexData,
+    NSMutableData *indexData,
+    uint16_t *baseIndex,
+    float x0,
+    float z0,
+    float x1,
+    float z1,
+    float x2,
+    float z2,
+    float x3,
+    float z3,
+    float y
+) {
+    PGGridVertex verts[4] = {
+        { x0, y, z0 },
+        { x1, y, z1 },
+        { x2, y, z2 },
+        { x3, y, z3 }
+    };
+    uint16_t base = *baseIndex;
+    [vertexData appendBytes:verts length:sizeof(verts)];
+    uint16_t indices[6] = {
+        base,
+        (uint16_t)(base + 1u),
+        (uint16_t)(base + 2u),
+        base,
+        (uint16_t)(base + 2u),
+        (uint16_t)(base + 3u)
+    };
+    [indexData appendBytes:indices length:sizeof(indices)];
+    *baseIndex = (uint16_t)(base + 4u);
+}
+
+SCNGeometry *pg_create_grid_line_geometry(
+    float widthM,
+    float depthM,
+    float centerX,
+    float centerZ,
+    float cellM,
+    float lineWidthM,
+    float yM
+) {
+    if (widthM <= 0.0f || depthM <= 0.0f || cellM <= 0.0f || lineWidthM <= 0.0f) {
+        return nil;
+    }
+
+    float halfW = widthM * 0.5f;
+    float halfD = depthM * 0.5f;
+    float halfLine = lineWidthM * 0.5f;
+    float xMin = centerX - halfW;
+    float xMax = centerX + halfW;
+    float zMin = centerZ - halfD;
+    float zMax = centerZ + halfD;
+
+    int hCount = (int)floorf(depthM / cellM) + 1;
+    int vCount = (int)floorf(widthM / cellM) + 1;
+    if (hCount > PG_MAX_GRID_LINES_PER_AXIS) {
+        hCount = PG_MAX_GRID_LINES_PER_AXIS;
+    }
+    if (vCount > PG_MAX_GRID_LINES_PER_AXIS) {
+        vCount = PG_MAX_GRID_LINES_PER_AXIS;
+    }
+    if (hCount < 1) {
+        hCount = 1;
+    }
+    if (vCount < 1) {
+        vCount = 1;
+    }
+
+    int quadCount = hCount + vCount;
+    NSMutableData *vertexData = [NSMutableData dataWithCapacity:(NSUInteger)quadCount * 4 * sizeof(PGGridVertex)];
+    NSMutableData *indexData = [NSMutableData dataWithCapacity:(NSUInteger)quadCount * 6 * sizeof(uint16_t)];
+    uint16_t vertexIndex = 0;
+
+    for (int i = 0; i < hCount; i++) {
+        float t = (hCount == 1) ? 0.5f : ((float)i / (float)(hCount - 1));
+        float z = zMin + t * (zMax - zMin);
+        PGGridAppendQuad(
+            vertexData,
+            indexData,
+            &vertexIndex,
+            xMin,
+            z - halfLine,
+            xMax,
+            z - halfLine,
+            xMax,
+            z + halfLine,
+            xMin,
+            z + halfLine,
+            yM
+        );
+    }
+
+    for (int i = 0; i < vCount; i++) {
+        float t = (vCount == 1) ? 0.5f : ((float)i / (float)(vCount - 1));
+        float x = xMin + t * (xMax - xMin);
+        PGGridAppendQuad(
+            vertexData,
+            indexData,
+            &vertexIndex,
+            x - halfLine,
+            zMin,
+            x + halfLine,
+            zMin,
+            x + halfLine,
+            zMax,
+            x - halfLine,
+            zMax,
+            yM
+        );
+    }
+
+    if (vertexIndex == 0) {
+        return nil;
+    }
+
+    NSInteger vertexCount = (NSInteger)vertexIndex;
+    NSInteger primitiveCount = (NSInteger)quadCount * 2;
+    SCNGeometrySource *source = [SCNGeometrySource geometrySourceWithData:vertexData
+                                                                 semantic:SCNGeometrySourceSemanticVertex
+                                                              vectorCount:vertexCount
+                                                          floatComponents:YES
+                                                      componentsPerVector:3
+                                                        bytesPerComponent:sizeof(float)
+                                                               dataOffset:0
+                                                               dataStride:sizeof(PGGridVertex)];
+    SCNGeometryElement *element = [SCNGeometryElement geometryElementWithData:indexData
+                                                                primitiveType:SCNGeometryPrimitiveTypeTriangles
+                                                               primitiveCount:primitiveCount
+                                                                bytesPerIndex:sizeof(uint16_t)];
+    return [SCNGeometry geometryWithSources:@[source] elements:@[element]];
+}
+
+static int PGCompareFloat(const void *a, const void *b) {
+    float fa = *(const float *)a;
+    float fb = *(const float *)b;
+    if (fa < fb) {
+        return -1;
+    }
+    if (fa > fb) {
+        return 1;
+    }
+    return 0;
+}
+
+static void PGGridAppendEdgeQuad(
+    NSMutableData *vertexData,
+    NSMutableData *indexData,
+    uint16_t *baseIndex,
+    float x1,
+    float z1,
+    float x2,
+    float z2,
+    float halfWidth,
+    float y
+) {
+    float dx = x2 - x1;
+    float dz = z2 - z1;
+    float len = sqrtf(dx * dx + dz * dz);
+    if (len < 1e-5f) {
+        return;
+    }
+    float nx = (-dz / len) * halfWidth;
+    float nz = (dx / len) * halfWidth;
+    PGGridAppendQuad(
+        vertexData,
+        indexData,
+        baseIndex,
+        x1 + nx,
+        z1 + nz,
+        x2 + nx,
+        z2 + nz,
+        x2 - nx,
+        z2 - nz,
+        x1 - nx,
+        z1 - nz,
+        y
+    );
+}
+
+#define PG_MAX_POLYGON_INTERSECTIONS 32
+
+static int PGCollectIntersectionsAtZ(
+    float z,
+    const vector_float3 *vertices,
+    NSUInteger count,
+    float *outX,
+    int maxOut
+) {
+    int written = 0;
+    for (NSUInteger i = 0; i < count; i++) {
+        NSUInteger next = (i + 1u) % count;
+        float x1 = vertices[i].x;
+        float z1 = vertices[i].z;
+        float x2 = vertices[next].x;
+        float z2 = vertices[next].z;
+        if (fabsf(z2 - z1) < 1e-5f) {
+            continue;
+        }
+        float zMin = fminf(z1, z2);
+        float zMax = fmaxf(z1, z2);
+        if (z < zMin - 1e-4f || z > zMax + 1e-4f) {
+            continue;
+        }
+        float t = (z - z1) / (z2 - z1);
+        float x = x1 + t * (x2 - x1);
+        if (written < maxOut) {
+            outX[written++] = x;
+        }
+    }
+    if (written > 1) {
+        qsort(outX, (size_t)written, sizeof(float), PGCompareFloat);
+    }
+    return written;
+}
+
+static int PGCollectIntersectionsAtX(
+    float x,
+    const vector_float3 *vertices,
+    NSUInteger count,
+    float *outZ,
+    int maxOut
+) {
+    int written = 0;
+    for (NSUInteger i = 0; i < count; i++) {
+        NSUInteger next = (i + 1u) % count;
+        float x1 = vertices[i].x;
+        float z1 = vertices[i].z;
+        float x2 = vertices[next].x;
+        float z2 = vertices[next].z;
+        if (fabsf(x2 - x1) < 1e-5f) {
+            continue;
+        }
+        float xMin = fminf(x1, x2);
+        float xMax = fmaxf(x1, x2);
+        if (x < xMin - 1e-4f || x > xMax + 1e-4f) {
+            continue;
+        }
+        float t = (x - x1) / (x2 - x1);
+        float z = z1 + t * (z2 - z1);
+        if (written < maxOut) {
+            outZ[written++] = z;
+        }
+    }
+    if (written > 1) {
+        qsort(outZ, (size_t)written, sizeof(float), PGCompareFloat);
+    }
+    return written;
+}
+
+static void PGAppendHorizontalGridInPolygon(
+    NSMutableData *vertexData,
+    NSMutableData *indexData,
+    uint16_t *vertexIndex,
+    const vector_float3 *vertices,
+    NSUInteger count,
+    float z,
+    float halfLine,
+    float yM
+) {
+    float intersections[PG_MAX_POLYGON_INTERSECTIONS];
+    int intersectionCount = PGCollectIntersectionsAtZ(z, vertices, count, intersections, PG_MAX_POLYGON_INTERSECTIONS);
+    for (int i = 0; i + 1 < intersectionCount; i += 2) {
+        float x0 = intersections[i];
+        float x1 = intersections[i + 1];
+        if ((x1 - x0) <= 1e-4f) {
+            continue;
+        }
+        PGGridAppendQuad(
+            vertexData,
+            indexData,
+            vertexIndex,
+            x0,
+            z - halfLine,
+            x1,
+            z - halfLine,
+            x1,
+            z + halfLine,
+            x0,
+            z + halfLine,
+            yM
+        );
+    }
+}
+
+static void PGAppendVerticalGridInPolygon(
+    NSMutableData *vertexData,
+    NSMutableData *indexData,
+    uint16_t *vertexIndex,
+    const vector_float3 *vertices,
+    NSUInteger count,
+    float x,
+    float halfLine,
+    float yM
+) {
+    float intersections[PG_MAX_POLYGON_INTERSECTIONS];
+    int intersectionCount = PGCollectIntersectionsAtX(x, vertices, count, intersections, PG_MAX_POLYGON_INTERSECTIONS);
+    for (int i = 0; i + 1 < intersectionCount; i += 2) {
+        float z0 = intersections[i];
+        float z1 = intersections[i + 1];
+        if ((z1 - z0) <= 1e-4f) {
+            continue;
+        }
+        PGGridAppendQuad(
+            vertexData,
+            indexData,
+            vertexIndex,
+            x - halfLine,
+            z0,
+            x + halfLine,
+            z0,
+            x + halfLine,
+            z1,
+            x - halfLine,
+            z1,
+            yM
+        );
+    }
+}
+
+SCNGeometry *pg_create_polygon_grid_line_geometry(
+    void *planeAnchor,
+    float cellM,
+    float lineWidthM,
+    float yM
+) {
+    ARPlaneAnchor *anchor = PGCast(planeAnchor);
+    vector_float3 fallback[4];
+    const vector_float3 *vertices = NULL;
+    NSUInteger count = 0;
+    if (!PGReadBoundary(anchor, &vertices, &count, fallback)) {
+        return nil;
+    }
+    if (vertices == NULL || count < 3u || cellM <= 0.0f || lineWidthM <= 0.0f) {
+        return nil;
+    }
+
+    float minX = INFINITY;
+    float maxX = -INFINITY;
+    float minZ = INFINITY;
+    float maxZ = -INFINITY;
+    for (NSUInteger i = 0; i < count; i++) {
+        float x = vertices[i].x;
+        float z = vertices[i].z;
+        if (x < minX) {
+            minX = x;
+        }
+        if (x > maxX) {
+            maxX = x;
+        }
+        if (z < minZ) {
+            minZ = z;
+        }
+        if (z > maxZ) {
+            maxZ = z;
+        }
+    }
+
+    float halfLine = lineWidthM * 0.5f;
+    float depthM = maxZ - minZ;
+    float widthM = maxX - minX;
+    if (depthM <= 0.0f || widthM <= 0.0f) {
+        return nil;
+    }
+
+    int hCount = (int)floorf(depthM / cellM) + 1;
+    int vCount = (int)floorf(widthM / cellM) + 1;
+    if (hCount > PG_MAX_GRID_LINES_PER_AXIS) {
+        hCount = PG_MAX_GRID_LINES_PER_AXIS;
+    }
+    if (vCount > PG_MAX_GRID_LINES_PER_AXIS) {
+        vCount = PG_MAX_GRID_LINES_PER_AXIS;
+    }
+    if (hCount < 1) {
+        hCount = 1;
+    }
+    if (vCount < 1) {
+        vCount = 1;
+    }
+
+    int estimatedQuads = hCount + vCount + (int)count;
+    NSMutableData *vertexData = [NSMutableData dataWithCapacity:(NSUInteger)estimatedQuads * 8u * sizeof(PGGridVertex)];
+    NSMutableData *indexData = [NSMutableData dataWithCapacity:(NSUInteger)estimatedQuads * 12u * sizeof(uint16_t)];
+    uint16_t vertexIndex = 0;
+
+    for (NSUInteger i = 0; i < count; i++) {
+        NSUInteger next = (i + 1u) % count;
+        PGGridAppendEdgeQuad(
+            vertexData,
+            indexData,
+            &vertexIndex,
+            vertices[i].x,
+            vertices[i].z,
+            vertices[next].x,
+            vertices[next].z,
+            halfLine,
+            yM
+        );
+    }
+
+    for (int i = 0; i < hCount; i++) {
+        float t = (hCount == 1) ? 0.5f : ((float)i / (float)(hCount - 1));
+        float z = minZ + t * (maxZ - minZ);
+        PGAppendHorizontalGridInPolygon(vertexData, indexData, &vertexIndex, vertices, count, z, halfLine, yM);
+    }
+
+    for (int i = 0; i < vCount; i++) {
+        float t = (vCount == 1) ? 0.5f : ((float)i / (float)(vCount - 1));
+        float x = minX + t * (maxX - minX);
+        PGAppendVerticalGridInPolygon(vertexData, indexData, &vertexIndex, vertices, count, x, halfLine, yM);
+    }
+
+    if (vertexIndex == 0) {
+        return nil;
+    }
+
+    SCNGeometrySource *source = [SCNGeometrySource geometrySourceWithData:vertexData
+                                                                 semantic:SCNGeometrySourceSemanticVertex
+                                                              vectorCount:(NSInteger)vertexIndex
+                                                          floatComponents:YES
+                                                      componentsPerVector:3
+                                                        bytesPerComponent:sizeof(float)
+                                                               dataOffset:0
+                                                               dataStride:sizeof(PGGridVertex)];
+    SCNGeometryElement *element = [SCNGeometryElement geometryElementWithData:indexData
+                                                                primitiveType:SCNGeometryPrimitiveTypeTriangles
+                                                               primitiveCount:(NSInteger)indexData.length / (sizeof(uint16_t) * 3u)
+                                                                bytesPerIndex:sizeof(uint16_t)];
+    return [SCNGeometry geometryWithSources:@[source] elements:@[element]];
+}
+
+static UIImage *PGGridPatternImageWithLineWidth(CGFloat lineWidth) {
+    const CGFloat tile = 64.0;
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(tile, tile), NO, 0.0);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    UIImage *image = nil;
+    if (ctx != NULL) {
+        /* Transparent background — only stroke lines, no fill. */
+        CGContextClearRect(ctx, CGRectMake(0.0, 0.0, tile, tile));
+        CGContextSetStrokeColorWithColor(ctx, [UIColor colorWithWhite:1.0 alpha:1.0].CGColor);
+        CGContextSetLineWidth(ctx, lineWidth);
+        CGContextSetLineCap(ctx, kCGLineCapSquare);
+        const CGFloat half = lineWidth * 0.5;
+        CGContextMoveToPoint(ctx, half, 0.0);
+        CGContextAddLineToPoint(ctx, half, tile);
+        CGContextMoveToPoint(ctx, 0.0, half);
+        CGContextAddLineToPoint(ctx, tile, half);
+        CGContextStrokePath(ctx);
+        image = UIGraphicsGetImageFromCurrentImageContext();
+    }
+    UIGraphicsEndImageContext();
+    return image;
+}
+
+static UIImage *PGGridPatternImage(void) {
+    static UIImage *cached = nil;
+    if (cached == nil) {
+        cached = PGGridPatternImageWithLineWidth(3.0);
+    }
+    return cached;
+}
+
+static UIImage *PGGridPatternImageOutdoor(void) {
+    static UIImage *cached = nil;
+    if (cached == nil) {
+        cached = PGGridPatternImageWithLineWidth(4.5);
+    }
+    return cached;
+}
+
+UIImage *pg_grid_pattern_image(void) {
+    return PGGridPatternImage();
+}
+
+UIImage *pg_grid_pattern_image_outdoor(void) {
+    return PGGridPatternImageOutdoor();
 }

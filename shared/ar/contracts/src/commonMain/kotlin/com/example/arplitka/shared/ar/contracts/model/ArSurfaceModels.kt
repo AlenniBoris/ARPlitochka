@@ -40,6 +40,8 @@ enum class ArTrackingStatus {
 enum class ArInstruction {
     PLEASE_WAIT,
     SEARCHING,
+    /** Scan viz found a large plane nearby, but reticle is not on it yet (iOS outdoor). */
+    SURFACE_NEARBY,
     MOVE_PHONE,
     DETECTED,
     CONTOUR_CLOSED,

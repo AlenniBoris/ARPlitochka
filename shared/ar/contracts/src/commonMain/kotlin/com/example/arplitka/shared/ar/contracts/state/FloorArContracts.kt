@@ -16,6 +16,8 @@ data class SharedFloorArState(
 
 sealed interface FloorArEvent {
     data object AddPoint : FloorArEvent
+    /** Placement resolved on platform at tap time (e.g. fresh hitTest + section-floor projection). */
+    data class AddPointAt(val point: ArPoint3D) : FloorArEvent
     data object UndoPoint : FloorArEvent
     data object Reset : FloorArEvent
     data object FinalizeArea : FloorArEvent

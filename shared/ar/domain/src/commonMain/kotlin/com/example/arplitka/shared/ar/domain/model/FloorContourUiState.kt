@@ -9,6 +9,7 @@ data class FloorContourUiState(
     val instruction: ArInstruction = ArInstruction.PLEASE_WAIT,
     val horizontalPlaneCount: Int = 0,
     val selectedArea: Float = 0f,
+    val largestPlaneAreaM2: Float = 0f,
     val hasCenterHit: Boolean = false,
     val isFloorDetected: Boolean = false,
     val focusedLabel: String = "",

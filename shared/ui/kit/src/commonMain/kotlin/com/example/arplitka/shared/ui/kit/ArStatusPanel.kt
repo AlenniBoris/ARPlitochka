@@ -20,7 +20,8 @@ import androidx.compose.ui.unit.dp
 fun StatusPanel(
     statusText: String,
     instructionText: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    detailText: String? = null
 ) {
     Column(
         modifier = modifier
@@ -41,5 +42,13 @@ fun StatusPanel(
             color = Color.White.copy(alpha = 0.86f),
             style = MaterialTheme.typography.bodyMedium
         )
+        if (detailText != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = detailText,
+                color = Color.White.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
     }
 }

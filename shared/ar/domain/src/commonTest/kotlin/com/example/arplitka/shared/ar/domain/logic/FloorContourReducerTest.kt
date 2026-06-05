@@ -5,6 +5,7 @@ import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import com.example.arplitka.shared.ar.domain.model.PlacedContourPoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 class FloorContourReducerTest {
@@ -25,9 +26,18 @@ class FloorContourReducerTest {
     @Test
     fun tryAddPoint_rejectsWhenTooCloseToLastPoint() {
         val state = stateWithPoints(0f to 0f).copy(
-            currentHitPoint = point(0.02f, 0f, 0f)
+            currentHitPoint = point(0.02f, 0f, 0.02f)
         )
         assertNull(FloorContourReducer.tryAddPoint(state))
+    }
+
+    @Test
+    fun validateAddPoint_projectsToSectionFloor() {
+        val state = stateWithPoints(0f to 0f).copy(
+            currentHitPoint = point(1f, 0.02f, 0f)
+        )
+        val result = FloorContourReducer.validateAddPoint(state, point(1f, 0.02f, 0f))
+        assertEquals(point(1f, 0f, 0f), assertIs<AddPointValidation.Accepted>(result).point)
     }
 
     @Test

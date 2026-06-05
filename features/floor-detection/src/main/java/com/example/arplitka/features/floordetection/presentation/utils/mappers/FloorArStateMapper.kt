@@ -20,6 +20,7 @@ fun ArTrackingStatus.toText(): String = when (this) {
 fun ArInstruction.toText(): String = when (this) {
     ArInstruction.PLEASE_WAIT -> stringResource(R.string.please_wait)
     ArInstruction.SEARCHING -> stringResource(R.string.instruction_searching)
+    ArInstruction.SURFACE_NEARBY -> stringResource(R.string.instruction_surface_nearby)
     ArInstruction.MOVE_PHONE -> stringResource(R.string.instruction_move_phone)
     ArInstruction.DETECTED -> stringResource(R.string.instruction_detected)
     ArInstruction.CONTOUR_CLOSED -> stringResource(R.string.instruction_contour_closed)

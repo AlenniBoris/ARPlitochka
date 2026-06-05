@@ -28,6 +28,7 @@ class FloorArStateMapperTest {
         composeTestRule.setContent {
             assertEquals("Пожалуйста, подождите", ArInstruction.PLEASE_WAIT.toText())
             assertEquals("Ищем подходящую поверхность", ArInstruction.SEARCHING.toText())
+            assertEquals("Сетка найдена — наведите прицел на неё", ArInstruction.SURFACE_NEARBY.toText())
             assertEquals("Медленно наведите камеру на пол", ArInstruction.MOVE_PHONE.toText())
             assertEquals("Поверхность отображается точками", ArInstruction.DETECTED.toText())
             assertEquals("Нажмите OK, чтобы завершить разметку", ArInstruction.CONTOUR_CLOSED.toText())

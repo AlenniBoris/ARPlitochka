@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -20,6 +22,10 @@ import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.shared.ar.contracts.state.FloorArEvent
 import com.example.arplitka.shared.ar.domain.FloorArController
 import com.example.arplitka.shared.ar.domain.FloorArEffect
+import com.example.arplitka.shared.ar.domain.logic.AddPointRejectReason
+import com.example.arplitka.shared.ar.domain.logic.AddPointValidation
+import com.example.arplitka.shared.ar.domain.logic.FloorContourReducer
+import com.example.arplitka.shared.ar.domain.logic.FloorGeometry
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import com.example.arplitka.shared.ar.domain.model.FloorFrameSnapshot
 import com.example.arplitka.shared.ui.kit.ArContourActionButtons
@@ -30,10 +36,8 @@ import com.example.arplitka.shared.ui.kit.StatusPanel
 import com.example.arplitka.shared.ui.kit.isDebugBuild
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCSignatureOverride
-import kotlinx.cinterop.useContents
 import platform.ARKit.*
 import platform.CoreFoundation.CFAbsoluteTimeGetCurrent
-import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSUUID
 import platform.SceneKit.SCNNode
@@ -47,6 +51,7 @@ actual fun IosArScreen(onBack: () -> Unit) {
     var contourState by remember { mutableStateOf(FloorContourUiState()) }
     var trackingStateName by remember { mutableStateOf("INITIALIZING") }
     var planeDebugMetrics by remember { mutableStateOf(IosPlaneDebugMetrics()) }
+    var placementHint by remember { mutableStateOf<String?>(null) }
 
     val floorArController = remember {
         FloorArController(
@@ -58,7 +63,8 @@ actual fun IosArScreen(onBack: () -> Unit) {
         IosArSessionCoordinator(
             floorArController = floorArController,
             onTrackingNameChanged = { trackingStateName = it },
-            onPlaneDebugMetricsChanged = { planeDebugMetrics = it }
+            onPlaneDebugMetricsChanged = { planeDebugMetrics = it },
+            onPlacementHintChanged = { placementHint = it }
         )
     }
 
@@ -84,7 +90,8 @@ actual fun IosArScreen(onBack: () -> Unit) {
 
         StatusPanel(
             statusText = contourState.trackingStatus.toIosText(),
-            instructionText = contourState.instruction.toIosText(),
+            instructionText = placementHint ?: contourState.instruction.toIosText(),
+            detailText = contourState.toStatusDetailText(),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(horizontal = 16.dp, vertical = 36.dp)
@@ -92,7 +99,7 @@ actual fun IosArScreen(onBack: () -> Unit) {
 
         CenterReticle(
             modifier = Modifier.align(Alignment.Center),
-            isActive = contourState.hasCenterHit && contourState.showPlaneDots
+            isActive = contourState.hasCenterHit && contourState.showContourActions
         )
 
         if (contourState.showContourActions) {
@@ -114,19 +121,21 @@ actual fun IosArScreen(onBack: () -> Unit) {
                 debugLines = mapOf(
                     "Planes" to contourState.horizontalPlaneCount.toString(),
                     "Focused" to contourState.focusedLabel,
-                    "Area" to "${(contourState.selectedArea * 100).roundToInt() / 100.0} m²",
+                    "Reticle area" to "${(contourState.selectedArea * 100).roundToInt() / 100.0} m²",
                     "Tracking" to trackingStateName,
                     "Center hit" to if (contourState.hasCenterHit) "Yes" else "No",
                     "Points" to contourState.placedPoints.size.toString(),
                     "Closed" to if (contourState.isPolygonClosed) "Yes" else "No",
                     "Plane renderer" to planeDebugMetrics.rendererMode,
                     "Plane FPS" to planeDebugMetrics.fps.toString(),
-                    "Plane dots" to "${planeDebugMetrics.dotCount}/${planeDebugMetrics.nodeCount}",
-                    "Scan buckets" to planeDebugMetrics.bucketCount.toString(),
-                    "Dot gen/sync" to "${planeDebugMetrics.generateMs} / ${planeDebugMetrics.syncMs} ms",
-                    "Dot latency" to "${planeDebugMetrics.previewLatencyMs} / ${planeDebugMetrics.anchorLatencyMs} ms",
+                    "Surface overlays" to planeDebugMetrics.overlayCount.toString(),
                     "AR features" to planeDebugMetrics.sessionFeatures,
-                    "Hit path" to planeDebugMetrics.hitPath
+                    "Hit path" to planeDebugMetrics.hitPath,
+                    "Detect gate" to planeDebugMetrics.detectGate,
+                    "Scan patch" to planeDebugMetrics.scanPatch,
+                    "Largest plane" to "${(planeDebugMetrics.largestPlaneAreaM2 * 100).roundToInt() / 100.0} m²",
+                    "Reloc" to planeDebugMetrics.relocLabel,
+                    "Cull" to planeDebugMetrics.cullLabel
                 ),
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -139,6 +148,20 @@ actual fun IosArScreen(onBack: () -> Unit) {
             onBack = onBack,
             modifier = Modifier.align(Alignment.TopStart)
         )
+
+        if (contourState.placedPoints.isEmpty()) {
+            TextButton(
+                onClick = { coordinator.rescanSession() },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 36.dp, end = 12.dp)
+            ) {
+                Text(
+                    text = "Пересканировать",
+                    color = Color.White
+                )
+            }
+        }
     }
 }
 
@@ -146,60 +169,39 @@ actual fun IosArScreen(onBack: () -> Unit) {
 private class IosArSessionCoordinator(
     private val floorArController: FloorArController,
     private val onTrackingNameChanged: (String) -> Unit,
-    private val onPlaneDebugMetricsChanged: (IosPlaneDebugMetrics) -> Unit
+    private val onPlaneDebugMetricsChanged: (IosPlaneDebugMetrics) -> Unit,
+    private val onPlacementHintChanged: (String?) -> Unit
 ) : NSObject(), ARSCNViewDelegateProtocol, ARSessionDelegateProtocol {
 
     private var sceneView: ARSCNView? = null
     private var isSessionTracking = false
-    private var lastPlaneCount: Int = -1
-    private var lastConfirmedCenterHit: Boolean = false
-    private var lastFloorDetected: Boolean = false
-    private var lastSelectedArea: Float = -1f
-    private var lastFocusedLabel: String = ""
-    private var lastCenterHit: CenterPlaneHit = CenterPlaneHit()
     private var sessionFeatures: Set<IosArSessionFeature> = emptySet()
-    private var floorDotMaterial = createFloorDotMaterial()
-    private val planeFingerprints: PlaneFingerprints = mutableMapOf()
-    private val planeAreas: PlaneAreas = mutableMapOf()
-    private val planeDotCounts: PlaneDotCounts = mutableMapOf()
-    private val polygonStableFrames: PlanePolygonStableFrames = mutableMapOf()
-    private val dotBucketAccumulator = PlaneDotBucketAccumulator()
-    private val planeDotElevationLock = PlaneDotElevationLock()
     private val focusedPlaneTracker = FocusedPlaneTracker()
     private val anchorStore = IosFloorAnchorStore()
     private val contourRenderer = IosArContourRenderer()
-    private var lastCenterLocal: Pair<Float, Float>? = null
-    private var lastRenderedFocusedAnchorId: NSUUID? = null
+    private val planeSurfaceRenderer = IosArPlaneSurfaceRenderer()
+    private val relocationController = IosArSessionRelocationController()
+    private var pendingPlacementHit: CenterPlaneHit? = null
+    private var cachedCenterHit: CenterPlaneHit = CenterPlaneHit()
+    private var lastCenterHit: CenterPlaneHit = CenterPlaneHit()
+    private var hitTestFrameCounter: Int = 0
     private var sessionStartTimeSeconds: Double = 0.0
     private var fpsWindowStartSeconds: Double = 0.0
     private var fpsFrameCount: Int = 0
     private var currentFps: Int = 0
     private var lastMetricsPublishSeconds: Double = 0.0
-    private var firstPreviewDotsMs: Int? = null
-    private var firstAnchorDotsMs: Int? = null
-    private var lastPlaneFrameStats = PlaneDotFrameStats()
-    private var lastMeshRebuildSeconds: Double = 0.0
-    private var lastMeshBucketFingerprint: UInt? = null
+    private var lastRendererMode: String = "none"
+    private var firstSurfaceOverlayMs: Int? = null
 
     fun attach(sceneView: ARSCNView) {
         val now = currentTimeSeconds()
         this.sceneView = sceneView
-        planeFingerprints.clear()
-        planeAreas.clear()
-        planeDotCounts.clear()
-        polygonStableFrames.clear()
-        dotBucketAccumulator.clearAll()
-        planeDotElevationLock.clearAll()
         focusedPlaneTracker.reset()
-        lastMeshRebuildSeconds = 0.0
-        lastMeshBucketFingerprint = null
-        lastCenterLocal = null
-        lastRenderedFocusedAnchorId = null
-        lastPlaneCount = -1
-        lastConfirmedCenterHit = false
-        lastFloorDetected = false
-        lastSelectedArea = -1f
-        lastFocusedLabel = ""
+        relocationController.reset()
+        planeSurfaceRenderer.reset()
+        planeSurfaceRenderer.prepare()
+        hitTestFrameCounter = 0
+        cachedCenterHit = CenterPlaneHit()
         lastCenterHit = CenterPlaneHit()
         isSessionTracking = false
         sessionStartTimeSeconds = now
@@ -207,10 +209,8 @@ private class IosArSessionCoordinator(
         fpsFrameCount = 0
         currentFps = 0
         lastMetricsPublishSeconds = 0.0
-        firstPreviewDotsMs = null
-        firstAnchorDotsMs = null
-        lastPlaneFrameStats = PlaneDotFrameStats()
-        floorDotMaterial = createFloorDotMaterial()
+        lastRendererMode = "none"
+        firstSurfaceOverlayMs = null
         sceneView.debugOptions = 0UL
         sceneView.delegate = this
         sceneView.session.delegate = this
@@ -228,48 +228,103 @@ private class IosArSessionCoordinator(
             anchorStore.detachAll(session, session.currentFrame)
         }
         contourRenderer.detach()
+        planeSurfaceRenderer.reset()
         sceneView?.session?.pause()
         sceneView?.delegate = null
         sceneView?.session?.delegate = null
-        planeFingerprints.clear()
-        planeAreas.clear()
-        planeDotCounts.clear()
-        polygonStableFrames.clear()
-        dotBucketAccumulator.clearAll()
-        planeDotElevationLock.clearAll()
         focusedPlaneTracker.reset()
-        lastMeshRebuildSeconds = 0.0
-        lastMeshBucketFingerprint = null
-        lastRenderedFocusedAnchorId = null
+        relocationController.reset()
         sceneView = null
     }
 
+    fun rescanSession() {
+        val view = sceneView ?: return
+        if (floorArController.currentState().placedPoints.isNotEmpty()) {
+            onPlacementHintChanged("Очистите контур перед пересканированием")
+            return
+        }
+        onPlacementHintChanged(null)
+        performScanReset(
+            session = view.session,
+            request = RelocationResetRequest(reason = "manual"),
+            force = true
+        )
+    }
+
     fun dispatchEvent(event: FloorArEvent) {
+        if (event == FloorArEvent.AddPoint) {
+            handleAddPointTap()
+            return
+        }
+        if (event == FloorArEvent.UndoPoint) {
+            onPlacementHintChanged(null)
+            val effects = floorArController.onEvent(event)
+            applyEffects(effects)
+            updateContourModeFromState()
+            syncContourRendererIfNeeded()
+            return
+        }
         val effects = floorArController.onEvent(event)
         applyEffects(effects)
-        syncContourRenderer()
+        updateContourModeFromState()
+        syncContourRendererIfNeeded()
+    }
+
+    private fun handleAddPointTap() {
+        val state = floorArController.currentState()
+        if (state.isPolygonClosed) {
+            onPlacementHintChanged(null)
+            floorArController.onEvent(FloorArEvent.FinalizeArea)
+            syncContourRendererIfNeeded()
+            return
+        }
+        val view = sceneView
+        if (view == null) {
+            onPlacementHintChanged("AR-сессия не готова")
+            return
+        }
+        val frame = view.session.currentFrame
+        val hit = view.resolveCenterPlaneHit(frame = frame, session = view.session)
+        lastCenterHit = hit
+        val raw = hit.confirmedWorldFloorPoint()
+        if (raw == null) {
+            onPlacementHintChanged("Дождитесь точного попадания в плоскость под прицелом")
+            return
+        }
+        val sectionFloorY = state.placedPoints.firstOrNull()?.position?.yMeters
+        val projected = FloorGeometry.projectToSectionFloor(raw, sectionFloorY)
+        when (val validation = FloorContourReducer.validateAddPoint(state, projected)) {
+            is AddPointValidation.Rejected -> onPlacementHintChanged(validation.reason.toIosHint())
+            is AddPointValidation.Accepted -> {
+                onPlacementHintChanged(null)
+                pendingPlacementHit = hit
+                val wasFirstPoint = state.placedPoints.isEmpty()
+                val effects = floorArController.onEvent(FloorArEvent.AddPointAt(validation.point))
+                applyEffects(effects)
+                pendingPlacementHit = null
+                if (wasFirstPoint) {
+                    planeSurfaceRenderer.enterContourMode()
+                    lastRendererMode = "contour-hidden"
+                }
+                syncContourRendererIfNeeded()
+            }
+        }
     }
 
     @ObjCSignatureOverride
     override fun renderer(renderer: SCNSceneRendererProtocol, didAddNode: SCNNode, forAnchor: ARAnchor) {
-        // Dots are rendered from ARPlaneAnchor geometry in didUpdateFrame.
+        onPlaneAnchorNodeChanged(forAnchor, didAddNode, forceGeometry = true)
     }
 
     @ObjCSignatureOverride
     override fun renderer(renderer: SCNSceneRendererProtocol, didUpdateNode: SCNNode, forAnchor: ARAnchor) {
-        // See didAddNode.
+        onPlaneAnchorNodeChanged(forAnchor, didUpdateNode, forceGeometry = false)
     }
 
     @ObjCSignatureOverride
     override fun renderer(renderer: SCNSceneRendererProtocol, didRemoveNode: SCNNode, forAnchor: ARAnchor) {
         val planeAnchor = forAnchor as? ARPlaneAnchor ?: return
-        planeFingerprints.remove(planeAnchor.identifier)
-        planeAreas.remove(planeAnchor.identifier)
-        planeDotCounts.remove(planeAnchor.identifier)
-        polygonStableFrames.remove(planeAnchor.identifier)
-        dotBucketAccumulator.remove(planeAnchor.identifier)
-        planeDotElevationLock.clear(planeAnchor.identifier)
-        removePlaneDotGrid(didRemoveNode)
+        planeSurfaceRenderer.remove(planeAnchor.identifier)
     }
 
     override fun session(session: ARSession, didUpdateFrame: ARFrame) {
@@ -277,49 +332,83 @@ private class IosArSessionCoordinator(
         val frameStartedAt = currentTimeSeconds()
         updateFps(frameStartedAt)
 
-        val horizontalPlanes = didUpdateFrame.anchors
-            .filterIsInstance<ARPlaneAnchor>()
-            .filter { it.isHorizontalTracking() }
-
-        val centerHit = view.resolveCenterPlaneHit()
-        lastCenterHit = centerHit
-        val focusedAnchorId = focusedPlaneTracker.update(centerHit.anchor?.identifier)
-        lastPlaneFrameStats = if (floorArController.currentState().showPlaneDots) {
-            updatePlaneDotVisualization(view, didUpdateFrame, focusedAnchorId, centerHit, frameStartedAt)
-        } else {
-            hidePlaneDotVisualization(view, didUpdateFrame)
-            PlaneDotFrameStats(rendererMode = "hidden")
+        val state = floorArController.currentState()
+        val contourActive = state.placedPoints.isNotEmpty()
+        val horizontalPlaneCount = didUpdateFrame.anchors.count {
+            (it as? ARPlaneAnchor)?.isHorizontalTracking() == true
         }
-        val hasVisualCenterHit = centerHit.confirmed || centerHit.previewHitResult != null
 
-        val selectedArea = focusedAnchorId?.let { planeAreas[it] } ?: 0f
-        val floorDetected = focusedAnchorId != null && selectedArea >= MIN_FLOOR_AREA_M2
+        hitTestFrameCounter++
+        val runHitTest = !contourActive || hitTestFrameCounter % 3 == 0
+        val centerHit = if (runHitTest) {
+            view.resolveCenterPlaneHit(frame = didUpdateFrame, session = view.session).also {
+                cachedCenterHit = it
+                lastCenterHit = it
+            }
+        } else {
+            cachedCenterHit
+        }
+
+        val reticleAnchorId = centerHit.anchor?.identifier
+        val focusedAnchorId = focusedPlaneTracker.update(reticleAnchorId)
+
+        val scanContext = IosArScanSurfaceContext(
+            allowEstimatedPatch = didUpdateFrame.isTrackingNormal(),
+            strictConfirmedOverlaysOnly = didUpdateFrame.strictOutdoorScanMode(),
+            cameraWorldYMeters = didUpdateFrame.cameraWorldYMeters(),
+            cameraWorldPosition = didUpdateFrame.cameraWorldPosition()
+        )
+        if (!contourActive) {
+            maybePerformAutomaticScanReset(view.session, didUpdateFrame)
+        }
+        syncScanSurfaceVisualization(view, didUpdateFrame, centerHit, scanContext)
+
+        val gridMode = planeSurfaceRenderer.activeMode()
+        lastRendererMode = when {
+            !state.showPlaneDots -> "hidden"
+            contourActive -> "contour-hidden"
+            gridMode == GridSurfaceMode.MULTI_WITH_RETICLE -> "scan-multi+reticle"
+            gridMode == GridSurfaceMode.MULTI_SURFACE -> "scan-multi-surface"
+            gridMode == GridSurfaceMode.RETICLE_ONLY -> "scan-reticle-patch"
+            else -> "scan-grid-hidden"
+        }
+
+        val selectedArea = if (centerHit.confirmed) {
+            focusedAnchorId?.let { planeSurfaceRenderer.area(it) } ?: 0f
+        } else {
+            0f
+        }
+        val floorDetected = isSessionTracking &&
+            centerHit.confirmed &&
+            selectedArea >= MIN_FLOOR_AREA_M2
+        val hasCenterHit = centerHit.confirmed
         val focusedLabel = buildFocusedLabel(
+            gridMode = gridMode,
             focusedAnchorId = focusedAnchorId,
-            dotCount = focusedAnchorId?.let { planeDotCounts[it] } ?: 0,
+            overlayCount = planeSurfaceRenderer.overlayCount(),
+            surfaceCount = planeSurfaceRenderer.visibleSurfaceCount(),
             inGracePeriod = focusedPlaneTracker.isInGracePeriod()
         )
 
+        val sectionFloorY = state.placedPoints.firstOrNull()?.position?.yMeters
+        val currentHitPoint = centerHit.confirmedWorldFloorPoint()?.let {
+            FloorGeometry.projectToSectionFloor(it, sectionFloorY)
+        }
+        val largestPlaneAreaM2 = planeSurfaceRenderer.scanDebugStats().largestPlaneAreaM2
         val snapshot = FloorFrameSnapshot(
             isTracking = isSessionTracking,
-            horizontalPlaneCount = horizontalPlanes.size,
+            horizontalPlaneCount = horizontalPlaneCount,
             selectedArea = selectedArea,
-            hasCenterHit = hasVisualCenterHit,
+            hasCenterHit = hasCenterHit,
             isFloorDetected = floorDetected,
-            currentHitPoint = centerHit.confirmedWorldFloorPoint()
-                ?: centerHit.previewWorldFloorPoint(),
-            focusedLabel = focusedLabel
+            currentHitPoint = currentHitPoint,
+            focusedLabel = focusedLabel,
+            largestPlaneAreaM2 = largestPlaneAreaM2
         )
-        val updatedPoints = anchorStore.readPositions(didUpdateFrame)
+        val updatedPoints = anchorStore.placedPoints(sectionFloorY)
         floorArController.onFrame(snapshot, updatedPoints)
-        syncContourRenderer()
 
-        lastPlaneCount = horizontalPlanes.size
-        lastConfirmedCenterHit = hasVisualCenterHit
-        lastFloorDetected = floorDetected
-        lastSelectedArea = selectedArea
-        lastFocusedLabel = focusedLabel
-        publishPlaneDebugMetrics(frameStartedAt, centerHit)
+        publishPlaneDebugMetrics(frameStartedAt, centerHit, scanContext, largestPlaneAreaM2)
     }
 
     override fun session(session: ARSession, cameraDidChangeTrackingState: ARCamera) {
@@ -341,6 +430,77 @@ private class IosArSessionCoordinator(
                 onTrackingNameChanged("UNKNOWN")
             }
         }
+        if (floorArController.currentState().placedPoints.isEmpty()) {
+            relocationController.onTrackingStateChanged(cameraDidChangeTrackingState)?.let { request ->
+                performScanReset(session, request)
+            }
+        }
+    }
+
+    override fun sessionWasInterrupted(session: ARSession) {
+        relocationController.onSessionInterrupted()
+    }
+
+    override fun sessionInterruptionEnded(session: ARSession) {
+        if (floorArController.currentState().placedPoints.isNotEmpty()) return
+        if (!relocationController.onInterruptionEnded()) return
+        performScanReset(session, RelocationResetRequest(reason = "interrupt-end"))
+    }
+
+    private fun onPlaneAnchorNodeChanged(
+        forAnchor: ARAnchor,
+        anchorNode: SCNNode,
+        forceGeometry: Boolean
+    ) {
+        val planeAnchor = forAnchor as? ARPlaneAnchor ?: return
+        val state = floorArController.currentState()
+        if (!state.showPlaneDots || state.placedPoints.isNotEmpty()) {
+            planeSurfaceRenderer.cacheArea(planeAnchor)
+            return
+        }
+        planeSurfaceRenderer.syncPlaneOverlayOnNodeEvent(
+            anchor = planeAnchor,
+            anchorNode = anchorNode,
+            forceGeometry = forceGeometry
+        )
+    }
+
+    private fun syncScanSurfaceVisualization(
+        view: ARSCNView,
+        frame: ARFrame,
+        centerHit: CenterPlaneHit,
+        scanContext: IosArScanSurfaceContext
+    ) {
+        val state = floorArController.currentState()
+        if (!state.showPlaneDots || state.placedPoints.isNotEmpty()) {
+            planeSurfaceRenderer.hideAll()
+            return
+        }
+
+        val horizontalPlanes = frame.anchors.filterIsInstance<ARPlaneAnchor>()
+            .filter { it.isHorizontalTracking() }
+        planeSurfaceRenderer.applyOverlayBudget(horizontalPlanes, scanContext)
+        planeSurfaceRenderer.applyOverlayElevation(horizontalPlanes, centerHit)
+
+        val floorY = planeSurfaceRenderer.estimatedFloorWorldY()
+        val largestPlaneAreaM2 = planeSurfaceRenderer.scanDebugStats().largestPlaneAreaM2
+        val rootNode = view.scene?.rootNode
+        val renderedReticle = if (rootNode != null) {
+            planeSurfaceRenderer.syncReticlePatch(
+                rootNode,
+                centerHit,
+                floorY,
+                scanContext,
+                largestPlaneAreaM2
+            )
+        } else {
+            false
+        }
+
+        val hasVisibleSurfaces = planeSurfaceRenderer.visibleSurfaceCount() > 0
+        if ((hasVisibleSurfaces || renderedReticle) && firstSurfaceOverlayMs == null) {
+            firstSurfaceOverlayMs = elapsedMsSinceSession(currentTimeSeconds())
+        }
     }
 
     private fun applyEffects(effects: List<FloorArEffect>) {
@@ -349,15 +509,14 @@ private class IosArSessionCoordinator(
         effects.forEach { effect ->
             when (effect) {
                 is FloorArEffect.CreateAnchorAt -> {
-                    val transform = lastCenterHit.placementWorldTransform() ?: return@forEach
+                    val transform = pendingPlacementHit?.placementWorldTransform()
+                        ?: lastCenterHit.placementWorldTransform()
+                        ?: return@forEach
                     val logicalId = NSUUID().UUIDString()
                     val anchor = ARAnchor(transform = transform)
                     session.addAnchor(anchor)
-                    anchorStore.register(logicalId, anchor)
-                    floorArController.onPointAdded(
-                        logicalId,
-                        lastCenterHit.confirmedWorldFloorPoint() ?: effect.point
-                    )
+                    anchorStore.register(logicalId, anchor, effect.point)
+                    floorArController.onPointAdded(logicalId, effect.point)
                 }
                 is FloorArEffect.DetachAnchor -> anchorStore.detachLast(session, frame)
                 FloorArEffect.DetachAllAnchors -> anchorStore.detachAll(session, frame)
@@ -365,206 +524,19 @@ private class IosArSessionCoordinator(
         }
     }
 
-    private fun syncContourRenderer() {
-        contourRenderer.sync(floorArController.currentState())
-    }
-
-    private fun updatePlaneDotVisualization(
-        view: ARSCNView,
-        frame: ARFrame,
-        focusedAnchorId: NSUUID?,
-        centerHit: CenterPlaneHit,
-        frameStartedAtSeconds: Double
-    ): PlaneDotFrameStats {
-        if (centerHit.localPoint != null) {
-            lastCenterLocal = centerHit.localPoint
-        }
-        val ref = centerHit.localPoint ?: lastCenterLocal
-        val rootNode = view.scene?.rootNode
-
-        if (focusedAnchorId != lastRenderedFocusedAnchorId) {
-            lastRenderedFocusedAnchorId?.let { previousId ->
-                planeDotElevationLock.clear(previousId)
-                frame.anchors
-                    .filterIsInstance<ARPlaneAnchor>()
-                    .firstOrNull { it.identifier == previousId }
-                    ?.let { view.nodeForAnchor(it) }
-                    ?.let { hidePlaneDotGrid(it) }
-            }
-            lastRenderedFocusedAnchorId = focusedAnchorId
-            lastMeshRebuildSeconds = 0.0
-            lastMeshBucketFingerprint = null
-        }
-
-        if (focusedAnchorId == null) {
-            if (centerHit.previewHitResult != null) {
-                val syncStart = currentTimeSeconds()
-                val previewDotCount = rootNode?.let {
-                    syncPreviewDotGrid(
-                        rootNode = it,
-                        centerHit = centerHit,
-                        dotMaterial = floorDotMaterial
-                    )
-                } ?: 0
-                firstPreviewDotsMs = firstPreviewDotsMs ?: elapsedMsSinceSession(frameStartedAtSeconds)
-                return PlaneDotFrameStats(
-                    rendererMode = "preview-hit",
-                    dotCount = previewDotCount,
-                    nodeCount = rootNode?.let { activePreviewDotNodeCount(it) } ?: 0,
-                    syncMs = elapsedMs(syncStart)
-                )
-            }
-            rootNode?.let { hidePreviewDotGrid(it) }
-            return PlaneDotFrameStats(rendererMode = "none")
-        }
-        rootNode?.let { hidePreviewDotGrid(it) }
-
-        val focusedAnchor = frame.anchors
-            .filterIsInstance<ARPlaneAnchor>()
-            .firstOrNull { it.identifier == focusedAnchorId }
-            ?: return PlaneDotFrameStats(rendererMode = "anchor-missing")
-        val anchorNode = view.nodeForAnchor(focusedAnchor)
-            ?: return PlaneDotFrameStats(rendererMode = "anchor-node-missing")
-
-        updatePolygonStableFrames(focusedAnchor)
-
-        val boundaryMode = selectAccumulateBoundaryMode(
-            anchor = focusedAnchor,
-            polygonStableFrames = polygonStableFrames[focusedAnchor.identifier] ?: 0
-        )
-        val refForMesh = ref ?: (0f to 0f)
-        if (ref != null) {
-            dotBucketAccumulator.recordScan(
-                anchorId = focusedAnchor.identifier,
-                localX = ref.first,
-                localZ = ref.second
-            )
-        }
-
-        val displayFingerprint = combinedDisplayFingerprint(
-            anchor = focusedAnchor,
-            accumulator = dotBucketAccumulator,
-            boundaryMode = boundaryMode,
-            centerLocal = ref,
-            visibleRadiusM = VISIBLE_DOT_RADIUS_M
-        )
-        val previousFingerprint = planeFingerprints[focusedAnchor.identifier]
-        val storedBucketCount = dotBucketAccumulator.bucketCount(focusedAnchor.identifier)
-        if (displayFingerprint == previousFingerprint) {
-            val activeNodes = activePlaneDotNodeCount(anchorNode)
-            return finishPlaneDotFrame(
-                anchorNode,
-                focusedAnchor,
-                centerHit,
-                lastPlaneFrameStats.copy(
-                    rendererMode = "accumulate-cached",
-                    dotCount = planeDotCounts[focusedAnchor.identifier] ?: activeNodes,
-                    nodeCount = activeNodes,
-                    bucketCount = storedBucketCount
-                )
-            )
-        }
-
-        val nowSeconds = currentTimeSeconds()
-        if (
-            nowSeconds - lastMeshRebuildSeconds < MESH_REBUILD_MIN_INTERVAL_SECONDS &&
-            displayFingerprint == lastMeshBucketFingerprint
-        ) {
-            return finishPlaneDotFrame(
-                anchorNode,
-                focusedAnchor,
-                centerHit,
-                lastPlaneFrameStats.copy(
-                    rendererMode = "accumulate-throttled",
-                    bucketCount = storedBucketCount
-                )
-            )
-        }
-
-        val generateStart = currentTimeSeconds()
-        val geometry = buildCombinedPlaneGeometry(
-            anchor = focusedAnchor,
-            accumulator = dotBucketAccumulator,
-            boundaryMode = boundaryMode,
-            centerLocal = ref,
-            visibleRadiusM = VISIBLE_DOT_RADIUS_M
-        ) ?: buildHitDiscGeometry(refForMesh)
-        val generateMs = elapsedMs(generateStart)
-
-        if (geometry == null) {
-            hidePlaneDotGrid(anchorNode)
-            return finishPlaneDotFrame(
-                anchorNode,
-                focusedAnchor,
-                centerHit,
-                PlaneDotFrameStats(
-                    rendererMode = "accumulate-empty",
-                    bucketCount = storedBucketCount
-                )
-            )
-        }
-
-        val syncStart = currentTimeSeconds()
-        syncPlaneGeometryDots(
-            parentNode = anchorNode,
-            geometry = geometry,
-            dotMaterial = floorDotMaterial,
-            previousFingerprint = previousFingerprint
-        )
-        val syncMs = elapsedMs(syncStart)
-        planeFingerprints[focusedAnchor.identifier] = geometry.fingerprint
-        planeAreas[focusedAnchor.identifier] = geometry.area
-        planeDotCounts[focusedAnchor.identifier] = geometry.dotCount
-        lastMeshRebuildSeconds = nowSeconds
-        lastMeshBucketFingerprint = displayFingerprint
-        if (geometry.dotCount > 0) {
-            firstAnchorDotsMs = firstAnchorDotsMs ?: elapsedMsSinceSession(frameStartedAtSeconds)
-        }
-        return finishPlaneDotFrame(
-            anchorNode,
-            focusedAnchor,
-            centerHit,
-            PlaneDotFrameStats(
-                rendererMode = "${PlaneDotMeshSource.ACCUMULATE.debugLabel}+live+${boundaryMode.debugLabel}",
-                dotCount = geometry.dotCount,
-                nodeCount = activePlaneDotNodeCount(anchorNode),
-                generateMs = generateMs,
-                syncMs = syncMs,
-                bucketCount = storedBucketCount
-            )
-        )
-    }
-
-    private fun finishPlaneDotFrame(
-        anchorNode: SCNNode,
-        anchor: ARPlaneAnchor,
-        centerHit: CenterPlaneHit,
-        stats: PlaneDotFrameStats
-    ): PlaneDotFrameStats {
-        val raycastWorldY = centerHit.confirmedHitResult?.let { HitTransformReader.worldFloorPoint(it).yMeters }
-        planeDotElevationLock.apply(anchorNode, anchor, raycastWorldY)
-        return stats
-    }
-
-    private fun updatePolygonStableFrames(anchor: ARPlaneAnchor) {
-        val anchorId = anchor.identifier
-        if (anchor.hasPolygonBoundary()) {
-            val previous = polygonStableFrames[anchorId] ?: 0
-            polygonStableFrames[anchorId] = minOf(previous + 1, 30)
+    private fun updateContourModeFromState() {
+        val hasPoints = floorArController.currentState().placedPoints.isNotEmpty()
+        if (hasPoints) {
+            planeSurfaceRenderer.enterContourMode()
+            lastRendererMode = "contour-hidden"
         } else {
-            polygonStableFrames.remove(anchorId)
+            planeSurfaceRenderer.exitContourMode()
+            lastRendererMode = "scan-multi-surface"
         }
     }
 
-    private fun hidePlaneDotVisualization(view: ARSCNView, frame: ARFrame) {
-        view.scene?.rootNode?.let { hidePreviewDotGrid(it) }
-        lastRenderedFocusedAnchorId?.let { focusedId ->
-            frame.anchors
-                .filterIsInstance<ARPlaneAnchor>()
-                .firstOrNull { it.identifier == focusedId }
-                ?.let { view.nodeForAnchor(it) }
-                ?.let { hidePlaneDotGrid(it) }
-        }
+    private fun syncContourRendererIfNeeded() {
+        contourRenderer.syncIfChanged(floorArController.currentState())
     }
 
     private fun updateFps(nowSeconds: Double) {
@@ -577,22 +549,69 @@ private class IosArSessionCoordinator(
         }
     }
 
-    private fun publishPlaneDebugMetrics(nowSeconds: Double, centerHit: CenterPlaneHit) {
+    private fun maybePerformAutomaticScanReset(session: ARSession, frame: ARFrame) {
+        relocationController.distantPlaneResetRequest(frame)?.let { request ->
+            performScanReset(session, request)
+        }
+    }
+
+    private fun performScanReset(
+        session: ARSession,
+        request: RelocationResetRequest,
+        force: Boolean = false
+    ) {
+        performScanSessionReset(
+            session = session,
+            request = request,
+            relocationController = relocationController,
+            force = force,
+            callbacks = ScanSessionResetCallbacks(
+                onRendererReset = {
+                    planeSurfaceRenderer.reset()
+                    planeSurfaceRenderer.prepare()
+                },
+                onFocusReset = { focusedPlaneTracker.reset() },
+                onHitCacheReset = {
+                    cachedCenterHit = CenterPlaneHit()
+                    lastCenterHit = CenterPlaneHit()
+                    hitTestFrameCounter = 0
+                },
+                onOverlayLatencyReset = { firstSurfaceOverlayMs = null }
+            )
+        )
+    }
+
+    private fun publishPlaneDebugMetrics(
+        nowSeconds: Double,
+        centerHit: CenterPlaneHit,
+        scanContext: IosArScanSurfaceContext,
+        largestPlaneAreaM2: Float
+    ) {
         if (nowSeconds - lastMetricsPublishSeconds < METRICS_PUBLISH_INTERVAL_SECONDS) return
         lastMetricsPublishSeconds = nowSeconds
+        val patchLabel = when {
+            !scanContext.allowEstimatedPatch -> "off-limited"
+            planeSurfaceRenderer.isReticlePatchVisible() &&
+                !centerHit.confirmed &&
+                largestPlaneAreaM2 >= MIN_FLOOR_AREA_M2 -> "search-on"
+            planeSurfaceRenderer.isReticlePatchVisible() -> "on"
+            centerHit.previewSample != null || centerHit.previewHitResult != null -> "est-blocked"
+            else -> "off"
+        }
+        val scanStats = planeSurfaceRenderer.scanDebugStats()
         onPlaneDebugMetricsChanged(
             IosPlaneDebugMetrics(
                 fps = currentFps,
-                rendererMode = lastPlaneFrameStats.rendererMode,
-                dotCount = lastPlaneFrameStats.dotCount,
-                nodeCount = lastPlaneFrameStats.nodeCount,
-                bucketCount = lastPlaneFrameStats.bucketCount,
-                generateMs = lastPlaneFrameStats.generateMs,
-                syncMs = lastPlaneFrameStats.syncMs,
-                previewLatencyMs = firstPreviewDotsMs,
-                anchorLatencyMs = firstAnchorDotsMs,
+                rendererMode = lastRendererMode,
+                overlayCount = planeSurfaceRenderer.overlayCount(),
+                anchorLatencyMs = firstSurfaceOverlayMs,
                 sessionFeatures = sessionFeatures.debugLabel(),
-                hitPath = centerHit.hitPathDebugLabel()
+                hitPath = centerHit.hitPathDebugLabel(),
+                scanPatch = patchLabel,
+                detectGate = if (centerHit.confirmed) "confirmed" else "searching",
+                largestPlaneAreaM2 = scanStats.largestPlaneAreaM2,
+                relocLabel = relocationController.relocLabel(),
+                cullLabel = scanStats.cullStats.debugLabel()
             )
         )
     }
@@ -601,47 +620,46 @@ private class IosArSessionCoordinator(
         ((nowSeconds - sessionStartTimeSeconds) * 1000.0).roundToInt()
 
     private fun buildFocusedLabel(
+        gridMode: GridSurfaceMode,
         focusedAnchorId: NSUUID?,
-        dotCount: Int,
+        overlayCount: Int,
+        surfaceCount: Int,
         inGracePeriod: Boolean
     ): String {
+        if (gridMode == GridSurfaceMode.MULTI_WITH_RETICLE) {
+            return "multi+patch/$overlayCount"
+        }
+        if (gridMode == GridSurfaceMode.MULTI_SURFACE) {
+            val suffix = if (inGracePeriod) " (hold)" else ""
+            return "multi/$surfaceCount$suffix"
+        }
+        if (gridMode == GridSurfaceMode.RETICLE_ONLY) {
+            return "patch/$overlayCount"
+        }
         if (focusedAnchorId == null) return "No"
         val suffix = if (inGracePeriod) " (hold)" else ""
-        return "$dotCount pts$suffix"
+        return "surface/$overlayCount$suffix"
     }
-
 }
 
 private data class IosPlaneDebugMetrics(
     val fps: Int = 0,
     val rendererMode: String = "none",
-    val dotCount: Int = 0,
-    val nodeCount: Int = 0,
-    val bucketCount: Int = 0,
-    val generateMs: Int = 0,
-    val syncMs: Int = 0,
-    val previewLatencyMs: Int? = null,
+    val overlayCount: Int = 0,
     val anchorLatencyMs: Int? = null,
     val sessionFeatures: String = "planes",
-    val hitPath: String = "none"
-)
-
-private data class PlaneDotFrameStats(
-    val rendererMode: String = "none",
-    val dotCount: Int = 0,
-    val nodeCount: Int = 0,
-    val bucketCount: Int = 0,
-    val generateMs: Int = 0,
-    val syncMs: Int = 0
+    val hitPath: String = "none",
+    val detectGate: String = "searching",
+    val scanPatch: String = "off",
+    val largestPlaneAreaM2: Float = 0f,
+    val relocLabel: String = "ok",
+    val cullLabel: String = "d:0/e:0"
 )
 
 private const val METRICS_PUBLISH_INTERVAL_SECONDS = 0.25
 
 private fun currentTimeSeconds(): Double =
     CFAbsoluteTimeGetCurrent()
-
-private fun elapsedMs(startSeconds: Double): Int =
-    ((currentTimeSeconds() - startSeconds) * 1000.0).roundToInt()
 
 private fun ArTrackingStatus.toIosText(): String = when (this) {
     ArTrackingStatus.INITIALIZING -> "Инициализация…"
@@ -652,9 +670,32 @@ private fun ArTrackingStatus.toIosText(): String = when (this) {
     ArTrackingStatus.FINALIZED -> ""
 }
 
+private fun AddPointRejectReason.toIosHint(): String = when (this) {
+    AddPointRejectReason.FINALIZED -> "Разметка уже завершена"
+    AddPointRejectReason.POLYGON_CLOSED -> "Сначала подтвердите контур"
+    AddPointRejectReason.SNAP_ACTIVE -> "Отведите прицел от точки"
+    AddPointRejectReason.NO_HIT -> "Наведите прицел на поверхность"
+    AddPointRejectReason.TOO_CLOSE_TO_LAST -> "Отойдите дальше от предыдущей точки"
+    AddPointRejectReason.HEIGHT_OUT_OF_RANGE -> "Точка слишком высоко или низко относительно контура"
+}
+
+private fun FloorContourUiState.toStatusDetailText(): String? {
+    val formatArea = { value: Float ->
+        "${(value * 100).roundToInt() / 100.0} m²"
+    }
+    return when {
+        isFloorDetected && selectedArea > 0f ->
+            "Под прицелом: ${formatArea(selectedArea)}"
+        largestPlaneAreaM2 >= MIN_FLOOR_AREA_M2 ->
+            "Крупнейшая поверхность: ${formatArea(largestPlaneAreaM2)}"
+        else -> null
+    }
+}
+
 private fun ArInstruction.toIosText(): String = when (this) {
     ArInstruction.PLEASE_WAIT -> "Пожалуйста, подождите"
     ArInstruction.SEARCHING -> "Наведите прицел на нужную поверхность"
+    ArInstruction.SURFACE_NEARBY -> "Сетка найдена — наведите прицел на неё"
     ArInstruction.MOVE_PHONE -> "Медленно наведите камеру на поверхность"
     ArInstruction.DETECTED -> "Точки показывают поверхность под прицелом"
     ArInstruction.CONTOUR_CLOSED -> "Нажмите OK, чтобы завершить разметку"

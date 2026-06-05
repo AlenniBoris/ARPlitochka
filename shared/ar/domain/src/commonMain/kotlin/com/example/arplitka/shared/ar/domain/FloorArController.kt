@@ -4,6 +4,7 @@ import com.example.arplitka.shared.ar.contracts.model.ArInstruction
 import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
 import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.shared.ar.contracts.state.FloorArEvent
+import com.example.arplitka.shared.ar.domain.logic.AddPointValidation
 import com.example.arplitka.shared.ar.domain.logic.FloorContourReducer
 import com.example.arplitka.shared.ar.domain.logic.FloorTrackingReducer
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
@@ -35,6 +36,7 @@ class FloorArController(
         val effects = mutableListOf<FloorArEffect>()
         when (event) {
             FloorArEvent.AddPoint -> effects += handleAddPoint()
+            is FloorArEvent.AddPointAt -> effects += handleAddPointAt(event.point)
             FloorArEvent.UndoPoint -> effects += handleUndoPoint()
             FloorArEvent.Reset -> effects += handleReset()
             FloorArEvent.FinalizeArea -> handleFinalize()
@@ -52,7 +54,10 @@ class FloorArController(
         publish()
     }
 
-    private fun handleAddPoint(): List<FloorArEffect> {
+    private fun handleAddPoint(): List<FloorArEffect> =
+        state.currentHitPoint?.let { handleAddPointAt(it) } ?: emptyList()
+
+    private fun handleAddPointAt(candidate: ArPoint3D): List<FloorArEffect> {
         if (state.isFinalized) return emptyList()
         if (state.isPolygonClosed) {
             state = state.copy(
@@ -60,11 +65,14 @@ class FloorArController(
                 trackingStatus = ArTrackingStatus.FINALIZED,
                 instruction = ArInstruction.EMPTY
             )
+            publish()
             return emptyList()
         }
 
-        val point = FloorContourReducer.tryAddPoint(state) ?: return emptyList()
-        return listOf(FloorArEffect.CreateAnchorAt(point))
+        return when (val validation = FloorContourReducer.validateAddPoint(state, candidate)) {
+            is AddPointValidation.Accepted -> listOf(FloorArEffect.CreateAnchorAt(validation.point))
+            is AddPointValidation.Rejected -> emptyList()
+        }
     }
 
     private fun handleUndoPoint(): List<FloorArEffect> {
@@ -89,6 +97,7 @@ class FloorArController(
             instruction = state.instruction,
             horizontalPlaneCount = state.horizontalPlaneCount,
             selectedArea = state.selectedArea,
+            largestPlaneAreaM2 = state.largestPlaneAreaM2,
             hasCenterHit = state.hasCenterHit,
             isFloorDetected = state.isFloorDetected,
             focusedLabel = state.focusedLabel,

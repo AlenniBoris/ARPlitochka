@@ -16,6 +16,23 @@ object FloorGeometry {
         return sqrt(dx * dx + dy * dy + dz * dz)
     }
 
+    fun distancePlanar(a: ArPoint3D, b: ArPoint3D): Float {
+        val dx = a.xMeters - b.xMeters
+        val dz = a.zMeters - b.zMeters
+        return sqrt(dx * dx + dz * dz)
+    }
+
+    fun projectToSectionFloor(point: ArPoint3D, sectionFloorY: Float?): ArPoint3D =
+        if (sectionFloorY == null) {
+            point
+        } else {
+            ArPoint3D(
+                xMeters = point.xMeters,
+                yMeters = sectionFloorY,
+                zMeters = point.zMeters
+            )
+        }
+
     fun isWithinHeightTolerance(point: ArPoint3D, floorY: Float): Boolean =
         abs(point.yMeters - floorY) <= MAX_POINT_HEIGHT_DELTA_M
 }

@@ -4,14 +4,19 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.COpaque
 import kotlinx.cinterop.FloatVar
 import kotlinx.cinterop.IntVar
+import kotlinx.cinterop.alloc
 import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.get
 import kotlinx.cinterop.interpretCPointer
+import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.nativeHeap
 import kotlinx.cinterop.objcPtr
+import kotlinx.cinterop.ptr
 import kotlinx.cinterop.set
 import kotlinx.cinterop.useContents
+import kotlinx.cinterop.value
 import platform.darwin.NSObject
+import platform.ARKit.ARCamera
 import platform.ARKit.ARHitTestResult
 import platform.ARKit.ARHitTestResultTypeExistingPlaneUsingExtent
 import platform.ARKit.ARPlaneAnchor
@@ -32,6 +37,7 @@ import com.example.arplitka.iosapp.bridge.pg_create_dot_mesh_from_points
 import com.example.arplitka.iosapp.bridge.pg_create_dot_mesh_geometry
 import com.example.arplitka.iosapp.bridge.pg_create_dot_mesh_local_disc
 import com.example.arplitka.iosapp.bridge.pg_create_preview_dot_mesh_geometry
+import com.example.arplitka.iosapp.bridge.pg_world_xz_on_anchor
 import com.example.arplitka.iosapp.bridge.pg_geometry_signature
 import com.example.arplitka.iosapp.bridge.pg_geometry_signature_extent
 import com.example.arplitka.iosapp.bridge.pg_local_point_in_polygon
@@ -95,6 +101,40 @@ internal object HitTransformReader {
             )
         }
     }
+
+    fun worldPointFromCamera(camera: ARCamera): com.example.arplitka.shared.ar.contracts.model.ArPoint3D {
+        scratchNode.transform = SCNMatrix4FromMat4(camera.transform)
+        return scratchNode.position.useContents {
+            com.example.arplitka.shared.ar.contracts.model.ArPoint3D(
+                xMeters = x.toFloat(),
+                yMeters = y.toFloat(),
+                zMeters = z.toFloat()
+            )
+        }
+    }
+
+    fun worldXZOnAnchor(
+        anchor: platform.ARKit.ARAnchor,
+        world: com.example.arplitka.shared.ar.contracts.model.ArPoint3D
+    ): Pair<Float, Float> =
+        memScoped {
+            val localX = alloc<FloatVar>()
+            val localZ = alloc<FloatVar>()
+            val ok = pg_world_xz_on_anchor(
+                anchorPtr = anchor.bridgePointer(),
+                worldX = world.xMeters,
+                worldY = world.yMeters,
+                worldZ = world.zMeters,
+                outLocalX = localX.ptr,
+                outLocalZ = localZ.ptr
+            )
+            if (!ok) {
+                0f to 0f
+            } else {
+                localX.value to localZ.value
+            }
+        }
+
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -131,17 +171,22 @@ internal class PlaneDotElevationLock {
         floorWorldYByAnchor[anchorId] = if (previous == null) worldY else minOf(previous, worldY)
     }
 
-    fun apply(anchorNode: SCNNode, anchor: ARPlaneAnchor, raycastWorldY: Float?) {
-        val grid = findDotGrid(anchorNode) ?: return
+    /** Local Y offset so viz stays at the lowest seen floor when ARKit nudges the anchor up. */
+    fun lockedLocalYOffsetM(anchor: ARPlaneAnchor, raycastWorldY: Float?): Float {
         val anchorWorldY = HitTransformReader.worldPointFromAnchor(anchor).yMeters
-        raycastWorldY?.let { sample ->
-            registerFloorSample(anchor.identifier, sample)
+        if (raycastWorldY != null) {
+            registerFloorSample(anchor.identifier, raycastWorldY)
             registerFloorSample(anchor.identifier, anchorWorldY)
         }
         val lockedFloorY = floorWorldYByAnchor[anchor.identifier]
             ?: raycastWorldY
             ?: anchorWorldY
-        val localY = dotLocalY() + (lockedFloorY - anchorWorldY)
+        return lockedFloorY - anchorWorldY
+    }
+
+    fun apply(anchorNode: SCNNode, anchor: ARPlaneAnchor, raycastWorldY: Float?) {
+        val grid = findDotGrid(anchorNode) ?: return
+        val localY = dotLocalY() + lockedLocalYOffsetM(anchor, raycastWorldY)
         grid.position = SCNVector3Make(0f, localY, 0f)
     }
 }
@@ -282,6 +327,39 @@ internal fun buildCombinedPlaneGeometry(
         area = area,
         fingerprint = fingerprint,
         source = PlaneDotMeshSource.ACCUMULATE
+    )
+}
+
+/** Lighter mesh while placing contour points: live window only, no bucket accumulate. */
+@OptIn(ExperimentalForeignApi::class)
+internal fun buildLiveWindowPlaneGeometry(
+    anchor: ARPlaneAnchor,
+    boundaryMode: PlaneDotMeshSource,
+    centerLocal: Pair<Float, Float>,
+    visibleRadiusM: Float
+): IosPlaneGeometry? {
+    val points = PlaneGeometryBridge.collectWindowDotPoints(
+        anchor = anchor,
+        boundaryMode = boundaryMode,
+        refX = centerLocal.first,
+        refZ = centerLocal.second,
+        maxRadiusM = visibleRadiusM
+    )
+    if (points.isEmpty()) return null
+    val mesh = PlaneGeometryBridge.generateDotMeshFromPoints(points) ?: return null
+    val fingerprint = combinedDisplayFingerprint(
+        anchor = anchor,
+        accumulator = PlaneDotBucketAccumulator(),
+        boundaryMode = boundaryMode,
+        centerLocal = centerLocal,
+        visibleRadiusM = visibleRadiusM
+    )
+    return IosPlaneGeometry(
+        meshGeometry = mesh,
+        dotCount = PlaneGeometryBridge.lastGeneratedDotCount,
+        area = PlaneGeometryBridge.polygonArea(anchor),
+        fingerprint = fingerprint,
+        source = PlaneDotMeshSource.HIT
     )
 }
 
@@ -558,7 +636,7 @@ private fun centerFingerprintBucket(value: Float): Int =
     (value / CENTER_FINGERPRINT_STEP_M).roundToInt()
 
 @OptIn(ExperimentalForeignApi::class)
-private fun NSObject.bridgePointer() =
+internal fun NSObject.bridgePointer() =
     interpretCPointer<COpaque>(objcPtr())
 
 @OptIn(ExperimentalForeignApi::class)
@@ -591,10 +669,10 @@ internal fun syncPreviewDotGrid(
     centerHit: CenterPlaneHit,
     dotMaterial: SCNMaterial
 ): Int {
-    val worldTransform = centerHit.previewHitResult?.worldTransform ?: return 0
+    val worldMatrix = centerHit.previewWorldScnMatrix() ?: return 0
     val grid = findOrCreatePreviewGrid(rootNode)
     grid.hidden = false
-    grid.transform = SCNMatrix4FromMat4(worldTransform)
+    grid.transform = worldMatrix
 
     if (grid.geometry == null) {
         PlaneGeometryBridge.generatePreviewDotMeshGeometry()?.let { (geometry, dotCount) ->
@@ -656,21 +734,46 @@ private fun removeChildDotNodes(grid: SCNNode) {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-internal fun List<*>.firstHorizontalFloorHitResult(): ARHitTestResult? {
+internal fun List<*>.firstHorizontalFloorHitResult(): ARHitTestResult? =
+    closestHorizontalFloorHitResult()
+
+/** Closest horizontal plane under the reticle (ARKit returns hits sorted by distance). */
+@OptIn(ExperimentalForeignApi::class)
+internal fun List<*>.closestHorizontalFloorHitResult(): ARHitTestResult? {
+    var best: ARHitTestResult? = null
+    var bestDistance = Double.MAX_VALUE
     for (item in this) {
         val result = item as? ARHitTestResult ?: continue
         val anchor = result.anchor as? ARPlaneAnchor ?: continue
-        if (anchor.isHorizontalTracking()) return result
+        if (!anchor.isHorizontalTracking()) continue
+        val distance = result.distance
+        if (distance < bestDistance) {
+            bestDistance = distance
+            best = result
+        }
     }
-    return null
+    return best
 }
 
-internal fun List<*>.firstEstimatedHorizontalFloorHitResult(): ARHitTestResult? {
+internal fun List<*>.firstEstimatedHorizontalFloorHitResult(): ARHitTestResult? =
+    closestEstimatedHorizontalFloorHitResult()
+
+/** Closest estimated horizontal plane (same idea as confirmed — avoids random far hits in air). */
+@OptIn(ExperimentalForeignApi::class)
+internal fun List<*>.closestEstimatedHorizontalFloorHitResult(): ARHitTestResult? {
+    var best: ARHitTestResult? = null
+    var bestDistance = Double.MAX_VALUE
     for (item in this) {
         val result = item as? ARHitTestResult ?: continue
-        return result
+        val anchor = result.anchor as? ARPlaneAnchor
+        if (anchor != null && !anchor.isHorizontalTracking()) continue
+        val distance = result.distance
+        if (distance < bestDistance) {
+            bestDistance = distance
+            best = result
+        }
     }
-    return null
+    return best
 }
 
 internal typealias PlaneFingerprints = MutableMap<NSUUID, UInt>
@@ -711,7 +814,7 @@ internal class FocusedPlaneTracker(
 
 internal const val VISIBLE_DOT_RADIUS_M = 2.0f
 internal const val HIT_DOT_GRID_RADIUS_M = 0.55f
-internal const val FOCUS_GRACE_FRAMES = 12
+internal const val FOCUS_GRACE_FRAMES = 4
 internal const val GRID_STEP_M = 0.18f
 internal const val GRID_VISUAL_OFFSET_M = 0.0005f
 internal const val FLOOR_DOT_RADIUS_M = 0.013f

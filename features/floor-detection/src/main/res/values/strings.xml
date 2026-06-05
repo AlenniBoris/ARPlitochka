@@ -4,6 +4,7 @@
     <string name="status_tracking_lost">Трекинг потерян</string>
     <string name="instruction_move_phone">Медленно наведите камеру на пол</string>
     <string name="instruction_searching">Ищем подходящую поверхность</string>
+    <string name="instruction_surface_nearby">Сетка найдена — наведите прицел на неё</string>
     <string name="instruction_detected">Поверхность отображается точками</string>
     <string name="instruction_contour_closed">Нажмите OK, чтобы завершить разметку</string>
     <string name="instruction_contour_confirmed">Нажмите «Добавить плитку» для предпросмотра</string>

@@ -9,5 +9,7 @@ data class FloorFrameSnapshot(
     val hasCenterHit: Boolean,
     val isFloorDetected: Boolean,
     val currentHitPoint: ArPoint3D?,
-    val focusedLabel: String = ""
+    val focusedLabel: String = "",
+    /** Largest tracked horizontal plane area this frame (scan feedback; may differ from [selectedArea]). */
+    val largestPlaneAreaM2: Float = 0f
 )

@@ -6,6 +6,8 @@ import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import com.example.arplitka.shared.ar.domain.model.FloorFrameSnapshot
 
 object FloorTrackingReducer {
+    private const val MIN_SCAN_SURFACE_AREA_M2 = 0.15f
+
     fun applyFrame(
         state: FloorContourUiState,
         snapshot: FloorFrameSnapshot
@@ -19,17 +21,23 @@ object FloorTrackingReducer {
                 snappedPointIndex = null,
                 horizontalPlaneCount = snapshot.horizontalPlaneCount,
                 selectedArea = snapshot.selectedArea,
+                largestPlaneAreaM2 = snapshot.largestPlaneAreaM2,
                 isFloorDetected = false,
                 focusedLabel = snapshot.focusedLabel
             )
             !snapshot.isFloorDetected -> state.copy(
                 trackingStatus = ArTrackingStatus.SEARCHING_FLOOR,
-                instruction = ArInstruction.SEARCHING,
+                instruction = if (snapshot.largestPlaneAreaM2 >= MIN_SCAN_SURFACE_AREA_M2) {
+                    ArInstruction.SURFACE_NEARBY
+                } else {
+                    ArInstruction.SEARCHING
+                },
                 hasCenterHit = snapshot.hasCenterHit,
                 currentHitPoint = snapshot.currentHitPoint,
                 snappedPointIndex = null,
                 horizontalPlaneCount = snapshot.horizontalPlaneCount,
                 selectedArea = snapshot.selectedArea,
+                largestPlaneAreaM2 = snapshot.largestPlaneAreaM2,
                 isFloorDetected = false,
                 focusedLabel = snapshot.focusedLabel
             )
@@ -48,6 +56,7 @@ object FloorTrackingReducer {
                 currentHitPoint = snapshot.currentHitPoint,
                 horizontalPlaneCount = snapshot.horizontalPlaneCount,
                 selectedArea = snapshot.selectedArea,
+                largestPlaneAreaM2 = snapshot.largestPlaneAreaM2,
                 isFloorDetected = true,
                 focusedLabel = snapshot.focusedLabel
             )

@@ -5,15 +5,15 @@
 **Для агентов и разработчиков:**
 
 - **Android** — [статус и договорённости](#android--статус-и-договорённости): эталон поиска пола и **полный** flow контура/плитки.
-- **iOS** — [статус и договорённости](#ios--статус-и-договорённости): поиск поверхности **зафиксирован**; дальше — паритет контура с Android, без тюнинга белых точек без запроса.
+- **iOS** — [статус и договорённости](#ios--статус-и-договорённости): поиск и отображение поверхностей; **стратегия и план действий (фазы A–B):** [IOS_AR_SURFACE_STRATEGY.md](./IOS_AR_SURFACE_STRATEGY.md).
 
 ## Цель UX
 
-Пользователь ходит по комнате с камерой и видит **белые круглые точки в 3D на поверхности** — preview будущей разметки контура. Поверхность должна:
+Пользователь ходит по комнате с камерой и видит **белую surface-сетку в 3D** — быстрый preview найденных горизонтальных поверхностей. Поверхность должна:
 
 - обнаруживаться **динамически** при движении;
 - быть **горизонтальной** (пол, стол, кровать сверху);
-- **фокусироваться** на той плоскости, куда направлен прицел (center reticle);
+- быстро показывать отфильтрованный набор useful horizontal planes, а прицел использовать для статуса и добавления точек;
 - давать понятный статус: «ищем», «найдено», площадь, center hit.
 
 ---
@@ -25,7 +25,7 @@
 | **Horizontal plane** | Горизонтальная плоскость, которую строит AR-движок (пол, стол и т.д.) |
 | **Center reticle** | Перекрестие в центре экрана; по нему определяется «активная» поверхность |
 | **Center hit** | Попадание луча из центра экрана в отслеживаемую горизонтальную плоскость |
-| **Selected / focused plane** | Плоскость под прицелом — по ней считается площадь и статус «обнаружено» |
+| **Selected / focused plane** | Плоскость под прицелом для статуса и placement; scan-визуал может показывать больше surfaces |
 | **MIN_FLOOR_AREA_M2** | Минимальная площадь **0.15 m²**, чтобы считать поверхность пригодной |
 
 Общий UI-kit (`shared/ui/kit`): `CenterReticle`, `StatusPanel`, `DebugPanel` — используется на обеих платформах.
@@ -39,7 +39,7 @@
 | Белые точки / plane | `showPlaneRenderer` | `showPlaneDots` / `showPlaneRenderer` |
 | Зелёные точки | `showContourPoints` | `showContourPoints` |
 | Синие линии | `showContourLines` | `showContourLines` |
-| Preview-линия | `showPreviewLine` | `showPreviewLine` |
+| Preview-линия | `showPreviewLine` (к прицелу) | **выкл.** — синие линии только между поставленными точками (≥2) |
 | Заливка секции | `showSectionFill` | `showSectionFill` |
 | Плитка (будущее) | `isTileVisible` | `isTileVisible` (пока false на iOS) |
 
@@ -213,47 +213,49 @@ Planes, Area, Tracking, Points, Closed, Confirmed, Tile, Texture rotation — `F
 
 ## iOS — статус и договорённости
 
-### Статус (зафиксировано, июнь 2026)
+> **Стратегия, outdoor-анализ, план A/B:** [IOS_AR_SURFACE_STRATEGY.md](./IOS_AR_SURFACE_STRATEGY.md)
+
+### Статус (июнь 2026, scan multi-surface + contour mode)
 
 | Решение | Суть |
 |---------|------|
-| **Оставляем текущую реализацию** | После оптимизаций (план `ios-plane-speed`) субъективно **не стало сильно лучше**, но **и не хуже** — приемлемый baseline. |
-| **Не тюним дальше без запроса** | Не углубляться в белые точки, радиус, drift, mesh, пока не закончен этап **зелёных точек контура**. |
-| **Следующий этап** | Постановка зелёных точек, синие отрезки, замыкание контура, OK — заготовка уже в коде (`FloorArController`, `IosArContourRenderer`). |
-| **Паритет с Android** | Android — **эталон** UX; iOS по скорости визуально слабее, baseline принят. Контур на iOS — в работе. |
+| **Scan viz** | До **3** overlays по `ARPlaneAnchor` (polygon grid), incremental на `didAdd`/`didUpdate`; budget + dedup **10 cm** по Y в `didUpdateFrame`. Патч **1.5 m** под прицелом (estimated/elevated). |
+| **Scan viz ≠ статус** | Визуал может показывать крупные planes **вне прицела** (как Android `planeRenderer`); баннер «обнаружено» — только confirmed ≥ 0.15 m² **под прицелом** (фаза A.2 ✅). |
+| **Contour mode** | После **первой** зелёной точки scan-сетки **скрываются** (`contour-hidden`). |
+| **Placement** | Кнопка «+» — только **confirmed** hit (отдельный этап; не в фокусе surface-плана). |
+| **Паритет с Android** | Android — эталон detection; статус «обнаружено» выровнен (A.2); scan-viz догоняем в **фазе A+**. |
+| **Смена локации** | Призраки planes при улица→дом — фикс **A+**: relocation reset + distance cull + «Пересканировать». |
+| **Legacy** | `IosArPlaneRenderer.kt` — boundary helpers; не в runtime scan path. |
+| **Окклюзия плитки** | **Вне scope** до отдельного решения продукта. |
 
-### Что сделано на iOS (план ios-plane-speed)
+**План по скринам тестировщиков:** [IOS_AR_SURFACE_STRATEGY.md §5.5, §8](./IOS_AR_SURFACE_STRATEGY.md) (фазы A+ → A.5 → B).
 
-- Один **mesh** белых точек (`SCNGeometry`), не сотни `SCNNode`.
-- **Accumulate + live**: след от ходьбы (buckets) + живое окно **2 m** вокруг прицела в одном mesh.
-- **Preview** по `hitTest` (estimated plane) до confirmed anchor.
-- **Throttle** пересборки mesh (~12.5 Hz), fingerprint/cache.
-- **Debug-метрики**: FPS, dot/node count, gen/sync ms, preview/anchor latency, AR features, hit path.
-- **LiDAR** (опционально): `sceneReconstruction = mesh` на поддерживаемых устройствах.
-- **Compose**: `FloorArController.publishIfUiChanged()` — UI не на каждый AR-кадр.
-- **Высота точек**: `PlaneDotElevationLock` — минимальный зафиксированный world Y, компенсация подъёма plane anchor при уточнении ARKit.
+### Что сделано (план ios-ar-rebuild + фазы A+ / B)
+
+- `IosArPlaneSurfaceRenderer` — **polygon grid** (world-space белые линии) per anchor; reticle patch 1.5×1.5 m.
+- `IosArCenterRaycast.kt` — **`pg_center_raycast`** (ARRaycast) + hitTest fallback + mesh raycast (B.5).
+- Bridge: `pg_create_polygon_grid_line_geometry`, `pg_create_grid_line_geometry`, classification, outdoor strict.
+- `applyOverlayElevation` — `PlaneDotElevationLock`: сетка лежит на полу, компенсация дрейфа ARKit вверх.
+- Dedup по высоте: на одном уровне (±10 cm) — только **крупнейшая** plane (визуальный аналог ARCore subsuming).
+- `didUpdateFrame` — raycast, focus, `FloorArController.onFrame`, debug FPS; **без** dot mesh rebuild.
+- Preview hit (estimated plane) — только для **поиска** поверхности в scan mode (`hasCenterHit` до первой точки).
+- LiDAR mesh optional; Compose UI throttled через `publishIfUiChanged`.
 
 ### Что отложено
 
 | Тема | Причина |
 |------|---------|
-| **`ARRaycast` / `session.raycast`** | В текущих **Kotlin/Native ARKit bindings** нет `ARRaycastResult`, `ARRaycastQueryTarget*`, `raycastQuery`. Используем **`hitTest`**. Добавление — через ObjC bridge, когда понадобится. |
-| **Заметный визуальный паритет с Android** | Не достигнут; пользователь не видит «большого улучшения». |
-| **Синяя заливка, плитка, rotate** | Только Android; iOS — после контура. |
+| **Белые точки во время разметки** | Продуктово конфликтует с FPS; fallback — статический snapshot, не live mesh. |
+| **Синяя заливка, плитка, rotate** | После стабильного контура на устройстве. |
+| **Merge якорей ARKit** | API iOS не даёт subsuming как ARCore; dedup только на уровне визуала и sticky floor. |
 
-### Ограничения среды (комната)
+### Критерии «не ломать»
 
-- ARKit **поднимает** horizontal plane при уточнении — точки могут казаться «плывущими вверх»; частично гасится `PlaneDotElevationLock`.
-- В **комнате** (тени, плинтусы, мебель) хуже, чем на открытом участке пола — это норма для AR, не только баг приложения.
-- Точки могут уходить **за стену**, если ARKit продлил plane; смягчается polygon boundary + радиус 2 m.
-
-### Критерии «не ломать» при будущих правках
-
-1. `node count` в debug ≈ **1** на focused plane (один mesh).
-2. Preview (`preview-hit`) появляется до polygon anchor.
-3. При ходьбе остаётся **след** (accumulate) + **пятно под прицелом** (live 2 m).
-4. `showPlaneDots` / белые точки **скрыты после finalize**.
-5. Сборка: `./gradlew :iosApp:linkDebugFrameworkIosArm64` на Mac.
+1. В **contour mode** debug: `Plane renderer` = `contour-hidden`, без фризов при 2–5 точках.
+2. В **scan mode**: overlays обновляются на anchor events, не в `didUpdateFrame`.
+3. Placement только confirmed hit; точки не дрейфуют от anchor refine.
+4. `showPlaneDots` скрывает surface после finalize.
+5. Сборка на Mac: `./gradlew :iosApp:linkDebugFrameworkIosArm64`.
 
 ---
 
@@ -264,10 +266,11 @@ Planes, Area, Tracking, Points, Closed, Confirmed, Tile, Texture rotation — `F
 | Компонент | Путь |
 |-----------|------|
 | Экран + сессия | `iosApp/.../IosArScreen.ios.kt` |
-| Белые точки, buckets, mesh | `iosApp/.../IosArPlaneRenderer.kt` |
-| Center hit | `iosApp/.../IosArCenterRaycast.kt` |
+| Surface v2 (polygon grid lines) | `iosApp/.../IosArPlaneSurfaceRenderer.kt` |
+| Center hit (ARRaycast) | `iosApp/.../IosArCenterRaycast.kt` |
 | AR-конфиг (LiDAR) | `iosApp/.../IosArSessionConfiguration.kt` |
-| Геометрия точек (ObjC) | `PlaneGeometryBridge.h`, `plane_geometry_bridge.def` |
+| Bridge (polygon grid, raycast) | `PlaneGeometryBridge.h`, `plane_geometry_bridge.def` |
+| Legacy dot mesh (не в runtime) | `iosApp/.../IosArPlaneRenderer.kt` |
 | Контур (зелёный) | `IosArContourRenderer.kt`, `IosFloorAnchorStore.kt` |
 | Shared state | `shared/ar/domain` — `FloorArController`, `FloorContourUiState` |
 
@@ -285,99 +288,75 @@ Debug **AR features**: `lidar-mesh+planes` или `planes`.
 
 ### Center hit
 
-`IosArCenterRaycast.kt` — **`ARSCNView.hitTest`** (не ARRaycast):
+`IosArCenterRaycast.kt` — **`pg_center_raycast`** (ARRaycast) + hitTest fallback + mesh raycast (B.5):
 
 1. **Confirmed:** `ExistingPlaneUsingExtent` → horizontal `ARPlaneAnchor` + local (x, z); confirmed = точка внутри boundary (`containsLocalPoint`).
-2. **Preview:** если не confirmed — `EstimatedHorizontalPlane` для мгновенного feedback.
+2. **Preview:** `EstimatedHorizontalPlane` резолвится всегда для scan feedback и широкого estimated carpet.
 
 Debug **Hit path**: `c:hit_test/p:hit_test` (или `none`).
 
-### Поток данных (каждый кадр)
+### Режимы: Scan vs Contour
 
 ```mermaid
 flowchart TD
-    A[didUpdateFrame] --> B[resolveCenterPlaneHit hitTest]
-    B --> C[FocusedPlaneTracker]
-    C --> D{focused anchor?}
-    D -->|нет| E[preview-hit: mesh под hit worldTransform]
-    D -->|да| F[recordScan buckets 3x3]
-    F --> G[merge accumulated + live 2m window]
-    G --> H[build SCNGeometry fingerprint throttle]
-    H --> I[syncPlaneGeometryDots 1 node]
-    I --> J[PlaneDotElevationLock world Y]
-    B --> K[FloorArController.onFrame publishIfUiChanged]
-    K --> L[syncContourRenderer каждый кадр]
+    scan[Scan Mode] -->|first green point| contour[Contour Mode]
+    scan --> planePool[syncPlaneOverlay per anchor on didAdd/didUpdate]
+    scan --> budget[applyOverlayBudget top 3 from cache]
+    scan --> elevation[applyOverlayElevation PlaneDotElevationLock]
+    scan --> reticlePatch[syncReticlePatch 1.5m fixed patch]
+    contour --> hideSurface[plane overlays hidden]
+    contour --> contourOnly[green points + blue lines only]
 ```
 
-### Отображение белых точек
+### Поток данных
 
-**Один mesh** на focused `ARPlaneAnchor` (узел `plane-grid`), круглые диски через `PlaneGeometryBridge` (12 сегментов, `doubleSided`).
+**`didUpdateFrame`** (scan, `placedPoints.isEmpty()`):
 
-**Два источника точек в одном mesh:**
+- **`syncPlaneOverlayOnNodeEvent`** — сетка на plane **сразу при didAdd** (без ожидания «выбора одной» плоскости). Geometry throttle ~120 ms на anchor.
+- **`applyOverlayBudget`** — в `didUpdateFrame` только **скрывает лишнее** по кэшу area (до **3** surfaces), без полного пересчёта geometry всех anchors → нет фриза 2–3 с.
+- **`applyOverlayElevation`** — каждый кадр: `PlaneDotElevationLock` опускает overlay к **минимальной** виденной высоте пола (ARKit часто поднимает anchor при refine).
+- **`syncReticlePatch`** — патч **1.5×1.5 m** под прицелом (estimated/elevated); позиция из hit transform, **без** Y-offset.
+- Sticky floor id переключается только если новая plane **>18%** больше по area (нет thrashing).
 
-| Слой | Поведение |
-|------|-----------|
-| **Accumulated** | `PlaneDotBucketAccumulator`: при каждом scan с center hit штамп **3×3** ячеек (`ACCUMULATE_STAMP_RADIUS_CELLS = 1`), max **1024** bucket на anchor. След там, где пользователь уже ходил. |
-| **Live** | Окно **2 m** (`VISIBLE_DOT_RADIUS_M`) вокруг прицела по extent/polygon (`pg_collect_window_dot_points`). Текущая «лужа» под прицелом. |
+**`didUpdateFrame`** (общее):
 
-**Граница polygon:**
+- `resolveCenterPlaneHit` (throttle в contour mode: каждый 3-й кадр).
+- `FocusedPlaneTracker` — только статус, area, доступность «+» (не решает, какие overlays рисовать).
+- `FloorArController.onFrame` + `publishIfUiChanged`.
+- **Нет** dot mesh rebuild / buckets в coordinator path (elevation lock — только для surface grid).
 
-- Пока polygon нестабилен (&lt; 3 кадров) — **extent**.
-- После — **polygon** (`POLYGON_STABLE_FRAME_THRESHOLD = 3`).
+### Center hit и placement
 
-**Preview** (нет focused anchor): маленькая сетка в **world space** на `rootNode` (`plane-preview-grid`), радиус `HIT_DOT_GRID_RADIUS_M` (0.55 m), режим debug `preview-hit`.
+1. **Confirmed:** `ExistingPlaneUsingExtent` + `containsLocalPoint` — для «+» и `currentHitPoint` в contour mode.
+2. **Preview:** `EstimatedHorizontalPlane` — для `hasCenterHit` и reticle patch в scan mode (до первой точки); patch на полу не рисуется (есть floor overlay); на возвышенных поверхностях — сразу; не для placement.
 
-**Пересборка:** не чаще `MESH_REBUILD_MIN_INTERVAL_SECONDS` (0.08 s), если fingerprint не изменился — `accumulate-cached`.
+`placementWorldFloorPoint()` / `placementWorldTransform()` — **только confirmed**.
 
-### Фиксация высоты (`PlaneDotElevationLock`)
+### Контурные точки
 
-ARKit при уточнении часто **поднимает** anchor. Для каждого plane id запоминается **минимальный** world Y (из confirmed hit и anchor). Каждый кадр grid node получает local Y = `GRID_VISUAL_OFFSET_M + (lockedY - anchorWorldY)`.
+| Компонент | Поведение |
+|-----------|-----------|
+| `IosFloorAnchorStore` | `placedPoints()` из **cached** tap-time позиций |
+| `IosArContourRenderer` | `syncIfChanged` на add/undo/close |
+| Preview-линия к прицелу | **выкл.** (как Android policy для iOS) |
+| `ARAnchor` | Session ownership; позиция UI не из anchor |
 
-Не убирает drift полностью в сложной комнате, но уменьшает «всплытие» при долгом сканировании.
+### UI и debug
 
-### Focus
-
-`FocusedPlaneTracker`: переключение сразу на anchor под прицелом; **12 кадров** grace при уходе прицела с плоскости.
-
-### Статус «поверхность обнаружена»
-
-```kotlin
-floorDetected = focusedAnchorId != null && selectedArea >= MIN_FLOOR_AREA_M2
-selectedArea = polygon area (bridge) для focused anchor
-hasCenterHit = confirmed || previewHitResult != null
-```
-
-### UI и Compose
-
-- `FloorArController.onFrame` → `publishIfUiChanged()` (только если изменились поля из `FloorContourUiPublishSnapshot`).
-- Контурный renderer (`IosArContourRenderer.sync`) читает **`currentState()` каждый кадр** — preview-линия к прицелу обновляется без лишней Compose-рекомпозиции.
-- Debug-панель (только debug build): Planes, Focused, Area, **Plane renderer**, **Plane FPS**, **Plane dots** (count/1 node), Scan buckets, Dot gen/sync, Dot latency, **AR features**, **Hit path**.
-
-### Контурные точки (следующий этап, код уже есть)
-
-| Компонент | Статус |
-|-----------|--------|
-| `FloorArController` + `FloorArEvent` Add/Undo | ✅ |
-| `IosArContourRenderer` — зелёные точки, синие линии, preview | ✅ |
-| `IosFloorAnchorStore` — `ARAnchor` на точку | ✅ |
-| `ArContourActionButtons` | ✅ |
-| Заливка, плитка, rotate, OK/finalize UI как Android | ❌ позже |
-
-При добавлении точки: `lastCenterHit.placementWorldTransform()` → `ARAnchor`.
+- Debug: **Plane renderer** (`scan-floor` / `scan-floor+reticle` / `scan-reticle-patch` / `contour-hidden`), **Surface overlays** (0–3), FPS, hit path (`c:raycast_*` / `p:hit_test`).
+- Reticle в contour: активен только при **confirmed** hit.
 
 ### Ключевые файлы
 
 | Файл | Роль |
 |------|------|
-| `IosArScreen.ios.kt` | `IosArSessionCoordinator`, plane viz, debug |
-| `IosArCenterRaycast.kt` | Center hit (hitTest) |
-| `IosArSessionConfiguration.kt` | Horizontal planes + optional LiDAR mesh |
-| `IosArPlaneRenderer.kt` | Mesh, buckets, elevation lock, focus |
-| `IosArContourRenderer.kt` | Контур |
-| `IosFloorAnchorStore.kt` | Anchors точек |
-| `PlaneGeometryBridge` | Dot mesh, boundaries, window points |
-| `FloorContourUiState.kt` | Derived visibility flags |
-| `FloorArController.kt` | Events + throttled UI publish |
+| `IosArScreen.ios.kt` | Coordinator, scan/contour modes, rescan |
+| `IosArSessionRelocation.kt` | Auto/manual scan session reset (A+) |
+| `IosArPlaneSurfaceRenderer.kt` | Surface v2 polygon grid, cull/elevated (A+), elevation lock |
+| `IosArCenterRaycast.kt` | Center hit (`pg_center_raycast` + hitTest fallback) |
+| `IosArContourRenderer.kt` | Event-driven contour |
+| `IosFloorAnchorStore.kt` | Cached contour positions |
+| `IosArPlaneRenderer.kt` | Legacy helpers (не coordinator path) |
 
 ---
 
@@ -386,13 +365,13 @@ hasCenterHit = confirmed || previewHitResult != null
 | Аспект | Android (ARCore) — эталон | iOS (ARKit) |
 |--------|-------------------------|-------------|
 | Роль в продукте | Референс detection + **полный контур/плитка** | Surface зафиксирован; контур — догнать Android |
-| Визуализация пола | Нативный `planeRenderer` (все horizontal planes) | Один **mesh**, focused plane + accumulate/live |
-| Скорость «на глаз» | Быстрее (нативный renderer) | Baseline принят, без большого выигрыша |
-| Выбор поверхности | Center hit + **`isPoseInPolygon`** | Center hit + polygon boundary / extent |
-| Фиксация одного пола | **Нет** (постоянный поиск) | Focus + grace на anchor |
-| След при ходьбе | ARCore renderer | Bucket accumulate |
-| Окно под прицелом | Полигон plane + center | Live **2 m** |
-| Center hit API | `Frame.hitTest` | `hitTest` (ARRaycast отложен) |
+| Визуализация пола | Нативный `planeRenderer` (все horizontal planes) | Polygon grid overlay + reticle patch только без floor под прицелом |
+| Скорость в contour mode | N/A | Surface **скрыта** после 1-й точки |
+| Выбор поверхности | Center hit + **`isPoseInPolygon`** | Confirmed extent hit + boundary check |
+| Фиксация одного пола | **Нет** (постоянный поиск) | Contour mode stops surface updates |
+| След при ходьбе | ARCore renderer | Extent grows with ARKit (overlay resize) |
+| Окно под прицелом | Полигон plane + center | Scan-визуал широкий; placement только confirmed center |
+| Center hit API | `Frame.hitTest` | `pg_center_raycast` (+ hitTest fallback) |
 | Depth / LiDAR | Depth automatic | sceneReconstruction mesh optional |
 | Min area | 0.15 m² | 0.15 m² |
 | Белые точки до confirm | `showPlaneRenderer` | `showPlaneDots` |
@@ -416,10 +395,15 @@ hasCenterHit = confirmed || previewHitResult != null
 
 ### iOS (актуально)
 
-- Нет `ARRaycast` в K/N — только `hitTest`.
-- В комнате возможен **вертикальный drift** точек (ARKit + elevation lock частично).
-- Точки за стеной — если ARKit раздул plane (boundary + 2 m радиус помогают).
-- **Не ждать** визуального паритета с Android по скорости без смены подхода (нативный plane viz на iOS не используем).
+- B.1–B.5 реализованы: ARRaycast bridge, polygon grid, outdoor strict mode, classification filter, mesh raycast pilot.
+- Surface v2 — **polygon grid** (B.2 ✅); reticle patch только при отсутствии floor overlay под прицелом.
+- **Призраки сессии:** ARKit не чистит старые planes при смене физической локации без reset — сетки «в воздухе» (фикс A+.1–A+.2).
+- **Плитка vs ступени:** polygon grid + classification suppress table/seat; elevated planes Y > floor + 15 cm скрываются (A+.4, B.4).
+- **Перекрывающиеся planes:** ARKit может держать несколько якорей на одном полу; приложение **не сливает** якоря — dedup ±10 cm показывает одну сетку; hit/placement — только plane **под прицелом**.
+- **Трава:** confirmed hit под прицелом часто отсутствует → статус «ищем» корректен; scan-viz слабее Android dots (фикс A+.5).
+- Scan-визуал — UX-индикатор найденных поверхностей, не источник точек.
+- В contour mode белые точки **скрыты** — намеренно для FPS.
+- Не возвращать per-frame dot-mesh rebuild в `didUpdateFrame`.
 
 ---
 
@@ -440,7 +424,7 @@ hasCenterHit = confirmed || previewHitResult != null
 |---|----------|----------|
 | 1 | Старт AR, пол в кадре | Белые точки `planeRenderer`, status searching → detected |
 | 2 | Прицел на пол | Reticle активен, `hasCenterHit`, area ≥ 0.15 m² |
-| 3 | Сдвиг на стол/кровать | Другая plane под прицелом, area обновляется |
+| 3 | Сдвиг на стол/кровать | Renderer показывает useful planes после фильтра; постановка точек — только confirmed/polygon |
 | 4 | Нет «залипания» одного пола | Уход с плоскости → снова searching (без lock) |
 | 5 | «+» — 3+ точки, замкнуть | Snap к первой (0.10 m), closed, кнопка OK |
 | 6 | OK → confirm | `planeRenderer` **выкл**, синяя заливка |
@@ -457,40 +441,64 @@ hasCenterHit = confirmed || previewHitResult != null
 
 Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 
-### Чеклист регрессии iOS (поверхность)
+### Чеклист регрессии iOS (поверхность + контур)
+
+**Базовый (contour + scan):**
 
 | # | Проверка | Ожидание |
 |---|----------|----------|
-| 1 | Старт AR, навести на пол | Preview dots, режим `preview-hit` |
-| 2 | Подержать 1–2 с | Confirmed mesh, `accumulate+live+extent/polygon` |
-| 3 | Походить по полу | След (buckets) + пятно 2 m под прицелом |
-| 4 | Debug node count | **1** на focused plane |
-| 5 | Plane FPS | Без сильных просадок |
-| 6 | Другая поверхность (стол) | Переключение focused |
-| 7 | Reticle | Активен при `hasCenterHit` и `showPlaneDots` |
-| 8 | Area ≥ 0.15 | Status «обнаружено» |
-| 9 | LiDAR device | `AR features`: `lidar-mesh+planes` |
-| 10 | Drift вверх | Не должен нарастать бесконечно за 30 с на одном месте |
+| 1 | Старт AR, навести на пол | `scan-multi-surface`, сетка пола быстро |
+| 1b | Прицел на стол/тумбу | `scan-multi+reticle` или `scan-reticle-patch`; патч 1.5 m; «+» только confirmed |
+| 2 | До первой точки | Сетка видна, FPS стабилен |
+| 3 | Первая зелёная точка | **Нет** фриза ~6 с; `contour-hidden` |
+| 4 | 2–5 точек + undo | Точки под прицелом (confirmed), линии между точками |
+| 5 | Замыкание / OK | Контур стабилен, без preview-линии к прицелу |
+| 6 | Plane FPS | Без просадок в contour mode |
+| 7 | Reticle в scan | Активен при confirmed (фаза A.2) |
+| 8 | Reticle в contour | Только при **confirmed** |
+| 9 | Area ≥ 0.15 под прицелом | Status «обнаружено» |
+| 10 | Undo все точки | Surface снова `scan-multi-surface` |
 
-Субъективная оценка команды: **не сильно лучше, не хуже** — baseline принят.
+**По скринам тестировщиков (фаза A.5, после A+):**
+
+| # | Сценарий | Ожидание |
+|---|----------|----------|
+| S1 | **Плитка на улице**, светло | Статус «обнаружено»; сетки на плитке; **нет** сетки на ступенях |
+| S2 | **Трава** | Статус «ищем» без confirmed под прицелом; **видна** сетка крупнейшего plane; debug `Largest plane` > 0 |
+| S3 | **Улица → лестница** без выхода из AR | Нет сеток в воздухе; нет уличных призраков; `Reloc`/`Cull` в debug при reset |
+| S4 | **Выход → вход** в AR | Полный reset (`RemoveExistingAnchors`), чистая сцена |
+| S5 | **«Пересканировать»** (A+.6) | То же, что S4, без выхода с экрана |
 
 ---
 
-## Константы iOS (`IosArPlaneRenderer.kt`)
+## Константы iOS (surface v2)
 
-| Константа | Значение | Назначение |
-|-----------|----------|------------|
-| `VISIBLE_DOT_RADIUS_M` | **2.0** m | Live-окно вокруг прицела |
-| `HIT_DOT_GRID_RADIUS_M` | 0.55 m | Preview-сетка без anchor |
-| `GRID_STEP_M` | 0.18 m | Шаг сетки точек |
-| `ACCUMULATE_STAMP_RADIUS_CELLS` | **1** (3×3) | Штамп при scan |
-| `MAX_ACCUMULATED_BUCKETS` | 1024 | Лимит памяти следа |
-| `FOCUS_GRACE_FRAMES` | 12 | Grace без hit |
-| `POLYGON_STABLE_FRAME_THRESHOLD` | 3 | Кадров до polygon mode |
-| `MESH_REBUILD_MIN_INTERVAL_SECONDS` | 0.08 s | Throttle mesh |
-| `CENTER_FINGERPRINT_STEP_M` | 0.18 m | Квантование fingerprint |
-| `FLOOR_DOT_RADIUS_M` | 0.013 m | Радиус диска |
-| `GRID_VISUAL_OFFSET_M` | **0.0005** m | Высота над плоскостью |
+| Константа | Файл | Значение | Назначение |
+|-----------|------|----------|------------|
+| `GRID_CELL_METERS` | `IosArPlaneSurfaceRenderer.kt` | **0.60 m** | Шаг сетки в world space |
+| `GRID_LINE_WIDTH_M` | `IosArPlaneSurfaceRenderer.kt` | **0.015 m** (1.5 cm) | Толщина линий сетки в world space |
+| `RETICLE_SURFACE_PATCH_M` | `IosArPlaneSurfaceRenderer.kt` | 1.5 m | Фикс. патч под прицелом (стол, тумба, новая зона) |
+| `MIN_RENDER_AREA_M2` | `IosArPlaneSurfaceRenderer.kt` | 0.15 m² (= `MIN_FLOOR_AREA_M2`) | Мин. area для overlay |
+| `MAX_PLANE_ABOVE_CAMERA_M` | `IosArPlaneSurfaceRenderer.kt` | 0.25 m | Скрыть plane «в воздухе» над камерой |
+| `MAX_RETICLE_HIT_DISTANCE_M` | `IosArPlaneSurfaceRenderer.kt` | 5.0 m | Max distance для scan patch |
+| `SAME_LEVEL_Y_DELTA_M` | `IosArPlaneSurfaceRenderer.kt` | 0.10 m | На одном уровне — рисуем только самую большую plane (dedup overlap) |
+| `PlaneDotElevationLock` | `IosArPlaneRenderer.kt` + surface renderer | per-anchor min Y | Сетка на полу, не «парит» при refine anchor |
+| Grid material | `IosArPlaneSurfaceRenderer.kt` | `writesToDepthBuffer = true` | Корректная глубина; геометрия в local y=0 |
+| `ELEVATED_Y_DELTA_M` | `IosArPlaneSurfaceRenderer.kt` | 0.10 m | Пол vs возвышенная / патч под прицелом |
+| `MAX_OVERLAY_DISTANCE_M` | `IosArPlaneSurfaceRenderer.kt` | **10 m** | Cull overlay дальше от камеры (A+) |
+| `ELEVATED_SUPPRESS_DELTA_M` | `IosArPlaneSurfaceRenderer.kt` | **0.15 m** | Скрыть elevated при доминирующем floor (A+) |
+| `STICKY_FLOOR_Y_RESET_M` | `IosArPlaneSurfaceRenderer.kt` | **1.0 m** | Сброс sticky floor при смене уровня (A+) |
+| `RELOCATION_RESET_COOLDOWN_S` | `IosArSessionRelocation.kt` | **3 s** | Анти-фликер auto reset |
+| `DISTANT_PLANE_RESET_RATIO` | `IosArSessionRelocation.kt` | **0.6** | Auto reset при 60%+ planes далеко |
+| Polygon grid | `plane_geometry_bridge.def` | `pg_create_polygon_grid_line_geometry` | Сетка по `ARPlaneGeometry` boundary, клип внутри полигона |
+| Reticle patch | `IosArPlaneSurfaceRenderer.kt` | 1.5×1.5 m extent | Только когда **нет** floor overlay под прицелом |
+| `MAX_SURFACE_OVERLAYS` | `IosArPlaneSurfaceRenderer.kt` | **3** | Лимит overlays; 1 на уровень пола |
+| `MIN_FLOOR_AREA_M2` | `IosArPlaneRenderer.kt` | 0.15 m² | Порог «обнаружено» |
+| `FOCUS_GRACE_FRAMES` | `IosArPlaneRenderer.kt` | 4 | Grace без hit для UI/status |
+| `GRID_VISUAL_OFFSET_M` | `IosArPlaneRenderer.kt` (legacy dots) | 0.0005 m | Только dot mesh; surface grid **не** использует |
+| `MESH_REBUILD_MIN_INTERVAL_SECONDS` | `IosArPlaneRenderer.kt` | 0.08 s | Throttle legacy dot mesh |
+| `CENTER_FINGERPRINT_STEP_M` | `IosArPlaneRenderer.kt` | 0.18 m | Квантование fingerprint |
+| `FLOOR_DOT_RADIUS_M` | `IosArPlaneRenderer.kt` | 0.013 m | Радиус диска (legacy) |
 | `MIN_FLOOR_AREA_M2` | 0.15 m² | Порог «обнаружено» |
 | `MAX_GENERATED_DOT_POINTS` | 768 | Лимит точек в mesh |
 
@@ -556,3 +564,7 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | 2026-06 | iOS: ARRaycast откатан (K/N bindings); hitTest |
 | 2026-06 | **Договорённости:** Android = эталон; iOS surface зафиксирован; iOS контур — следующий этап |
 | 2026-06 | Документ: разделы «статус и договорённости» для Android и iOS |
+| 2026-06 | iOS фаза A в коде: confirmed-only gate, patch filters, overlay budget |
+| 2026-06 | Скрины: плитка / трава / лестница-призраки → план **A+** в [IOS_AR_SURFACE_STRATEGY.md](./IOS_AR_SURFACE_STRATEGY.md) |
+| 2026-06 | iOS фаза **B** (B.1–B.5): ARRaycast bridge, polygon grid, outdoor strict, classification, mesh raycast |
+| 2026-06 | Grid lines: world-space 1.5 cm; elevation lock для surface; dedup overlap ±10 cm задокументирован |
