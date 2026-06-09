@@ -1,5 +1,7 @@
 # iOS AR: handoff prompt — ARKit delegate starvation (~10 s между кадрами)
 
+**Статус (июнь 2026):** проблема **не решена**. Частичный обход для placement explore patch: render loop `renderer(updateAtTime:)` + `workingFloorY` (см. [IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md § Фаза 5](./IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md)). Стабильность **точек контура** — отдельно: [ios-ar-point-stability.md](./ios-ar-point-stability.md).
+
 Скопируй этот текст целиком и передай другой нейросети / разработчику.
 
 ---
@@ -74,7 +76,7 @@ Debug panel читает из двух источников:
 3. **Tap immediate viz** — `activatePlacementVisualizationImmediately()` на tap — **работает в момент тапа**
 4. **Scan throttle** — hitTest каждые 2 кадра, overlay budget, elevation, didUpdateNode каждый 3-й
 5. **Scan hitTest-only** — без raycast в scan (`resolveScanCenterHit`)
-6. **`renderer(updateAtTime:)` + `session.currentFrame`** — **убрано**, ухудшало / конкурировало с delegate
+6. **`renderer(updateAtTime:)` + `session.currentFrame`** — **убрано** из ранних экспериментов; **возвращено** только для placement patch (ray ∩ `workingFloorY`, без `currentFrame`) — не устраняет starvation delegate в scan
 7. **Display link** — пробовали, убрали из-за contention
 8. **Async polygon grid** — `AsyncPolygonGridGeometryBuilder`, completions на main queue
 9. **Extent sync grid + SceneKit render tick без ARFrame** (коммит `e4eadd7`) — **откачен**, не помог

@@ -35,3 +35,9 @@
 - [Навигация](docs/NAVIGATION.md)
 - [Тестирование](docs/TESTING.md)
 - [Backend и моки](docs/BACKEND_MOCKING_PLAN.md)
+
+### iOS AR
+- [Surface strategy](docs/IOS_AR_SURFACE_STRATEGY.md) — поиск и отображение поверхностей
+- [Surface detection](docs/SURFACE_DETECTION.md) — константы, debug panel, чеклисты
+- [Placement mode](docs/IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md) — continuous floor + explore patch
+- [Point stability](docs/ios-ar-point-stability.md) — anchor-коррекции, кнопка «Выровнять»

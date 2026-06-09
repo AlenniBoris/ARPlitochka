@@ -12,6 +12,12 @@ The Swift files in `iosApp/iosApp` show the expected SwiftUI entry point that ho
 
 On Windows this module uses a JVM metadata host target so Gradle can configure and validate common code without requiring Xcode.
 
+## iOS AR documentation
+
+- [Point stability & anchor corrections](../docs/ios-ar-point-stability.md)
+- [Placement mode](../docs/IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md)
+- [Surface strategy](../docs/IOS_AR_SURFACE_STRATEGY.md)
+
 ## Mac verification
 
 Run on macOS with Xcode installed:

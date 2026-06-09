@@ -5,7 +5,7 @@
 **Для агентов и разработчиков:**
 
 - **Android** — [статус и договорённости](#android--статус-и-договорённости): эталон поиска пола и **полный** flow контура/плитки.
-- **iOS** — [статус и договорённости](#ios--статус-и-договорённости): поиск и отображение поверхностей; **стратегия и план действий (фазы A–B):** [IOS_AR_SURFACE_STRATEGY.md](./IOS_AR_SURFACE_STRATEGY.md).
+- **iOS** — [статус и договорённости](#ios--статус-и-договорённости): поиск и отображение поверхностей; **стратегия:** [IOS_AR_SURFACE_STRATEGY.md](./IOS_AR_SURFACE_STRATEGY.md); **стабильность точек контура:** [ios-ar-point-stability.md](./ios-ar-point-stability.md).
 
 ## Цель UX
 
@@ -336,10 +336,12 @@ flowchart TD
 
 | Компонент | Поведение |
 |-----------|-----------|
-| `IosFloorAnchorStore` | `placedPoints()` из **cached** tap-time позиций |
+| `IosFloorAnchorStore` | Root `ARAnchor` + `rootLocalX/Z`; resolve из transform anchor; политика micro / auto-small / manual macro |
 | `IosArContourRenderer` | `syncIfChanged` на add/undo/close |
 | Preview-линия к прицелу | **выкл.** (как Android policy для iOS) |
-| `ARAnchor` | Session ownership; позиция UI не из anchor |
+| Manual realign | Кнопка «Выровнять контур» при сдвиге ≥ 8 см после нестабильности трекинга |
+
+Подробности: [ios-ar-point-stability.md](./ios-ar-point-stability.md).
 
 ### UI и debug
 
@@ -355,7 +357,7 @@ flowchart TD
 | `IosArPlaneSurfaceRenderer.kt` | Surface v2 polygon grid, cull/elevated (A+), elevation lock |
 | `IosArCenterRaycast.kt` | Center hit (`pg_center_raycast` + hitTest fallback) |
 | `IosArContourRenderer.kt` | Event-driven contour |
-| `IosFloorAnchorStore.kt` | Cached contour positions |
+| `IosFloorAnchorStore.kt` | Anchor-based contour positions + correction policy |
 | `IosArPlaneRenderer.kt` | Legacy helpers (не coordinator path) |
 
 ---
@@ -493,6 +495,7 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | **Hit Y** | Высота hit: `raw` / `sec` (уровень контура) / `d` (дельта) |
 | **Cull** | Статистика отсечения overlays: `d:` по дистанции, `e:` elevated/classification |
 | **Reloc** | Состояние relocation / auto reset сессии |
+| **Anchor corr** | Коррекция контура: `{state} r:{rootCm} d:{displayCm}` — см. [ios-ar-point-stability.md](./ios-ar-point-stability.md) |
 | **AR features** | Включённые фичи сессии (planes, mesh, …) |
 
 #### Контур
@@ -520,6 +523,11 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | 8 | Reticle в contour | Только при **confirmed** |
 | 9 | Area ≥ 0.15 под прицелом | Status «обнаружено» |
 | 10 | Undo все точки | Surface снова `scan-multi-surface` |
+| 11 | Лёгкий фриз трекинга, сдвиг 3–8 см | `Anchor corr: auto-small`, точки возвращаются без кнопки |
+| 12 | Потеря трекинга, сдвиг ≥ 8 см | Кнопка «Выровнять контур»; после нажатия `Anchor corr: manual` |
+| 13 | Обычная работа | `Anchor corr: micro`, нет рывков контура |
+
+Подробный чеклист: [ios-ar-point-stability.md §8](./ios-ar-point-stability.md#8-чеклист-регрессии).
 
 **По скринам тестировщиков (фаза A.5, после A+):**
 

@@ -5,7 +5,8 @@
 Связанные документы:
 - [SURFACE_DETECTION.md](./SURFACE_DETECTION.md) — техническая реализация Android/iOS, константы, чеклисты
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — общая архитектура KMP
-- [IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md](./IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md) — **отложенный план:** scan-плоскость на всём этапе контура (вместо placement patch)
+- [IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md](./IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md) — placement mode: continuous floor + explore patch
+- [ios-ar-point-stability.md](./ios-ar-point-stability.md) — **стабильность точек контура**, anchor-коррекции, кнопка «Выровнять»
 - [SURFACE_DETECTION.md § iOS Debug Panel](./SURFACE_DETECTION.md#ios-debug-panel--справочник-полей) — расшифровка полей debug-панели на устройстве
 
 **Вне scope этого плана:** окклюзия плитки за объектами (машина и т.д.) — далёкое будущее, не проектируем и не закладываем в код.
