@@ -15,6 +15,17 @@ internal const val SCAN_OVERLAY_BUDGET_INTERVAL_FRAMES = 1
 internal const val SCAN_OVERLAY_ELEVATION_INTERVAL_FRAMES = 2
 internal const val SCAN_ANCHOR_NODE_UPDATE_INTERVAL = 3
 internal const val PLACEMENT_MUTATION_COOLDOWN_FRAMES = 4
+internal const val PLACEMENT_ANCHORED_POINTS_SYNC_INTERVAL_FRAMES = 6
+/** Imperceptible anchor drift — applied immediately when tracking is stable. */
+internal const val PLACEMENT_ANCHOR_MICRO_CORRECTION_M = 0.03f
+/** Shifts above this never auto-apply; user confirms via the realign button. */
+internal const val PLACEMENT_ANCHOR_MACRO_BLOCKED_M = 0.08f
+/** Stable frames required before auto-applying a small (3–8 cm) post-freeze correction. */
+internal const val PLACEMENT_ANCHOR_SMALL_AUTO_CONFIRM_FRAMES = 2
+internal const val PLACEMENT_ANCHOR_CONFIRM_FRAMES = 3
+internal const val PLACEMENT_ANCHOR_SIGNATURE_TOLERANCE_M = 0.015f
+/** Legacy recovery window; instability latch below is the primary realign trigger. */
+internal const val PLACEMENT_ANCHOR_RECOVERY_CONTEXT_SECONDS = 30.0
 internal const val PLACEMENT_FLOOR_BAND_TOLERANCE_M = 0.10f
 internal const val PLACEMENT_HIT_STALE_MS = 700
 internal const val PLACEMENT_RENDER_RETICLE_MIN_INTERVAL_SECONDS = 1.0 / 120.0
@@ -64,6 +75,17 @@ internal fun formatTapFrameAgeLabel(tapFrameAgeMs: Int, lastReticleAtSeconds: Do
 
 internal fun formatTapDeltaLabel(tapDeltaCm: Float): String =
     if (tapDeltaCm <= 0f) "-" else "${(tapDeltaCm * 10f).roundToInt() / 10.0} cm"
+
+internal fun formatAnchorCorrectionLabel(
+    stateLabel: String,
+    rootDeltaCm: Float,
+    displayDeltaCm: Float
+): String {
+    val rootPart = if (rootDeltaCm > 0f) "r:${(rootDeltaCm * 10f).roundToInt() / 10.0}" else null
+    val displayPart = if (displayDeltaCm > 0f) "d:${(displayDeltaCm * 10f).roundToInt() / 10.0}" else null
+    val deltas = listOfNotNull(rootPart, displayPart).joinToString(" ")
+    return if (deltas.isEmpty()) stateLabel else "$stateLabel $deltas"
+}
 
 internal fun formatReticleHitAgeLabel(ageMs: Int): String =
     if (ageMs <= 0) "n/a" else "$ageMs ms"

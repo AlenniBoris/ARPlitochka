@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,6 +41,12 @@ actual fun IosArScreen(onBack: () -> Unit) {
     val trackingStateName = model.trackingStateName
     val planeDebugMetrics = model.planeDebugMetrics
     val placementHint = model.placementHint
+    val showContourRealignButton = model.showContourRealignButton
+    val contourRealignPrompt = if (showContourRealignButton) {
+        "Контур мог сместиться — нажмите «Выровнять», если точки не на полу"
+    } else {
+        null
+    }
 
     DisposableEffect(model) {
         onDispose {
@@ -64,6 +72,7 @@ actual fun IosArScreen(onBack: () -> Unit) {
             statusText = contourState.trackingStatus.toIosText(),
             instructionText = when {
                 contourState.snappedPointIndex != null -> "Отведите прицел от точки"
+                contourRealignPrompt != null -> contourRealignPrompt
                 else -> placementHint ?: contourState.instruction.toIosText()
             },
             detailText = contourState.toStatusDetailText(),
@@ -77,6 +86,21 @@ actual fun IosArScreen(onBack: () -> Unit) {
             isActive = contourState.hasCenterHit && contourState.showContourActions,
             state = contourState.toReticleState(placementHint, planeDebugMetrics.placementStatus)
         )
+
+        if (showContourRealignButton && contourState.showContourActions) {
+            Button(
+                onClick = { coordinator.applyContourRealignment() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFF9800),
+                    contentColor = Color.White
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 196.dp)
+            ) {
+                Text("Выровнять контур")
+            }
+        }
 
         if (contourState.showContourActions) {
             ArContourActionButtons(
@@ -127,6 +151,7 @@ actual fun IosArScreen(onBack: () -> Unit) {
                     "Hit Y" to planeDebugMetrics.hitYLabel,
                     "Largest plane" to "${(planeDebugMetrics.largestPlaneAreaM2 * 100).roundToInt() / 100.0} m²",
                     "Reloc" to planeDebugMetrics.relocLabel,
+                    "Anchor corr" to planeDebugMetrics.anchorCorrectionLabel,
                     "Cull" to planeDebugMetrics.cullLabel
                 ),
                 modifier = Modifier

@@ -27,6 +27,9 @@ internal class IosArScreenModel {
     var placementHint by mutableStateOf<String?>(null)
         private set
 
+    var showContourRealignButton by mutableStateOf(false)
+        private set
+
     private val floorArController = FloorArController(
         onStateChanged = { contourState = it }
     )
@@ -35,7 +38,8 @@ internal class IosArScreenModel {
         floorArController = floorArController,
         onTrackingNameChanged = { trackingStateName = it },
         onPlaneDebugMetricsChanged = { planeDebugMetrics = it },
-        onPlacementHintChanged = { placementHint = it }
+        onPlacementHintChanged = { placementHint = it },
+        onContourRealignAvailableChanged = { showContourRealignButton = it }
     )
 
     fun pause() {

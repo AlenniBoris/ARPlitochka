@@ -41,7 +41,8 @@ internal class IosArSessionCoordinator(
     private val floorArController: FloorArController,
     private val onTrackingNameChanged: (String) -> Unit,
     private val onPlaneDebugMetricsChanged: (IosPlaneDebugMetrics) -> Unit,
-    private val onPlacementHintChanged: (String?) -> Unit
+    private val onPlacementHintChanged: (String?) -> Unit,
+    private val onContourRealignAvailableChanged: (Boolean) -> Unit
 ) : NSObject(), ARSCNViewDelegateProtocol, ARSessionDelegateProtocol {
 
     private var sceneView: ARSCNView? = null
@@ -89,6 +90,9 @@ internal class IosArSessionCoordinator(
     private var rendererNodeCallbackWindowStartSeconds: Double = 0.0
     private var rendererNodeCallbackCount: Int = 0
     private var rendererNodeCallbackHz: Int = 0
+    private var placementAnchorTrackingWasUnstable: Boolean = false
+    private var placementAnchorHadInstability: Boolean = false
+    private var placementAnchorRecoveryContextUntilSeconds: Double = 0.0
 
     fun attach(sceneView: ARSCNView) {
         val now = currentTimeSeconds()
@@ -125,6 +129,9 @@ internal class IosArSessionCoordinator(
         placementUiFrameCounter = 0
         lastPlacementRenderReticleSeconds = 0.0
         lastPlacementPatchSmoothSeconds = 0.0
+        placementAnchorTrackingWasUnstable = false
+        placementAnchorHadInstability = false
+        placementAnchorRecoveryContextUntilSeconds = 0.0
         scanOverlaySyncCounter = 0
         scanAnchorNodeUpdateCounter = 0
         rendererNodeCallbackWindowStartSeconds = now
@@ -173,6 +180,37 @@ internal class IosArSessionCoordinator(
         publishScanResetUiSnapshot()
     }
 
+    fun applyContourRealignment() {
+        val view = sceneView ?: return
+        val frame = view.session.currentFrame ?: return
+        if (!anchorStore.applyManualMacroRealignment(frame)) return
+        placementAnchorHadInstability = false
+        val sectionFloorY = anchorStore.anchoredFloorY(frame) ?: workingFloorY
+        sectionFloorY?.let { workingFloorY = it }
+        val snapshot = FloorFrameSnapshot(
+            isTracking = isSessionTracking,
+            horizontalPlaneCount = 1,
+            selectedArea = workingFloorAreaM2,
+            hasCenterHit = liveReticlePoint != null,
+            isFloorDetected = isSessionTracking && liveReticlePoint != null,
+            currentHitPoint = liveReticlePoint,
+            focusedLabel = "placement",
+            largestPlaneAreaM2 = workingFloorAreaM2
+        )
+        floorArController.onFrame(
+            snapshot,
+            anchorStore.placedPoints(
+                frame = frame,
+                sectionFloorY = sectionFloorY,
+                trackingStable = isPlacementAnchorTrackingStable(frame),
+                hadTrackingInstability = placementAnchorHadInstability
+            )
+        )
+        clearPlacementAnchorInstabilityIfSettled(frame)
+        publishContourRealignAvailability()
+        syncContourRenderer()
+    }
+
     fun dispatchEvent(event: FloorArEvent) {
         if (event == FloorArEvent.AddPoint) {
             handleAddPointTap()
@@ -188,6 +226,9 @@ internal class IosArSessionCoordinator(
                 workingFloorAreaM2 = 0f
                 smoothedPlacementPatchPoint = null
                 lastPlacementPatchSmoothSeconds = 0.0
+                placementAnchorTrackingWasUnstable = false
+        placementAnchorHadInstability = false
+        placementAnchorRecoveryContextUntilSeconds = 0.0
                 anchorStore.setSectionPlaneAnchorId(null)
                 placementFreezeApplied = false
                 planeSurfaceRenderer.exitPlacementHitOnlyMode()
@@ -195,6 +236,7 @@ internal class IosArSessionCoordinator(
             }
             updateContourModeFromState()
             syncContourRenderer()
+            publishContourRealignAvailability()
             return
         }
         val effects = floorArController.onEvent(event)
@@ -204,6 +246,9 @@ internal class IosArSessionCoordinator(
             workingFloorAreaM2 = 0f
             smoothedPlacementPatchPoint = null
             lastPlacementPatchSmoothSeconds = 0.0
+            placementAnchorTrackingWasUnstable = false
+        placementAnchorHadInstability = false
+        placementAnchorRecoveryContextUntilSeconds = 0.0
             anchorStore.setSectionPlaneAnchorId(null)
             placementFreezeApplied = false
             planeSurfaceRenderer.exitPlacementHitOnlyMode()
@@ -211,6 +256,7 @@ internal class IosArSessionCoordinator(
         }
         updateContourModeFromState()
         syncContourRenderer()
+        publishContourRealignAvailability()
     }
 
     private fun handleAddPointTap() {
@@ -234,7 +280,12 @@ internal class IosArSessionCoordinator(
             onPlacementHintChanged("Дождитесь попадания в плоскость под прицелом")
             return
         }
-        val sectionFloorY = workingFloorY ?: state.placedPoints.firstOrNull()?.position?.yMeters
+        val sectionFloorY = anchorStore.anchoredFloorY(frame)
+            ?: workingFloorY
+            ?: state.placedPoints.firstOrNull()?.position?.yMeters
+        if (sectionFloorY != null) {
+            workingFloorY = sectionFloorY
+        }
         val freshHit = if (sectionFloorY != null) {
             view.resolveWorkingFloorPlacementHit(frame = frame, sectionFloorY = sectionFloorY)
         } else {
@@ -496,22 +547,27 @@ internal class IosArSessionCoordinator(
     }
 
     override fun session(session: ARSession, cameraDidChangeTrackingState: ARCamera) {
+        val now = currentTimeSeconds()
         when (cameraDidChangeTrackingState.trackingState) {
             ARTrackingState.ARTrackingStateNotAvailable -> {
                 isSessionTracking = false
                 onTrackingNameChanged("NOT_AVAILABLE")
+                markPlacementAnchorTrackingUnstable()
             }
             ARTrackingState.ARTrackingStateLimited -> {
                 isSessionTracking = true
                 onTrackingNameChanged("LIMITED")
+                markPlacementAnchorTrackingUnstable()
             }
             ARTrackingState.ARTrackingStateNormal -> {
                 isSessionTracking = true
                 onTrackingNameChanged("TRACKING")
+                onPlacementAnchorTrackingRecovered(now)
             }
             else -> {
                 isSessionTracking = true
                 onTrackingNameChanged("UNKNOWN")
+                markPlacementAnchorTrackingUnstable()
             }
         }
         if (floorArController.currentState().placedPoints.isEmpty()) {
@@ -523,13 +579,17 @@ internal class IosArSessionCoordinator(
 
     override fun sessionWasInterrupted(session: ARSession) {
         relocationController.onSessionInterrupted()
+        markPlacementAnchorTrackingUnstable()
         if (floorArController.currentState().placedPoints.isEmpty()) {
             planeSurfaceRenderer.requestOverlayTransformDebounce()
         }
     }
 
     override fun sessionInterruptionEnded(session: ARSession) {
-        if (floorArController.currentState().placedPoints.isNotEmpty()) return
+        if (floorArController.currentState().placedPoints.isNotEmpty()) {
+            onPlacementAnchorTrackingRecovered(currentTimeSeconds())
+            return
+        }
         if (!relocationController.onInterruptionEnded()) return
         performScanReset(session, RelocationResetRequest(reason = "interrupt-end"))
     }
@@ -633,24 +693,34 @@ internal class IosArSessionCoordinator(
         state: FloorContourUiState,
         sectionFloorY: Float?
     ) {
+        val trackingStable = isPlacementAnchorTrackingStable(frame)
+        if (!trackingStable) {
+            markPlacementAnchorTrackingUnstable()
+        } else {
+            onPlacementAnchorTrackingRecovered(frameStartedAt)
+        }
+        val effectiveSectionFloorY = anchorStore.anchoredFloorY(frame) ?: sectionFloorY
+        if (effectiveSectionFloorY != null) {
+            workingFloorY = effectiveSectionFloorY
+        }
         if (!placementFreezeApplied) {
             planeSurfaceRenderer.enterPlacementScanFreeze(view.scene?.rootNode)
             placementFreezeApplied = true
         }
         if (state.showPlaneDots) {
-            updatePlacementReticle(view, frame, sectionFloorY, frameStartedAt)
+            updatePlacementReticle(view, frame, effectiveSectionFloorY, frameStartedAt)
             syncPlacementExplorePatch(view, liveReticleHit)
         }
         val placementStatus = placementStatusLabel(
             liveReticleHit,
-            sectionFloorY,
+            effectiveSectionFloorY,
             hitAgeMs = computeHitAgeMs(frameStartedAt, liveReticleResolvedSeconds)
         )
         val hasCenterHit = liveReticlePoint != null && placementStatus in PLACEABLE_STATUSES
         val selectedArea = workingFloorAreaM2
 
         placementUiFrameCounter++
-        if (placementUiFrameCounter % 2 == 0) {
+        if (placementUiFrameCounter % PLACEMENT_ANCHORED_POINTS_SYNC_INTERVAL_FRAMES == 0) {
             val snapshot = FloorFrameSnapshot(
                 isTracking = isSessionTracking,
                 horizontalPlaneCount = 1,
@@ -661,8 +731,26 @@ internal class IosArSessionCoordinator(
                 focusedLabel = "placement",
                 largestPlaneAreaM2 = selectedArea
             )
-            floorArController.onFrame(snapshot, anchorStore.placedPoints(frame, sectionFloorY))
+            floorArController.onFrame(
+                snapshot,
+                anchorStore.placedPoints(
+                    frame = frame,
+                    sectionFloorY = effectiveSectionFloorY,
+                    trackingStable = trackingStable,
+                    hadTrackingInstability = placementAnchorHadInstability
+                )
+            )
+        } else if (state.placedPoints.isNotEmpty()) {
+            anchorStore.placedPoints(
+                frame = frame,
+                sectionFloorY = effectiveSectionFloorY,
+                trackingStable = trackingStable,
+                hadTrackingInstability = placementAnchorHadInstability
+            )
         }
+
+        clearPlacementAnchorInstabilityIfSettled(frame)
+        publishContourRealignAvailability()
 
         val snapActive = floorArController.currentState().snappedPointIndex != null
         if (!snapActive) {
@@ -697,7 +785,7 @@ internal class IosArSessionCoordinator(
                 cameraWorldPosition = frame.cameraWorldPosition()
             ),
             largestPlaneAreaM2 = selectedArea,
-            sectionFloorY = sectionFloorY,
+            sectionFloorY = effectiveSectionFloorY,
             hitAgeMs = computeHitAgeMs(frameStartedAt, liveReticleResolvedSeconds),
             placementScanFrozen = true
         )
@@ -709,6 +797,7 @@ internal class IosArSessionCoordinator(
         if (!state.showPlaneDots || state.placedPoints.isEmpty() || state.isFinalized) return
 
         val sectionFloorY = workingFloorY ?: state.placedPoints.firstOrNull()?.position?.yMeters ?: return
+        workingFloorY = sectionFloorY
         if (renderTimeSeconds - lastPlacementRenderReticleSeconds < PLACEMENT_RENDER_RETICLE_MIN_INTERVAL_SECONDS) {
             return
         }
@@ -1002,6 +1091,41 @@ internal class IosArSessionCoordinator(
         contourRenderer.syncIfChanged(floorArController.currentState())
     }
 
+    private fun isPlacementAnchorTrackingStable(frame: ARFrame): Boolean =
+        frame.isTrackingNormal() &&
+            !relocationController.isRelocalizing() &&
+            cameraFrameGapMs < TRACKING_DEGRADED_CAMERA_GAP_MS
+
+    private fun markPlacementAnchorTrackingUnstable() {
+        if (floorArController.currentState().placedPoints.isEmpty()) return
+        placementAnchorTrackingWasUnstable = true
+        placementAnchorHadInstability = true
+    }
+
+    private fun clearPlacementAnchorInstabilityIfSettled(frame: ARFrame) {
+        if (!placementAnchorHadInstability) return
+        if (!isPlacementAnchorTrackingStable(frame)) return
+        if (anchorStore.canManuallyRealign()) return
+        placementAnchorHadInstability = false
+    }
+
+    private fun onPlacementAnchorTrackingRecovered(nowSeconds: Double) {
+        if (floorArController.currentState().placedPoints.isEmpty()) return
+        if (!placementAnchorTrackingWasUnstable) return
+        placementAnchorTrackingWasUnstable = false
+        val recoveryUntil = nowSeconds + PLACEMENT_ANCHOR_RECOVERY_CONTEXT_SECONDS
+        if (recoveryUntil > placementAnchorRecoveryContextUntilSeconds) {
+            placementAnchorRecoveryContextUntilSeconds = recoveryUntil
+        }
+    }
+
+    private fun isPlacementAnchorRecoveryContextActive(nowSeconds: Double): Boolean =
+        nowSeconds < placementAnchorRecoveryContextUntilSeconds
+
+    private fun publishContourRealignAvailability() {
+        onContourRealignAvailableChanged(anchorStore.canManuallyRealign())
+    }
+
     private fun trackCameraFrameGap(arFrameTimestamp: Double) {
         lastArFrameTimestamp?.let { previousTimestamp ->
             cameraFrameGapMs = ((arFrameTimestamp - previousTimestamp) * 1000.0)
@@ -1180,7 +1304,14 @@ internal class IosArSessionCoordinator(
                 hitYLabel = hitYLabel,
                 largestPlaneAreaM2 = scanStats.largestPlaneAreaM2,
                 relocLabel = relocationController.relocLabel(),
-                cullLabel = scanStats.cullStats.debugLabel()
+                cullLabel = scanStats.cullStats.debugLabel(),
+                anchorCorrectionLabel = formatAnchorCorrectionLabel(
+                    stateLabel = anchorStore.correctionDebug().stateLabel,
+                    rootDeltaCm = anchorStore.correctionDebug().rootDeltaCm,
+                    displayDeltaCm = anchorStore.correctionDebug().displayDeltaCm
+                ),
+                anchorRootDeltaCm = anchorStore.correctionDebug().rootDeltaCm,
+                anchorDisplayDeltaCm = anchorStore.correctionDebug().displayDeltaCm
             )
         )
     }

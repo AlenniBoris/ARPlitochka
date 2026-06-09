@@ -37,5 +37,8 @@ internal data class IosPlaneDebugMetrics(
     val hitYLabel: String = "-",
     val largestPlaneAreaM2: Float = 0f,
     val relocLabel: String = "ok",
-    val cullLabel: String = "d:0/e:0"
+    val cullLabel: String = "d:0/e:0",
+    val anchorCorrectionLabel: String = "n/a",
+    val anchorRootDeltaCm: Float = 0f,
+    val anchorDisplayDeltaCm: Float = 0f
 )
