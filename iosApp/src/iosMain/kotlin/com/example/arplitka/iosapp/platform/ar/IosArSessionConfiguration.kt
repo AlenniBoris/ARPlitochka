@@ -1,4 +1,4 @@
-package com.example.arplitka.iosapp
+package com.example.arplitka.iosapp.platform.ar
 
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.ARKit.ARPlaneDetectionHorizontal

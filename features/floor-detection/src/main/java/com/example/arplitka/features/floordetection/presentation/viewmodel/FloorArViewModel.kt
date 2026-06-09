@@ -269,7 +269,7 @@ class FloorArViewModel @Inject constructor(
     
     companion object {
         private const val CLOSE_THRESHOLD_M = 0.10f
-        private const val SNAP_THRESHOLD_M = 0.05f
+        private const val SNAP_THRESHOLD_M = 0.02f
         private const val MAX_POINT_HEIGHT_DELTA_M = 0.08f
     }
 }

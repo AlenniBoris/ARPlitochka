@@ -1,4 +1,4 @@
-package com.example.arplitka.iosapp
+package com.example.arplitka.iosapp.presentation.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

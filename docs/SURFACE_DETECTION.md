@@ -77,7 +77,7 @@
 | Прицел | `CenterReticle` активен при `hasCenterHit && !isContourConfirmed` |
 | «+» | Точка в `currentHitResult`, anchor на hit pose |
 | Линии | Между точками; preview к прицелу |
-| Snap / close | Snap 0.05 m; замыкание к первой 0.10 m (≥3 точек) |
+| Snap / close | Snap 0.02 m; замыкание к первой 0.10 m (≥3 точек) |
 | OK (замкнут) | `confirmContour()` → синяя заливка, plane renderer off |
 | Плитка | Toggle, смена типа, поворот 0°/45°/90°/135° |
 | Стабильность Y | Контур/линии/заливка на **Y первой точки** (`sectionFloorY`), чтобы точки не «плыли» при drift anchor |
@@ -441,6 +441,68 @@ flowchart TD
 
 Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 
+### iOS Debug Panel — справочник полей
+
+Панель видна только в **debug** build (`isDebugBuild()`). Обновляется ~4 раза в секунду; **Delegate Hz** пересчитывается раз в 1 с (скользящее окно).
+
+#### Производительность (главное для диагностики лагов)
+
+| Поле | Что измеряет | Норма / тревога |
+|------|----------------|-----------------|
+| **Phase** | Этап сессии: `scan` (0 точек), `placement` (контур в работе), `contour` (сетка скрыта после OK) | — |
+| **Perf** | Авто-вывод узкого места по трём метрикам ниже | `ok` — хорошо; `delegate blocked` / `handler blocked` — плохо |
+| **Delegate Hz** | Сколько раз в секунду **завершился** наш `ARSessionDelegate.session(_:didUpdateFrame:)` | ≈ `1000 / Camera gap`. Если Camera gap ~33 ms, а Delegate Hz = 1 — обработчик не успевает |
+| **Camera gap** | Интервал между соседними `ARFrame.timestamp` (частота **доставки** кадров ARKit) | ~33 ms ≈ 30 Hz; ~16 ms ≈ 60 Hz; >200 ms — редкие кадры от ARKit |
+| **Frame work** | Wall-clock время **последнего** полного прохода `didUpdateFrame` (hit-test, overlays, контур) | <33 ms — ок для 30 Hz; >100 ms — тяжело; >250 ms — блокирует поток |
+
+**Как читать Perf:**
+
+| Значение Perf | Значит |
+|---------------|--------|
+| `warming up` | Первый кадр, метрикам нужна 1–2 с |
+| `ok (delegate ~Nhz)` | Камера и обработчик согласованы |
+| `handler heavy (Nms)` | Обработчик тяжёлый, но ещё не критично |
+| `handler blocked (Nms)` | Один кадр обрабатывался >250 ms |
+| `delegate blocked (camera ok)` | ARKit шлёт кадры нормально, мы успеваем ~1 Hz |
+| `delegate behind camera` | Кадры приходят чаще, чем мы их обрабатываем |
+| `camera sparse (~Nhz)` | Мало кадров от ARKit (трекинг / сессия) |
+
+> **Важно:** старое поле **«Plane FPS»** удалено — оно показывало Delegate Hz, но называлось так, будто это FPS отрисовки сетки. Это вводило в заблуждение.
+
+Связанный чеклист прогона: [IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md §7](./IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md#7-шаг-1--диагностика-на-устройстве-перед-фазой-a).
+
+#### Поверхность и hit
+
+| Поле | Что значит |
+|------|------------|
+| **Plane renderer** | Режим визуализации: `scan-multi-surface`, `continuous-floor`, `continuous-floor+explore`, `contour-hidden`, … |
+| **Surface overlays** | Число видимых белых сеток (scan overlay + reticle/placement patch) |
+| **Planes** | Число horizontal plane anchors в кадре |
+| **Focused** | Какая плоскость в фокусе под прицелом (`surface/1`, `patch/1`, `No`, …) |
+| **Reticle area** | Площадь plane anchor под прицелом (m²), только при confirmed |
+| **Largest plane** | Площадь крупнейшего кэшированного plane (m²) |
+| **Center hit** | Есть ли hit под прицелом для UI/кнопки «+» |
+| **Hit path** | Источник hit: `c:hit/p:est` = confirmed hitTest, preview estimated, … |
+| **Detect gate** | `confirmed` или `searching` — строгий статус «обнаружено» |
+| **Scan patch** | Scan: `on`, `off`, `search-on`; placement: `explore-on`, `fallback-on` |
+| **Placement** | В placement mode: `valid`, `preview`, `stale`, `height`, `no-hit`, … |
+| **Hit age** | Возраст последнего center hit (мс); >700 ms → `stale` |
+| **Tap frame age** | Сколько мс прошло с последнего `didUpdateFrame`; >150 ms → тап блокируется; суффикс `(stale)` |
+| **Tap Δ** | Расхождение preview hit и поставленной точки при последнем тапе (см); >5 см — подозрительно |
+| **Track quality** | `ok` / `degraded` / `debounce` / `degraded+debounce` — деградация трекинга и debounce transform |
+| **Hit Y** | Высота hit: `raw` / `sec` (уровень контура) / `d` (дельта) |
+| **Cull** | Статистика отсечения overlays: `d:` по дистанции, `e:` elevated/classification |
+| **Reloc** | Состояние relocation / auto reset сессии |
+| **AR features** | Включённые фичи сессии (planes, mesh, …) |
+
+#### Контур
+
+| Поле | Что значит |
+|------|------------|
+| **Tracking** | `TRACKING`, `LIMITED`, `NOT_AVAILABLE` |
+| **Points** | Число поставленных точек контура |
+| **Closed** | Контур замкнут (`Yes` / `No`) |
+
 ### Чеклист регрессии iOS (поверхность + контур)
 
 **Базовый (contour + scan):**
@@ -453,7 +515,7 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | 3 | Первая зелёная точка | **Нет** фриза ~6 с; `contour-hidden` |
 | 4 | 2–5 точек + undo | Точки под прицелом (confirmed), линии между точками |
 | 5 | Замыкание / OK | Контур стабилен, без preview-линии к прицелу |
-| 6 | Plane FPS | Без просадок в contour mode |
+| 6 | Delegate Hz / Perf | В scan и placement: Perf ≠ `delegate blocked`; Frame work <100 ms |
 | 7 | Reticle в scan | Активен при confirmed (фаза A.2) |
 | 8 | Reticle в contour | Только при **confirmed** |
 | 9 | Area ≥ 0.15 под прицелом | Status «обнаружено» |
@@ -517,7 +579,7 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | Константа | Значение |
 |-----------|----------|
 | `CLOSE_THRESHOLD_M` | 0.10 m (замыкание к первой) |
-| `SNAP_THRESHOLD_M` | 0.05 m |
+| `SNAP_THRESHOLD_M` | 0.02 m |
 | `MAX_POINT_HEIGHT_DELTA_M` | 0.08 m |
 
 ### 3D-визуализация (`FloorArRenderConfig.kt`)

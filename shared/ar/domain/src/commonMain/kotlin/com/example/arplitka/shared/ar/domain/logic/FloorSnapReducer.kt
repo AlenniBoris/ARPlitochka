@@ -7,16 +7,21 @@ object FloorSnapReducer {
     fun applySnap(state: FloorContourUiState): FloorContourUiState {
         if (
             state.isFinalized ||
-            !state.hasCenterHit ||
             state.currentHitPoint == null ||
             state.placedPoints.isEmpty()
         ) {
             return state.copy(snappedPointIndex = null, isPolygonClosed = false)
         }
 
+        val canSnap = state.hasCenterHit || state.placedPoints.size >= 2
+        if (!canSnap) {
+            return state.copy(snappedPointIndex = null, isPolygonClosed = false)
+        }
+
         val current = state.currentHitPoint
         val first = state.placedPoints.first().position
-        val distToFirst = FloorGeometry.distancePlanar(first, current)
+        // Android parity: 3D distance between live reticle pose and first point pose.
+        val distToFirst = FloorGeometry.distance(first, current)
 
         if (state.placedPoints.size >= 3 && distToFirst < FloorGeometry.CLOSE_THRESHOLD_M) {
             return state.copy(
@@ -35,7 +40,7 @@ object FloorSnapReducer {
 
         for (index in 1 until state.placedPoints.size) {
             val point = state.placedPoints[index].position
-            if (FloorGeometry.distancePlanar(point, current) < FloorGeometry.SNAP_THRESHOLD_M) {
+            if (FloorGeometry.distance(point, current) < FloorGeometry.SNAP_THRESHOLD_M) {
                 return state.copy(
                     snappedPointIndex = index,
                     isPolygonClosed = false
@@ -72,17 +77,35 @@ object FloorContourReducer {
         state: FloorContourUiState,
         candidate: ArPoint3D
     ): AddPointValidation {
-        rejectReason(state, candidate)?.let { return AddPointValidation.Rejected(it) }
+        rejectReason(state, candidate, requireLiveCenterHit = true)?.let {
+            return AddPointValidation.Rejected(it)
+        }
         val sectionFloorY = state.placedPoints.firstOrNull()?.position?.yMeters
         return AddPointValidation.Accepted(FloorGeometry.projectToSectionFloor(candidate, sectionFloorY))
     }
 
-    private fun rejectReason(state: FloorContourUiState, candidate: ArPoint3D): AddPointRejectReason? {
+    /** Tap-time placement: hit already resolved at tap; skip stale [FloorContourUiState.hasCenterHit]. */
+    fun validateTapPlacement(
+        state: FloorContourUiState,
+        candidate: ArPoint3D
+    ): AddPointValidation {
+        rejectReason(state, candidate, requireLiveCenterHit = false)?.let {
+            return AddPointValidation.Rejected(it)
+        }
+        val sectionFloorY = state.placedPoints.firstOrNull()?.position?.yMeters
+        return AddPointValidation.Accepted(FloorGeometry.projectToSectionFloor(candidate, sectionFloorY))
+    }
+
+    private fun rejectReason(
+        state: FloorContourUiState,
+        candidate: ArPoint3D,
+        requireLiveCenterHit: Boolean
+    ): AddPointRejectReason? {
         when {
             state.isFinalized -> return AddPointRejectReason.FINALIZED
             state.isPolygonClosed -> return AddPointRejectReason.POLYGON_CLOSED
             state.snappedPointIndex != null -> return AddPointRejectReason.SNAP_ACTIVE
-            !state.hasCenterHit -> return AddPointRejectReason.NO_HIT
+            requireLiveCenterHit && !state.hasCenterHit -> return AddPointRejectReason.NO_HIT
         }
         val last = state.placedPoints.lastOrNull()?.position
         if (last != null && FloorGeometry.distancePlanar(last, candidate) < FloorGeometry.SNAP_THRESHOLD_M) {

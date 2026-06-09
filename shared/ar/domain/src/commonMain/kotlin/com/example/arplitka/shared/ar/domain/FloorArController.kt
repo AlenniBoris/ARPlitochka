@@ -69,7 +69,7 @@ class FloorArController(
             return emptyList()
         }
 
-        return when (val validation = FloorContourReducer.validateAddPoint(state, candidate)) {
+        return when (val validation = FloorContourReducer.validateTapPlacement(state, candidate)) {
             is AddPointValidation.Accepted -> listOf(FloorArEffect.CreateAnchorAt(validation.point))
             is AddPointValidation.Rejected -> emptyList()
         }

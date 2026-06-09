@@ -1,0 +1,158 @@
+package com.example.arplitka.iosapp.presentation.screen
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.UIKitView
+import com.example.arplitka.iosapp.presentation.mapper.toIosText
+import com.example.arplitka.iosapp.presentation.mapper.toReticleState
+import com.example.arplitka.iosapp.presentation.mapper.toStatusDetailText
+import com.example.arplitka.iosapp.presentation.model.IosArScreenModel
+import com.example.arplitka.shared.ar.contracts.state.FloorArEvent
+import com.example.arplitka.shared.ui.kit.ArContourActionButtons
+import com.example.arplitka.shared.ui.kit.ArTopBar
+import com.example.arplitka.shared.ui.kit.CenterReticle
+import com.example.arplitka.shared.ui.kit.DebugPanel
+import com.example.arplitka.shared.ui.kit.StatusPanel
+import com.example.arplitka.shared.ui.kit.isDebugBuild
+import kotlinx.cinterop.ExperimentalForeignApi
+import platform.ARKit.ARSCNView
+import platform.CoreGraphics.CGRectMake
+import kotlin.math.roundToInt
+
+@OptIn(ExperimentalForeignApi::class)
+@Composable
+actual fun IosArScreen(onBack: () -> Unit) {
+    val model = remember { IosArScreenModel() }
+    val coordinator = model.coordinator
+    val contourState = model.contourState
+    val trackingStateName = model.trackingStateName
+    val planeDebugMetrics = model.planeDebugMetrics
+    val placementHint = model.placementHint
+
+    DisposableEffect(model) {
+        onDispose {
+            model.pause()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        UIKitView(
+            factory = {
+                val sceneView = ARSCNView(frame = CGRectMake(0.0, 0.0, 0.0, 0.0))
+                coordinator.attach(sceneView)
+                sceneView
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        StatusPanel(
+            statusText = contourState.trackingStatus.toIosText(),
+            instructionText = when {
+                contourState.snappedPointIndex != null -> "Отведите прицел от точки"
+                else -> placementHint ?: contourState.instruction.toIosText()
+            },
+            detailText = contourState.toStatusDetailText(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 16.dp, vertical = 36.dp)
+        )
+
+        CenterReticle(
+            modifier = Modifier.align(Alignment.Center),
+            isActive = contourState.hasCenterHit && contourState.showContourActions,
+            state = contourState.toReticleState(placementHint, planeDebugMetrics.placementStatus)
+        )
+
+        if (contourState.showContourActions) {
+            ArContourActionButtons(
+                hasCenterHit = contourState.hasCenterHit || contourState.isPolygonClosed,
+                isPolygonClosed = contourState.isPolygonClosed,
+                hasPoints = contourState.placedPoints.isNotEmpty(),
+                onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
+                onUndoPoint = { coordinator.dispatchEvent(FloorArEvent.UndoPoint) },
+                addContentDescription = "Добавить точку",
+                undoContentDescription = "Отменить",
+                okContentDescription = "Готово",
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+
+        if (isDebugBuild()) {
+            DebugPanel(
+                debugLines = mapOf(
+                    "Planes" to contourState.horizontalPlaneCount.toString(),
+                    "Focused" to contourState.focusedLabel,
+                    "Reticle area" to "${(contourState.selectedArea * 100).roundToInt() / 100.0} m²",
+                    "Tracking" to trackingStateName,
+                    "Center hit" to if (contourState.hasCenterHit) "Yes" else "No",
+                    "Points" to contourState.placedPoints.size.toString(),
+                    "Closed" to if (contourState.isPolygonClosed) "Yes" else "No",
+                    "Phase" to planeDebugMetrics.sessionPhase,
+                    "Perf" to planeDebugMetrics.perfDiagnosis,
+                    "Plane renderer" to planeDebugMetrics.rendererMode,
+                    "Delegate Hz" to planeDebugMetrics.sessionDelegateHz.toString(),
+                    "Camera gap" to planeDebugMetrics.cameraFrameGapLabel,
+                    "Delegate gap" to planeDebugMetrics.delegateWallGapLabel,
+                    "Frame work" to "${planeDebugMetrics.frameHandleMs} ms",
+                    "Renderer Hz" to planeDebugMetrics.rendererNodeCallbackHz.toString(),
+                    "Surface overlays" to planeDebugMetrics.overlayCount.toString(),
+                    "AR features" to planeDebugMetrics.sessionFeatures,
+                    "Hit path" to planeDebugMetrics.hitPath,
+                    "Detect gate" to planeDebugMetrics.detectGate,
+                    "Scan patch" to planeDebugMetrics.scanPatch,
+                    "Snap" to if (contourState.snappedPointIndex != null) "yes" else "no",
+                    "Placement" to planeDebugMetrics.placementStatus,
+                    "Hit age" to "${planeDebugMetrics.hitAgeMs} ms",
+                    "Reticle age" to planeDebugMetrics.reticleHitAgeLabel,
+                    "Reticle src" to planeDebugMetrics.reticleSourceLabel,
+                    "Tap frame age" to planeDebugMetrics.tapFrameAgeLabel,
+                    "Tap src" to planeDebugMetrics.tapSourceLabel,
+                    "Tap Δ" to planeDebugMetrics.tapDeltaLabel,
+                    "Track quality" to planeDebugMetrics.trackingQualityLabel,
+                    "Hit Y" to planeDebugMetrics.hitYLabel,
+                    "Largest plane" to "${(planeDebugMetrics.largestPlaneAreaM2 * 100).roundToInt() / 100.0} m²",
+                    "Reloc" to planeDebugMetrics.relocLabel,
+                    "Cull" to planeDebugMetrics.cullLabel
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(12.dp)
+                    .padding(bottom = 100.dp)
+            )
+        }
+
+        ArTopBar(
+            onBack = onBack,
+            modifier = Modifier.align(Alignment.TopStart)
+        )
+
+        if (contourState.placedPoints.isEmpty()) {
+            TextButton(
+                onClick = { coordinator.rescanSession() },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 36.dp, end = 12.dp)
+            ) {
+                Text(
+                    text = "Пересканировать",
+                    color = Color.White
+                )
+            }
+        }
+    }
+}

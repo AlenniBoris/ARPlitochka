@@ -26,7 +26,7 @@ class FloorContourReducerTest {
     @Test
     fun tryAddPoint_rejectsWhenTooCloseToLastPoint() {
         val state = stateWithPoints(0f to 0f).copy(
-            currentHitPoint = point(0.02f, 0f, 0.02f)
+            currentHitPoint = point(0.01f, 0f, 0.01f)
         )
         assertNull(FloorContourReducer.tryAddPoint(state))
     }
@@ -46,6 +46,16 @@ class FloorContourReducerTest {
             currentHitPoint = point(2f, 0.2f, 0f)
         )
         assertNull(FloorContourReducer.tryAddPoint(state))
+    }
+
+    @Test
+    fun validateTapPlacement_acceptsWithoutLiveCenterHit() {
+        val state = stateWithPoints(0f to 0f).copy(
+            hasCenterHit = false,
+            currentHitPoint = null
+        )
+        val result = FloorContourReducer.validateTapPlacement(state, point(1f, 0f, 0f))
+        assertEquals(point(1f, 0f, 0f), assertIs<AddPointValidation.Accepted>(result).point)
     }
 
     @Test
@@ -70,11 +80,27 @@ class FloorContourReducerTest {
     }
 
     @Test
+    fun snapReducer_closesWithoutLiveCenterHitWhenContourExists() {
+        val state = stateWithPoints(
+            0f to 0f,
+            1f to 0f,
+            1f to 1f
+        ).copy(
+            hasCenterHit = false,
+            currentHitPoint = point(0.05f, 0f, 0.05f)
+        )
+
+        val snapped = FloorSnapReducer.applySnap(state)
+        assertEquals(true, snapped.isPolygonClosed)
+        assertEquals(0, snapped.snappedPointIndex)
+    }
+
+    @Test
     fun snapReducer_snapsToExistingPoint() {
         val state = stateWithPoints(
             0f to 0f,
             1f to 0f
-        ).copy(currentHitPoint = point(1f, 0f, 0.03f))
+        ).copy(currentHitPoint = point(1f, 0f, 0.015f))
 
         val snapped = FloorSnapReducer.applySnap(state)
         assertEquals(false, snapped.isPolygonClosed)

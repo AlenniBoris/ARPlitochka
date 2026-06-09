@@ -1,16 +1,26 @@
-package com.example.arplitka.iosapp
+package com.example.arplitka.iosapp.platform.render
 
+import com.example.arplitka.iosapp.platform.ar.ArWorldScnMatrix
+import com.example.arplitka.iosapp.platform.ar.CenterPlaneHit
+import com.example.arplitka.iosapp.platform.ar.confirmedWorldFloorPoint
+import com.example.arplitka.iosapp.platform.ar.confirmedWorldScnMatrix
+import com.example.arplitka.iosapp.platform.ar.previewWorldFloorPoint
+import com.example.arplitka.iosapp.platform.ar.previewWorldScnMatrix
 import com.example.arplitka.iosapp.bridge.PG_PLANE_CLASSIFICATION_FLOOR
 import com.example.arplitka.iosapp.bridge.PG_PLANE_CLASSIFICATION_TABLE
 import com.example.arplitka.iosapp.bridge.PG_PLANE_CLASSIFICATION_SEAT
 import com.example.arplitka.iosapp.bridge.pg_create_grid_line_geometry
-import com.example.arplitka.iosapp.bridge.pg_create_polygon_grid_line_geometry
+import com.example.arplitka.iosapp.bridge.pg_create_polygon_grid_line_geometry_from_vertices
+import com.example.arplitka.iosapp.bridge.pg_create_world_aligned_placement_patch_grid_geometry
 import com.example.arplitka.iosapp.bridge.pg_geometry_signature
 import com.example.arplitka.iosapp.bridge.pg_plane_classification
 import com.example.arplitka.iosapp.bridge.pg_plane_is_floor_like
 import com.example.arplitka.iosapp.bridge.pg_polygon_area
 import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.useContents
+import kotlinx.cinterop.usePinned
 import platform.ARKit.ARPlaneAnchor
 import platform.CoreFoundation.CFAbsoluteTimeGetCurrent
 import platform.Foundation.NSUUID
@@ -28,12 +38,19 @@ internal const val STICKY_FLOOR_Y_RESET_M = 1.0f
 
 private const val OVERLAY_NODE_NAME = "plane-surface-overlay"
 private const val RETICLE_PATCH_NODE_NAME = "plane-surface-reticle-patch"
+private const val PLACEMENT_PATCH_NODE_NAME = "plane-placement-reticle-patch"
 private const val GRID_CELL_METERS = 0.6f
 private const val GRID_LINE_WIDTH_M = 0.015f
+/** Thinner than grid — readable zone edge without the old thick "wall box". */
+private const val GRID_BOUNDARY_LINE_WIDTH_M = 0.006f
 private const val RETICLE_SURFACE_PATCH_M = 1.5f
+private const val PLACEMENT_SURFACE_PATCH_M = 0.55f
+private const val PLACEMENT_PATCH_CELL_M = 0.18f
+private const val PLACEMENT_PATCH_LINE_WIDTH_M = 0.01f
+private const val PLACEMENT_PATCH_BOUNDARY_WIDTH_M = 0.012f
 /** Same threshold as Android / placement — overlays below this are hidden. */
 private const val MIN_RENDER_AREA_M2 = MIN_FLOOR_AREA_M2
-private const val MAX_SURFACE_OVERLAYS = 3
+private const val MAX_SURFACE_OVERLAYS = 1
 /** Planes closer than this in world Y are treated as one level — keep only the largest overlay. */
 private const val SAME_LEVEL_Y_DELTA_M = 0.10f
 private const val ELEVATED_Y_DELTA_M = SAME_LEVEL_Y_DELTA_M
@@ -45,6 +62,9 @@ private const val MAX_PLANE_BELOW_CAMERA_M = 3.5f
 private const val MAX_RETICLE_ABOVE_CAMERA_M = 0.12f
 private const val FLOOR_SWITCH_AREA_RATIO = 1.18f
 private const val ANCHOR_GEOMETRY_MIN_INTERVAL_S = 0.12
+private const val GRID_ALPHA_NORMAL = 0.92
+private const val GRID_ALPHA_DEGRADED = 0.35
+private const val OVERLAY_TRANSFORM_DEBOUNCE_FRAMES = 3
 
 internal data class IosArScanSurfaceContext(
     val allowEstimatedPatch: Boolean,
@@ -82,13 +102,24 @@ internal class IosArPlaneSurfaceRenderer {
     private val overlays = mutableMapOf<NSUUID, SurfaceOverlay>()
     private val elevationLock = PlaneDotElevationLock()
     private var reticlePatchNode: SCNNode? = null
+    private var placementPatchNode: SCNNode? = null
     private var reticleMaterial: SCNMaterial? = null
+    private var placementGridMaterial: SCNMaterial? = null
     private var activeMode: GridSurfaceMode = GridSurfaceMode.HIDDEN
     private val areas = mutableMapOf<NSUUID, Float>()
     private var stickyFloorAnchorId: NSUUID? = null
     private var cachedFloorWorldY: Float? = null
     private var contourModeActive = false
+    private var placementScanFrozen = false
+    private var placementHitOnlyActive = false
+    private var overlaysPinnedToWorld = false
+    private var sectionFloorLocked = false
+    /** After lock: overlay keeps anchor XZ but never copies plane rotation (prevents post-freeze spin). */
+    private var overlayRotationFrozen = false
+    private var overlayTransformSkipFrames = 0
+    private var referenceOverlayDegraded = false
     private var lastDebugStats = ScanSurfaceDebugStats()
+    private val asyncGridBuilder = AsyncPolygonGridGeometryBuilder()
 
     fun prepare() {
         if (reticleMaterial != null) return
@@ -105,29 +136,106 @@ internal class IosArPlaneSurfaceRenderer {
             position = SCNVector3Make(0f, 0f, 0f)
             hidden = true
         }
+        placementGridMaterial = createGridLineMaterial()
+        placementPatchNode = SCNNode().apply {
+            name = PLACEMENT_PATCH_NODE_NAME
+            hidden = true
+        }
     }
 
     fun reset() {
+        asyncGridBuilder.cancelAll()
         overlays.values.forEach { it.node.removeFromParentNode() }
         overlays.clear()
         elevationLock.clearAll()
         reticlePatchNode?.removeFromParentNode()
         reticlePatchNode = null
+        placementPatchNode?.removeFromParentNode()
+        placementPatchNode = null
         reticleMaterial = null
+        placementGridMaterial = null
         activeMode = GridSurfaceMode.HIDDEN
         areas.clear()
         stickyFloorAnchorId = null
         cachedFloorWorldY = null
         contourModeActive = false
+        placementScanFrozen = false
+        placementHitOnlyActive = false
+        overlaysPinnedToWorld = false
+        sectionFloorLocked = false
+        overlayRotationFrozen = false
+        overlayTransformSkipFrames = 0
+        referenceOverlayDegraded = false
         lastDebugStats = ScanSurfaceDebugStats()
     }
 
     fun scanDebugStats(): ScanSurfaceDebugStats = lastDebugStats
 
+    fun pinCurrentOverlaysToWorldFloor(sceneRoot: SCNNode?) {
+        tryPinVisibleOverlays(sceneRoot)
+    }
+
+    fun enterPlacementHitOnlyMode() {
+        if (placementHitOnlyActive) return
+        placementHitOnlyActive = true
+        prepare()
+        asyncGridBuilder.cancelAll()
+        overlays.values.forEach { it.node.hidden = true }
+        reticlePatchNode?.hidden = true
+        placementPatchNode?.hidden = true
+        activeMode = GridSurfaceMode.HIDDEN
+    }
+
+    fun exitPlacementHitOnlyMode() {
+        if (!placementHitOnlyActive) return
+        placementHitOnlyActive = false
+        placementPatchNode?.hidden = true
+    }
+
+    /**
+     * After first point the scan grid becomes obsolete: the contour owns the working floor.
+     * Keep only the small placement patch so ARKit plane merges/refines cannot move the UX.
+     */
+    fun enterPlacementScanFreeze(@Suppress("UNUSED_PARAMETER") sceneRoot: SCNNode?) {
+        if (placementScanFrozen) {
+            reticlePatchNode?.hidden = true
+            overlays.values.forEach { it.node.hidden = true }
+            updateActiveMode()
+            return
+        }
+        placementScanFrozen = true
+        placementHitOnlyActive = false
+        reticlePatchNode?.hidden = true
+        placementPatchNode?.hidden = true
+        asyncGridBuilder.cancelAll()
+        overlays.values.forEach { it.node.hidden = true }
+        updateActiveMode()
+    }
+
+    fun exitPlacementScanFreeze() {
+        if (!placementScanFrozen && !overlaysPinnedToWorld && !sectionFloorLocked) return
+        placementScanFrozen = false
+        placementHitOnlyActive = false
+        sectionFloorLocked = false
+        overlayRotationFrozen = false
+        if (overlaysPinnedToWorld) {
+            overlays.values.forEach { overlay ->
+                overlay.node.removeFromParentNode()
+                overlay.node.hidden = true
+            }
+            overlaysPinnedToWorld = false
+        }
+    }
+
+    fun isPlacementScanFrozen(): Boolean = placementScanFrozen
+
+    /** Called when contour is finalized — hide scan overlays, keep contour geometry on screen. */
     fun enterContourMode() {
+        asyncGridBuilder.cancelAll()
         contourModeActive = true
         overlays.values.forEach { it.node.hidden = true }
         reticlePatchNode?.hidden = true
+        placementPatchNode?.hidden = true
         activeMode = GridSurfaceMode.HIDDEN
     }
 
@@ -147,6 +255,7 @@ internal class IosArPlaneSurfaceRenderer {
         activeMode = GridSurfaceMode.HIDDEN
         overlays.values.forEach { it.node.hidden = true }
         reticlePatchNode?.hidden = true
+        placementPatchNode?.hidden = true
     }
 
     /**
@@ -155,13 +264,14 @@ internal class IosArPlaneSurfaceRenderer {
     fun syncPlaneOverlayOnNodeEvent(
         anchor: ARPlaneAnchor,
         anchorNode: SCNNode,
+        sceneRoot: SCNNode? = null,
         forceGeometry: Boolean = false
     ): Boolean {
         if (contourModeActive) return false
         if (!anchor.isHorizontalTracking()) return false
         prepare()
         cacheArea(anchor)
-        return updateOverlayGeometry(anchor, anchorNode, force = forceGeometry)
+        return updateOverlayGeometry(anchor, anchorNode, sceneRoot, force = forceGeometry)
     }
 
     /**
@@ -169,7 +279,8 @@ internal class IosArPlaneSurfaceRenderer {
      */
     fun applyOverlayBudget(
         anchors: List<ARPlaneAnchor>,
-        scanContext: IosArScanSurfaceContext
+        scanContext: IosArScanSurfaceContext,
+        reticleAnchorId: NSUUID? = null
     ) {
         if (contourModeActive) return
         prepare()
@@ -181,7 +292,9 @@ internal class IosArPlaneSurfaceRenderer {
             .toSet()
 
         val orphanIds = overlays.keys - activeIds
-        orphanIds.forEach { removeOverlay(it) }
+        if (!sectionFloorLocked) {
+            orphanIds.forEach { removeOverlay(it) }
+        }
 
         val ranked = anchors
             .asSequence()
@@ -202,7 +315,8 @@ internal class IosArPlaneSurfaceRenderer {
             ranked = ranked,
             scanContext = scanContext,
             floorArea = floorArea,
-            cullStats = cullStats
+            cullStats = cullStats,
+            reticleAnchorId = reticleAnchorId
         ).map { it.identifier }.toSet()
 
         lastDebugStats = ScanSurfaceDebugStats(
@@ -233,6 +347,7 @@ internal class IosArPlaneSurfaceRenderer {
         centerHit: CenterPlaneHit
     ) {
         if (contourModeActive) return
+        if (sectionFloorLocked) return
         val hitAnchorId = centerHit.anchor?.identifier
         val raycastY = centerHit.confirmedWorldFloorPoint()?.yMeters
             ?: centerHit.previewWorldFloorPoint()?.yMeters
@@ -285,11 +400,141 @@ internal class IosArPlaneSurfaceRenderer {
         updateActiveMode()
     }
 
+    /**
+     * Placement-only: a small working-floor candidate under reticle.
+     * The first scan surface is only a reference; no second polygon surface is built here.
+     */
+    fun syncPlacementExplorationPatch(
+        rootNode: SCNNode,
+        centerHit: CenterPlaneHit,
+        sectionFloorY: Float?,
+        show: Boolean
+    ): Boolean {
+        if (contourModeActive || !placementScanFrozen) return false
+        prepare()
+        if (!show) {
+            placementPatchNode?.hidden = true
+            updateActiveMode()
+            return false
+        }
+        val hitPoint = centerHit.placementFloorPoint(sectionFloorY) ?: run {
+            placementPatchNode?.hidden = true
+            updateActiveMode()
+            return false
+        }
+        val node = placementPatchNode ?: return false
+        pruneDuplicateNamedNodes(rootNode, PLACEMENT_PATCH_NODE_NAME, keep = node)
+        if (node.parentNode != rootNode) {
+            node.removeFromParentNode()
+            rootNode.addChildNode(node)
+        }
+        applyPlacementPatchTransform(node, hitPoint, sectionFloorY)
+        node.eulerAngles = SCNVector3Make(0f, 0f, 0f)
+        node.hidden = false
+        updateActiveMode()
+        return true
+    }
+
+    fun isPlacementExplorationPatchVisible(): Boolean =
+        placementScanFrozen && isPlacementPatchVisible()
+
+    fun isPlacementFallbackPatchVisible(): Boolean =
+        false
+
+    /** Move exploration patch only — no geometry/prepare/activeMode churn. */
+    fun updatePlacementExplorationPatchPosition(
+        hitPoint: ArPoint3D,
+        sectionFloorY: Float?
+    ) {
+        if (!placementScanFrozen) return
+        val node = placementPatchNode ?: return
+        if (node.hidden) return
+        applyPlacementPatchTransform(node, hitPoint, sectionFloorY)
+    }
+
+    private fun applyPlacementPatchTransform(
+        node: SCNNode,
+        hitPoint: ArPoint3D,
+        sectionFloorY: Float?
+    ) {
+        val material = placementGridMaterial ?: return
+        node.geometry = buildWorldAlignedPlacementPatchGeometry(
+            worldCenterX = hitPoint.xMeters,
+            worldCenterZ = hitPoint.zMeters,
+            material = material
+        )
+        val visualY = (sectionFloorY ?: hitPoint.yMeters) + GRID_VISUAL_OFFSET_M
+        node.position = SCNVector3Make(hitPoint.xMeters, visualY, hitPoint.zMeters)
+    }
+
+    fun hidePlacementExplorationPatch() {
+        placementPatchNode?.hidden = true
+    }
+
+    /** Skip overlay transform updates for a few frames after relocalization / large camera gap. */
+    fun requestOverlayTransformDebounce(frames: Int = OVERLAY_TRANSFORM_DEBOUNCE_FRAMES) {
+        overlayTransformSkipFrames = frames.coerceAtLeast(overlayTransformSkipFrames)
+    }
+
+    fun tickOverlayTransformDebounce() {
+        if (overlayTransformSkipFrames > 0) {
+            overlayTransformSkipFrames--
+        }
+    }
+
+    fun isOverlayTransformDebouncing(): Boolean = overlayTransformSkipFrames > 0
+
+    /** Dim reference grid when ARKit frame stream is sparse or relocalizing. */
+    fun applyReferenceOverlayDegraded(degraded: Boolean) {
+        if (referenceOverlayDegraded == degraded) return
+        referenceOverlayDegraded = degraded
+        val alpha = if (degraded) GRID_ALPHA_DEGRADED else GRID_ALPHA_NORMAL
+        overlays.values.forEach { overlay ->
+            overlay.material.diffuse.contents = UIColor.whiteColor.colorWithAlphaComponent(alpha)
+        }
+    }
+
+    fun syncPlacementPatch(
+        rootNode: SCNNode,
+        centerHit: CenterPlaneHit,
+        sectionFloorY: Float?,
+        show: Boolean
+    ): Boolean {
+        if (contourModeActive) return false
+        prepare()
+        val hitPoint = centerHit.placementFloorPoint(sectionFloorY) ?: run {
+            placementPatchNode?.hidden = true
+            return false
+        }
+        if (!show) {
+            placementPatchNode?.hidden = true
+            return false
+        }
+        val node = placementPatchNode ?: return false
+        pruneDuplicateNamedNodes(rootNode, PLACEMENT_PATCH_NODE_NAME, keep = node)
+        if (node.parentNode != rootNode) {
+            node.removeFromParentNode()
+            rootNode.addChildNode(node)
+        }
+        node.geometry?.firstMaterial = placementGridMaterial
+        val visualY = (sectionFloorY ?: hitPoint.yMeters) + GRID_VISUAL_OFFSET_M
+        node.position = SCNVector3Make(hitPoint.xMeters, visualY, hitPoint.zMeters)
+        node.eulerAngles = SCNVector3Make(0f, 0f, 0f)
+        node.hidden = false
+        activeMode = GridSurfaceMode.RETICLE_ONLY
+        return true
+    }
+
+    fun isPlacementPatchVisible(): Boolean =
+        placementPatchNode?.let { !it.hidden } == true
+
     fun remove(anchorId: NSUUID) {
+        if (placementScanFrozen) return
+        asyncGridBuilder.cancel(anchorId)
         areas.remove(anchorId)
         elevationLock.clear(anchorId)
         removeOverlay(anchorId)
-        if (stickyFloorAnchorId == anchorId) {
+        if (!sectionFloorLocked && stickyFloorAnchorId == anchorId) {
             stickyFloorAnchorId = null
             cachedFloorWorldY = null
         }
@@ -300,10 +545,60 @@ internal class IosArPlaneSurfaceRenderer {
 
     fun estimatedFloorWorldY(): Float? = cachedFloorWorldY
 
+    fun isLockedSectionAnchor(anchorId: NSUUID): Boolean =
+        sectionFloorLocked && stickyFloorAnchorId == anchorId
+
+    /** Reference grid is built and pinned — ignore further ARKit plane refine callbacks. */
+    fun isPlacementReferenceFrozen(anchorId: NSUUID): Boolean {
+        if (!placementScanFrozen || !sectionFloorLocked || stickyFloorAnchorId != anchorId) return false
+        val overlay = overlays[anchorId] ?: return false
+        return overlay.node.geometry != null
+    }
+
+    /** Pin scan floor level when contour placement starts — stops sticky Y drift mid-session. */
+    fun lockSectionFloor(anchorId: NSUUID?, worldY: Float) {
+        sectionFloorLocked = true
+        overlayRotationFrozen = true
+        if (anchorId != null) {
+            stickyFloorAnchorId = anchorId
+        }
+        cachedFloorWorldY = worldY
+    }
+
+    private fun tryPinVisibleOverlays(sceneRoot: SCNNode?) {
+        if (sceneRoot == null || overlaysPinnedToWorld) return
+        overlaysPinnedToWorld = pinVisibleOverlaysToWorldFloor(sceneRoot)
+    }
+
+    private fun pinVisibleOverlaysToWorldFloor(sceneRoot: SCNNode): Boolean {
+        val floorY = cachedFloorWorldY ?: return false
+        val visualY = floorY + GRID_VISUAL_OFFSET_M
+        var pinnedAny = false
+        overlays.values.forEach { overlay ->
+            if (overlay.node.hidden) return@forEach
+            val worldTransform = overlay.node.worldTransform
+            overlay.node.removeFromParentNode()
+            sceneRoot.addChildNode(overlay.node)
+            overlay.node.transform = worldTransform
+            val pinnedPosition = overlay.node.position.useContents {
+                SCNVector3Make(x.toFloat(), visualY, z.toFloat())
+            }
+            overlay.node.position = pinnedPosition
+            overlay.node.hidden = false
+            pinnedAny = true
+        }
+        if (pinnedAny) {
+            activeMode = GridSurfaceMode.MULTI_SURFACE
+        }
+        return pinnedAny
+    }
+
     fun activeMode(): GridSurfaceMode = activeMode
 
     fun overlayCount(): Int =
-        overlays.count { !it.value.node.hidden } + (if (isReticlePatchVisible()) 1 else 0)
+        overlays.count { !it.value.node.hidden } +
+            (if (isReticlePatchVisible()) 1 else 0) +
+            (if (isPlacementPatchVisible()) 1 else 0)
 
     fun visibleSurfaceCount(): Int = overlays.count { !it.value.node.hidden }
 
@@ -317,6 +612,7 @@ internal class IosArPlaneSurfaceRenderer {
     private fun updateOverlayGeometry(
         anchor: ARPlaneAnchor,
         anchorNode: SCNNode,
+        sceneRoot: SCNNode?,
         force: Boolean
     ): Boolean {
         val bridgePtr = anchor.bridgePointer()
@@ -337,13 +633,28 @@ internal class IosArPlaneSurfaceRenderer {
             )
         }
 
-        if (overlay.node.parentNode != anchorNode) {
+        val worldLockedParent = if (sectionFloorLocked) sceneRoot else null
+        if (worldLockedParent != null) {
+            removeOverlayNodesOn(anchorNode, keep = overlay.node)
+            if (overlay.node.parentNode != worldLockedParent) {
+                overlay.node.removeFromParentNode()
+                worldLockedParent.addChildNode(overlay.node)
+                overlay.lastGeometrySignature = 0u
+            }
+            pinOverlayNodeToAnchorWorldFloor(overlay.node, anchorNode)
+            overlaysPinnedToWorld = true
+        } else if (overlay.node.parentNode != anchorNode) {
             overlay.node.removeFromParentNode()
             removeOverlayNodesOn(anchorNode, keep = overlay.node)
             anchorNode.addChildNode(overlay.node)
             overlay.lastGeometrySignature = 0u
         } else {
             removeOverlayNodesOn(anchorNode, keep = overlay.node)
+        }
+
+        if (placementScanFrozen && sectionFloorLocked && overlay.node.geometry != null) {
+            overlay.node.hidden = false
+            return true
         }
 
         val now = CFAbsoluteTimeGetCurrent()
@@ -361,7 +672,22 @@ internal class IosArPlaneSurfaceRenderer {
         return true
     }
 
+    private fun pinOverlayNodeToAnchorWorldFloor(node: SCNNode, anchorNode: SCNNode) {
+        if (overlayTransformSkipFrames > 0) return
+        val floorY = cachedFloorWorldY ?: return
+        val visualY = floorY + GRID_VISUAL_OFFSET_M
+        node.transform = anchorNode.worldTransform
+        val pinnedPosition = node.position.useContents {
+            SCNVector3Make(x.toFloat(), visualY, z.toFloat())
+        }
+        node.position = pinnedPosition
+        if (placementScanFrozen && overlayRotationFrozen) {
+            node.eulerAngles = SCNVector3Make(0f, 0f, 0f)
+        }
+    }
+
     private fun updateStickyFloor(ranked: List<ARPlaneAnchor>) {
+        if (sectionFloorLocked) return
         val largest = ranked.firstOrNull() ?: return
         val largestArea = areas[largest.identifier] ?: return
         val largestY = HitTransformReader.worldPointFromAnchor(largest).yMeters
@@ -392,28 +718,51 @@ internal class IosArPlaneSurfaceRenderer {
         ranked: List<ARPlaneAnchor>,
         scanContext: IosArScanSurfaceContext,
         floorArea: Float?,
-        cullStats: OverlayCullStats
+        cullStats: OverlayCullStats,
+        reticleAnchorId: NSUUID? = null
     ): List<ARPlaneAnchor> {
         if (ranked.isEmpty()) return emptyList()
 
+        if (sectionFloorLocked) {
+            val floorY = cachedFloorWorldY
+            val preferred = listOfNotNull(
+                stickyFloorAnchorId?.let { id -> ranked.firstOrNull { it.identifier == id } },
+                reticleAnchorId?.let { id -> ranked.firstOrNull { it.identifier == id } },
+                ranked.firstOrNull { isAllowedByLockedSectionFloor(it, floorY) }
+            ).firstOrNull { anchor ->
+                isEligibleOverlayAnchor(anchor, scanContext, floorArea, cullStats)
+            }
+            return preferred?.let { listOf(it) } ?: emptyList()
+        }
+
         val selected = mutableListOf<ARPlaneAnchor>()
         val largest = ranked.first()
-        if (isEligibleOverlayAnchor(largest, scanContext, floorArea, cullStats)) {
+        val floorY = cachedFloorWorldY
+        if (
+            isEligibleOverlayAnchor(largest, scanContext, floorArea, cullStats) &&
+            isAllowedByLockedSectionFloor(largest, floorY)
+        ) {
             selected += largest
         }
 
-        val floorY = cachedFloorWorldY
         for (anchor in ranked.drop(1)) {
             if (selected.size >= MAX_SURFACE_OVERLAYS) break
             if (!isEligibleOverlayAnchor(anchor, scanContext, floorArea, cullStats)) continue
-            if (floorY != null) {
+            if (!isAllowedByLockedSectionFloor(anchor, floorY)) continue
+            if (floorY != null && !sectionFloorLocked) {
                 val anchorY = HitTransformReader.worldPointFromAnchor(anchor).yMeters
                 if (abs(anchorY - floorY) < SAME_LEVEL_Y_DELTA_M) continue
             }
-            if (isDuplicateOfSelected(anchor, selected)) continue
+            if (!sectionFloorLocked && isDuplicateOfSelected(anchor, selected)) continue
             selected += anchor
         }
         return selected
+    }
+
+    private fun isAllowedByLockedSectionFloor(anchor: ARPlaneAnchor, floorY: Float?): Boolean {
+        if (!sectionFloorLocked || floorY == null) return true
+        val anchorY = HitTransformReader.worldPointFromAnchor(anchor).yMeters
+        return abs(anchorY - floorY) <= SAME_LEVEL_Y_DELTA_M
     }
 
     private fun isEligibleOverlayAnchor(
@@ -583,9 +932,29 @@ internal class IosArPlaneSurfaceRenderer {
         anchor: ARPlaneAnchor,
         signature: UInt
     ) {
+        if (placementScanFrozen && sectionFloorLocked) return
+        if (overlay.pendingBuildSignature == signature) return
         if (overlay.node.geometry != null && signature == overlay.lastGeometrySignature) return
-        overlay.node.geometry = buildPolygonGridLineGeometry(anchor, overlay.material)
-        overlay.lastGeometrySignature = signature
+
+        val boundary = copyPlaneBoundarySnapshot(anchor) ?: return
+        val anchorId = anchor.identifier
+        overlay.pendingBuildSignature = signature
+
+        asyncGridBuilder.requestBuild(
+            anchorId = anchorId,
+            boundary = boundary,
+            cellM = GRID_CELL_METERS,
+            lineWidthM = GRID_LINE_WIDTH_M,
+            boundaryLineWidthM = GRID_BOUNDARY_LINE_WIDTH_M,
+            yM = 0f
+        ) { geometry ->
+            val liveOverlay = overlays[anchorId] ?: return@requestBuild
+            liveOverlay.pendingBuildSignature = null
+            if (geometry == null) return@requestBuild
+            geometry.materials = listOf(liveOverlay.material)
+            liveOverlay.node.geometry = geometry
+            liveOverlay.lastGeometrySignature = signature
+        }
     }
 
     private fun removeOverlayNodesOn(anchorNode: SCNNode, keep: SCNNode) {
@@ -615,22 +984,9 @@ private data class SurfaceOverlay(
     val node: SCNNode,
     val material: SCNMaterial,
     var lastGeometrySignature: UInt,
-    var lastGeometryUpdateSeconds: Double
+    var lastGeometryUpdateSeconds: Double,
+    var pendingBuildSignature: UInt? = null
 )
-
-@OptIn(ExperimentalForeignApi::class)
-private fun buildPolygonGridLineGeometry(
-    anchor: ARPlaneAnchor,
-    material: SCNMaterial
-): SCNGeometry? =
-    pg_create_polygon_grid_line_geometry(
-        planeAnchor = anchor.bridgePointer(),
-        cellM = GRID_CELL_METERS,
-        lineWidthM = GRID_LINE_WIDTH_M,
-        yM = 0f
-    )?.apply {
-        materials = listOf(material)
-    }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun buildExtentGridLineGeometry(
@@ -653,6 +1009,24 @@ private fun buildExtentGridLineGeometry(
     }
 
 @OptIn(ExperimentalForeignApi::class)
+private fun buildWorldAlignedPlacementPatchGeometry(
+    worldCenterX: Float,
+    worldCenterZ: Float,
+    material: SCNMaterial
+): SCNGeometry? =
+    pg_create_world_aligned_placement_patch_grid_geometry(
+        patchSizeM = PLACEMENT_SURFACE_PATCH_M,
+        worldCenterX = worldCenterX,
+        worldCenterZ = worldCenterZ,
+        cellM = PLACEMENT_PATCH_CELL_M,
+        lineWidthM = PLACEMENT_PATCH_LINE_WIDTH_M,
+        boundaryLineWidthM = PLACEMENT_PATCH_BOUNDARY_WIDTH_M,
+        yM = 0f
+    )?.apply {
+        materials = listOf(material)
+    }
+
+@OptIn(ExperimentalForeignApi::class)
 private val NON_FLOOR_CLASSIFICATIONS = setOf(
     PG_PLANE_CLASSIFICATION_TABLE,
     PG_PLANE_CLASSIFICATION_SEAT
@@ -661,11 +1035,36 @@ private val NON_FLOOR_CLASSIFICATIONS = setOf(
 @OptIn(ExperimentalForeignApi::class)
 private fun createGridLineMaterial(): SCNMaterial =
     SCNMaterial().apply {
-        diffuse.contents = UIColor.whiteColor
+        diffuse.contents = UIColor.whiteColor.colorWithAlphaComponent(GRID_ALPHA_NORMAL)
         emission.contents = UIColor.whiteColor
-        emission.intensity = 0.22
+        emission.intensity = 0.20
         lightingModelName = platform.SceneKit.SCNLightingModelConstant
         doubleSided = true
         readsFromDepthBuffer = true
         writesToDepthBuffer = true
     }
+
+internal fun CenterPlaneHit.placementFloorPoint(sectionFloorY: Float?): ArPoint3D? {
+    val confirmed = confirmedWorldFloorPoint()
+    if (confirmed != null) {
+        if (sectionFloorY != null &&
+            abs(confirmed.yMeters - sectionFloorY) > SAME_LEVEL_Y_DELTA_M
+        ) {
+            return null
+        }
+        return confirmed
+    }
+    val preview = previewWorldFloorPoint()
+    if (preview != null) {
+        if (sectionFloorY != null &&
+            abs(preview.yMeters - sectionFloorY) > SAME_LEVEL_Y_DELTA_M
+        ) {
+            return null
+        }
+        return preview
+    }
+    return null
+}
+
+internal fun shouldShowPlacementPatch(status: String): Boolean =
+    status == "valid" || status == "preview"

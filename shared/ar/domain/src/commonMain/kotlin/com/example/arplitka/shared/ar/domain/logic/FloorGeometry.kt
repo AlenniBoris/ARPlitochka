@@ -6,7 +6,8 @@ import kotlin.math.sqrt
 
 object FloorGeometry {
     const val CLOSE_THRESHOLD_M = 0.10f
-    const val SNAP_THRESHOLD_M = 0.05f
+    /** Min planar gap to any contour point before another point can be placed (2 cm — fine tile edges). */
+    const val SNAP_THRESHOLD_M = 0.02f
     const val MAX_POINT_HEIGHT_DELTA_M = 0.08f
 
     fun distance(a: ArPoint3D, b: ArPoint3D): Float {

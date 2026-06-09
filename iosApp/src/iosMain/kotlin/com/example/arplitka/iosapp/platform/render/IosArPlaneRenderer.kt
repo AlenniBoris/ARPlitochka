@@ -1,4 +1,4 @@
-package com.example.arplitka.iosapp
+package com.example.arplitka.iosapp.platform.render
 
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.COpaque
@@ -29,6 +29,8 @@ import platform.SceneKit.SCNNode
 import platform.SceneKit.SCNVector3Make
 import platform.UIKit.UIColor
 import kotlin.math.roundToInt
+import com.example.arplitka.iosapp.platform.ar.CenterPlaneHit
+import com.example.arplitka.iosapp.platform.ar.previewWorldScnMatrix
 import com.example.arplitka.iosapp.bridge.PG_DOT_BOUNDARY_EXTENT
 import com.example.arplitka.iosapp.bridge.PG_DOT_BOUNDARY_POLYGON
 import com.example.arplitka.iosapp.bridge.pg_anchor_has_polygon_boundary
@@ -37,6 +39,7 @@ import com.example.arplitka.iosapp.bridge.pg_create_dot_mesh_from_points
 import com.example.arplitka.iosapp.bridge.pg_create_dot_mesh_geometry
 import com.example.arplitka.iosapp.bridge.pg_create_dot_mesh_local_disc
 import com.example.arplitka.iosapp.bridge.pg_create_preview_dot_mesh_geometry
+import com.example.arplitka.iosapp.bridge.pg_local_xz_to_world
 import com.example.arplitka.iosapp.bridge.pg_world_xz_on_anchor
 import com.example.arplitka.iosapp.bridge.pg_geometry_signature
 import com.example.arplitka.iosapp.bridge.pg_geometry_signature_extent
@@ -135,6 +138,45 @@ internal object HitTransformReader {
             }
         }
 
+    fun worldPointFromPlaneLocal(
+        anchor: platform.ARKit.ARAnchor,
+        localX: Float,
+        localZ: Float,
+        localY: Float = 0f
+    ): com.example.arplitka.shared.ar.contracts.model.ArPoint3D? =
+        memScoped {
+            val worldX = alloc<FloatVar>()
+            val worldY = alloc<FloatVar>()
+            val worldZ = alloc<FloatVar>()
+            val ok = pg_local_xz_to_world(
+                anchorPtr = anchor.bridgePointer(),
+                localX = localX,
+                localY = localY,
+                localZ = localZ,
+                outWorldX = worldX.ptr,
+                outWorldY = worldY.ptr,
+                outWorldZ = worldZ.ptr
+            )
+            if (!ok) return@memScoped null
+            com.example.arplitka.shared.ar.contracts.model.ArPoint3D(
+                xMeters = worldX.value,
+                yMeters = worldY.value,
+                zMeters = worldZ.value
+            )
+        }
+
+}
+
+/** ARSCNView draws its own plane mesh on each anchor node — hide it so only our overlay is visible. */
+@OptIn(ExperimentalForeignApi::class)
+internal fun suppressArkitPlaneMesh(anchorNode: SCNNode) {
+    val geometry = anchorNode.geometry ?: return
+    geometry.materials?.forEach { material ->
+        val mat = material as? SCNMaterial ?: return@forEach
+        mat.diffuse.contents = UIColor.clearColor
+        mat.transparency = 1.0
+        mat.writesToDepthBuffer = false
+    }
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -739,20 +781,18 @@ internal fun List<*>.firstHorizontalFloorHitResult(): ARHitTestResult? =
 
 /** Closest horizontal plane under the reticle (ARKit returns hits sorted by distance). */
 @OptIn(ExperimentalForeignApi::class)
-internal fun List<*>.closestHorizontalFloorHitResult(): ARHitTestResult? {
-    var best: ARHitTestResult? = null
-    var bestDistance = Double.MAX_VALUE
+internal fun List<*>.closestHorizontalFloorHitResult(sectionFloorY: Float? = null): ARHitTestResult? {
     for (item in this) {
         val result = item as? ARHitTestResult ?: continue
         val anchor = result.anchor as? ARPlaneAnchor ?: continue
         if (!anchor.isHorizontalTracking()) continue
-        val distance = result.distance
-        if (distance < bestDistance) {
-            bestDistance = distance
-            best = result
+        if (sectionFloorY != null) {
+            val floorDelta = kotlin.math.abs(HitTransformReader.worldFloorPoint(result).yMeters - sectionFloorY)
+            if (floorDelta > 0.10f) continue
         }
+        return result
     }
-    return best
+    return null
 }
 
 internal fun List<*>.firstEstimatedHorizontalFloorHitResult(): ARHitTestResult? =
@@ -760,20 +800,18 @@ internal fun List<*>.firstEstimatedHorizontalFloorHitResult(): ARHitTestResult? 
 
 /** Closest estimated horizontal plane (same idea as confirmed — avoids random far hits in air). */
 @OptIn(ExperimentalForeignApi::class)
-internal fun List<*>.closestEstimatedHorizontalFloorHitResult(): ARHitTestResult? {
-    var best: ARHitTestResult? = null
-    var bestDistance = Double.MAX_VALUE
+internal fun List<*>.closestEstimatedHorizontalFloorHitResult(sectionFloorY: Float? = null): ARHitTestResult? {
     for (item in this) {
         val result = item as? ARHitTestResult ?: continue
         val anchor = result.anchor as? ARPlaneAnchor
         if (anchor != null && !anchor.isHorizontalTracking()) continue
-        val distance = result.distance
-        if (distance < bestDistance) {
-            bestDistance = distance
-            best = result
+        if (sectionFloorY != null) {
+            val floorDelta = kotlin.math.abs(HitTransformReader.worldFloorPoint(result).yMeters - sectionFloorY)
+            if (floorDelta > 0.10f) continue
         }
+        return result
     }
-    return best
+    return null
 }
 
 internal typealias PlaneFingerprints = MutableMap<NSUUID, UInt>

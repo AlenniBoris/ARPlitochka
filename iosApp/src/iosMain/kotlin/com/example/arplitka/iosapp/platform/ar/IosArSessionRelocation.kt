@@ -1,5 +1,8 @@
-package com.example.arplitka.iosapp
+package com.example.arplitka.iosapp.platform.ar
 
+import com.example.arplitka.iosapp.platform.render.HitTransformReader
+import com.example.arplitka.iosapp.platform.render.MAX_OVERLAY_DISTANCE_M
+import com.example.arplitka.iosapp.platform.render.isHorizontalTracking
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.ARKit.ARCamera
 import platform.ARKit.ARFrame
@@ -23,6 +26,8 @@ internal class IosArSessionRelocationController {
     private var wasInterrupted: Boolean = false
 
     fun relocLabel(): String = relocLabel
+
+    fun isRelocalizing(): Boolean = relocLabel == "relocalizing"
 
     fun reset() {
         lastResetSeconds = 0.0
@@ -49,7 +54,7 @@ internal class IosArSessionRelocationController {
             return RelocationResetRequest(reason = "reloc")
         }
         if (camera.trackingState == ARTrackingState.ARTrackingStateNormal) {
-            if (relocLabel == "relocalizing") {
+            if (relocLabel == "relocalizing" || relocLabel == "interrupted") {
                 relocLabel = "ok"
             }
         }
@@ -100,7 +105,9 @@ internal fun performScanSessionReset(
     force: Boolean = false
 ) {
     if (!force && !relocationController.canResetNow()) return
-    val (configuration, _) = createWorldTrackingConfiguration(enableLidarMesh = true)
+    val (configuration, _) = createWorldTrackingConfiguration(
+        enableLidarMesh = supportsSceneReconstructionMesh()
+    )
     session.runWithConfiguration(
         configuration,
         ARSessionRunOptionResetTracking or ARSessionRunOptionRemoveExistingAnchors

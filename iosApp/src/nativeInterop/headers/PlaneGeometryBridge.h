@@ -2,6 +2,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#import <ARKit/ARKit.h>
+#import <simd/simd.h>
 #import <SceneKit/SceneKit.h>
 #import <UIKit/UIKit.h>
 
@@ -52,6 +54,15 @@ bool pg_world_xz_on_anchor(
     float *outLocalX,
     float *outLocalZ
 );
+bool pg_local_xz_to_world(
+    void *anchorPtr,
+    float localX,
+    float localY,
+    float localZ,
+    float *outWorldX,
+    float *outWorldY,
+    float *outWorldZ
+);
 SCNGeometry *pg_create_grid_line_geometry(
     float widthM,
     float depthM,
@@ -61,10 +72,43 @@ SCNGeometry *pg_create_grid_line_geometry(
     float lineWidthM,
     float yM
 );
+#define PG_MAX_CONTOUR_SEGMENTS 1024
+SCNGeometry *pg_create_contour_lines_geometry(
+    int segmentCount,
+    const float *segmentPairsXZ,
+    float yM,
+    float halfWidthM
+);
+#define PG_MAX_BOUNDARY_VERTICES 256
+int pg_copy_plane_boundary_xz(
+    void *planeAnchor,
+    float *outLocalX,
+    float *outLocalZ,
+    int maxVertices
+);
+SCNGeometry *pg_create_polygon_grid_line_geometry_from_vertices(
+    const float *localX,
+    const float *localZ,
+    int vertexCount,
+    float cellM,
+    float lineWidthM,
+    float boundaryLineWidthM,
+    float yM
+);
 SCNGeometry *pg_create_polygon_grid_line_geometry(
     void *planeAnchor,
     float cellM,
     float lineWidthM,
+    float boundaryLineWidthM,
+    float yM
+);
+SCNGeometry *pg_create_world_aligned_placement_patch_grid_geometry(
+    float patchSizeM,
+    float worldCenterX,
+    float worldCenterZ,
+    float cellM,
+    float lineWidthM,
+    float boundaryLineWidthM,
     float yM
 );
 #define PG_RAYCAST_EXISTING_PLANE 0
@@ -77,6 +121,8 @@ SCNGeometry *pg_create_polygon_grid_line_geometry(
 #define PG_PLANE_CLASSIFICATION_TABLE 3
 #define PG_PLANE_CLASSIFICATION_SEAT 4
 #define PG_PLANE_CLASSIFICATION_UNKNOWN 7
+bool pg_world_transform_from_column_major(const float *in16, simd_float4x4 *outMatrix);
+ARAnchor *pg_session_add_anchor_from_column_major(void *sessionPtr, const float *in16);
 bool pg_center_raycast(
     void *sessionPtr,
     void *framePtr,
