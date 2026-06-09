@@ -1,5 +1,6 @@
 package com.example.arplitka.iosapp.platform.render
 
+import com.example.arplitka.iosapp.bridge.pg_create_contour_fill_geometry
 import com.example.arplitka.iosapp.bridge.pg_create_contour_lines_geometry
 import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
@@ -18,6 +19,7 @@ private const val POINT_HEIGHT_M = 0.002f
 private const val POINT_VISUAL_OFFSET_M = 0.008f
 private const val LINE_WIDTH_M = 0.012f
 private const val LINE_VISUAL_OFFSET_M = 0.003f
+private const val FILL_VISUAL_OFFSET_M = 0.004f
 private const val LOD_POINT_COUNT_THRESHOLD = 30
 private const val LOD_POINT_RADIUS_SCALE = 0.85f
 private const val LOD_LINE_WIDTH_SCALE = 0.80f
@@ -28,13 +30,21 @@ internal class IosArContourRenderer {
     private var rootNode: SCNNode? = null
     private val pointNodes = mutableMapOf<String, SCNNode>()
     private var batchedLinesNode: SCNNode? = null
+    private var sectionFillNode: SCNNode? = null
     private var lastContourStateKey: Int = Int.MIN_VALUE
     private var lastLineBatchKey: Int = Int.MIN_VALUE
+    private var lastFillBatchKey: Int = Int.MIN_VALUE
     private val lastPointPositionKeys = mutableMapOf<String, Int>()
 
     private val pointMaterial = createContourMaterial(red = 0.0, green = 0.9, blue = 0.46)
     private val snapPointMaterial = createContourMaterial(red = 0.41, green = 0.94, blue = 0.68)
     private val lineMaterial = createContourMaterial(red = 0.13, green = 0.59, blue = 0.95)
+    private val fillMaterial = createFillMaterial(
+        red = 0.18,
+        green = 0.62,
+        blue = 0.98,
+        alpha = 0.58
+    )
 
     fun attach(sceneRoot: SCNNode) {
         if (rootNode != null) return
@@ -46,27 +56,81 @@ internal class IosArContourRenderer {
         pointNodes.clear()
         batchedLinesNode?.removeFromParentNode()
         batchedLinesNode = null
+        sectionFillNode?.removeFromParentNode()
+        sectionFillNode = null
         rootNode?.removeFromParentNode()
         rootNode = null
         lastContourStateKey = Int.MIN_VALUE
         lastLineBatchKey = Int.MIN_VALUE
+        lastFillBatchKey = Int.MIN_VALUE
         lastPointPositionKeys.clear()
     }
 
     fun syncIfChanged(state: FloorContourUiState): Boolean {
         val structureKey = contourStructureKey(state)
-        if (structureKey == lastContourStateKey) return false
-        lastContourStateKey = structureKey
+        val structureChanged = structureKey != lastContourStateKey
+        if (structureChanged) {
+            lastContourStateKey = structureKey
+        }
         syncContour(state)
-        return true
+        return structureChanged
     }
 
     private fun syncContour(state: FloorContourUiState) {
         if (rootNode == null) return
         val floorY = state.placedPoints.firstOrNull()?.position?.yMeters
         val lodActive = state.placedPoints.size >= LOD_POINT_COUNT_THRESHOLD
-        syncPointNodes(state, floorY, lodActive)
+        syncSectionFill(state, floorY)
         syncBatchedLines(state, floorY, lodActive)
+        syncPointNodes(state, floorY, lodActive)
+    }
+
+    private fun syncSectionFill(
+        state: FloorContourUiState,
+        floorY: Float?
+    ) {
+        if (!state.showSectionFill || state.placedPoints.size < 3) {
+            sectionFillNode?.hidden = true
+            lastFillBatchKey = Int.MIN_VALUE
+            return
+        }
+
+        val points = state.placedPoints.map { it.position }
+        val fillBatchKey = fillBatchKey(points, floorY, state.isFinalized)
+        if (fillBatchKey == lastFillBatchKey) {
+            sectionFillNode?.hidden = false
+            return
+        }
+        lastFillBatchKey = fillBatchKey
+
+        val yBase = (floorY ?: points.first().yMeters) + FILL_VISUAL_OFFSET_M
+        val pointBuffer = FloatArray(points.size * 2)
+        points.forEachIndexed { index, point ->
+            val offset = index * 2
+            pointBuffer[offset] = point.xMeters
+            pointBuffer[offset + 1] = point.zMeters
+        }
+
+        val geometry = pointBuffer.usePinned { pinned ->
+            pg_create_contour_fill_geometry(
+                pointCount = points.size,
+                pointsXZ = pinned.addressOf(0),
+                yM = yBase
+            )
+        } ?: run {
+            sectionFillNode?.hidden = true
+            return
+        }
+
+        val node = sectionFillNode ?: SCNNode().also { created ->
+            sectionFillNode = created
+            rootNode?.addChildNode(created)
+        }
+        geometry.materials = listOf(fillMaterial)
+        node.geometry = geometry
+        node.renderingOrder = 5
+        node.hidden = false
+        rootNode?.addChildNode(node)
     }
 
     private fun syncPointNodes(
@@ -109,6 +173,8 @@ internal class IosArContourRenderer {
             if (node.geometry?.firstMaterial != targetMaterial) {
                 node.geometry?.firstMaterial = targetMaterial
             }
+            node.hidden = false
+            rootNode?.addChildNode(node)
         }
     }
 
@@ -131,7 +197,10 @@ internal class IosArContourRenderer {
         }
 
         val lineBatchKey = lineBatchKey(points, segmentCount, floorY, state.isPolygonClosed, lodActive)
-        if (lineBatchKey == lastLineBatchKey) return
+        if (lineBatchKey == lastLineBatchKey) {
+            batchedLinesNode?.hidden = false
+            return
+        }
         lastLineBatchKey = lineBatchKey
 
         val halfWidth = (if (lodActive) LINE_WIDTH_M * LOD_LINE_WIDTH_SCALE else LINE_WIDTH_M) * 0.5f
@@ -164,7 +233,8 @@ internal class IosArContourRenderer {
             rootNode?.addChildNode(created)
         }
         node.geometry = geometry
-        node.geometry?.firstMaterial = lineMaterial
+        node.geometry?.materials = listOf(lineMaterial)
+        node.renderingOrder = 6
         node.hidden = false
     }
 
@@ -179,7 +249,24 @@ internal class IosArContourRenderer {
         key = key * 31 + if (state.isPolygonClosed) 1 else 0
         key = key * 31 + if (state.showContourPoints) 1 else 0
         key = key * 31 + if (state.showContourLines) 1 else 0
+        key = key * 31 + if (state.showSectionFill) 1 else 0
+        key = key * 31 + if (state.isFinalized) 1 else 0
         key = key * 31 + if (state.placedPoints.size >= LOD_POINT_COUNT_THRESHOLD) 1 else 0
+        return key
+    }
+
+    private fun fillBatchKey(
+        points: List<ArPoint3D>,
+        floorY: Float?,
+        isFinalized: Boolean
+    ): Int {
+        var key = points.size * 31
+        key = key * 31 + if (isFinalized) 1 else 0
+        key = key * 31 + ((floorY ?: 0f) / POSITION_QUANT_M).roundToInt()
+        points.forEach { point ->
+            key = key * 31 + quant(point.xMeters)
+            key = key * 31 + quant(point.zMeters)
+        }
         return key
     }
 
@@ -221,4 +308,20 @@ private fun createContourMaterial(
     SCNMaterial().apply {
         diffuse.contents = UIColor.colorWithRed(red, green, blue, alpha = alpha)
         lightingModelName = platform.SceneKit.SCNLightingModelConstant
+    }
+
+@OptIn(ExperimentalForeignApi::class)
+private fun createFillMaterial(
+    red: Double,
+    green: Double,
+    blue: Double,
+    alpha: Double
+): SCNMaterial =
+    SCNMaterial().apply {
+        diffuse.contents = UIColor.colorWithRed(red, green, blue, alpha = alpha)
+        lightingModelName = platform.SceneKit.SCNLightingModelConstant
+        doubleSided = true
+        readsFromDepthBuffer = true
+        writesToDepthBuffer = false
+        transparencyMode = platform.SceneKit.SCNTransparencyModeAOne
     }

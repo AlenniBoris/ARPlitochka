@@ -187,10 +187,10 @@ selectedArea = selectedPlane?.area() ?: max horizontal plane area
 | Флаг | Условие |
 |------|---------|
 | `showPlaneRenderer` | `!isContourConfirmed` |
-| `showContourPoints` | `points.isNotEmpty() && !isContourConfirmed` |
+| `showContourPoints` | `points.isNotEmpty() && !isTileVisible` (iOS shared: точки остаются после confirm) |
 | `showContourLines` | `points.size >= 2 && !isTileVisible` |
 | `showPreviewLine` | есть точки, не closed, есть `currentHitPose` |
-| `showSectionFill` | confirmed + closed + ≥3 точек |
+| `showSectionFill` | closed + ≥3 точек (preview при `Closed: Yes`, сохраняется после confirm) |
 
 ### Debug (только debug build)
 

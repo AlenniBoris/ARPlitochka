@@ -21,10 +21,10 @@ data class FloorContourUiState(
     val currentHitPoint: ArPoint3D? = null
 ) {
     val showContourPoints: Boolean
-        get() = placedPoints.isNotEmpty() && !isFinalized
+        get() = placedPoints.isNotEmpty() && !isTileVisible
 
     val showContourLines: Boolean
-        get() = placedPoints.size >= 2 && !isTileVisible && !isFinalized
+        get() = placedPoints.size >= 2 && !isTileVisible
 
     val showPreviewLine: Boolean
         get() = !isFinalized &&
@@ -42,7 +42,7 @@ data class FloorContourUiState(
         get() = !isFinalized
 
     val showSectionFill: Boolean
-        get() = isFinalized && isPolygonClosed && placedPoints.size >= 3
+        get() = isPolygonClosed && placedPoints.size >= 3
 
     val showTileControls: Boolean
         get() = isFinalized && isPolygonClosed && placedPoints.size >= 3

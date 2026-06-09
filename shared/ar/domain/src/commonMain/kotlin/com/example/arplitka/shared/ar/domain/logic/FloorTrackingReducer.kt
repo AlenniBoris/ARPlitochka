@@ -14,11 +14,22 @@ object FloorTrackingReducer {
     ): FloorContourUiState {
         val trackingFields = when {
             !snapshot.isTracking -> state.copy(
-                trackingStatus = ArTrackingStatus.TRACKING_LOST,
-                instruction = ArInstruction.MOVE_PHONE,
+                trackingStatus = if (state.isFinalized && state.isPolygonClosed) {
+                    ArTrackingStatus.FINALIZED
+                } else if (state.isPolygonClosed) {
+                    ArTrackingStatus.POLYGON_CLOSED
+                } else {
+                    ArTrackingStatus.TRACKING_LOST
+                },
+                instruction = when {
+                    state.isFinalized -> ArInstruction.EMPTY
+                    state.isPolygonClosed -> ArInstruction.CONTOUR_CLOSED
+                    else -> ArInstruction.MOVE_PHONE
+                },
                 hasCenterHit = false,
                 currentHitPoint = null,
                 snappedPointIndex = null,
+                isPolygonClosed = if (state.isFinalized) state.isPolygonClosed else false,
                 horizontalPlaneCount = snapshot.horizontalPlaneCount,
                 selectedArea = snapshot.selectedArea,
                 largestPlaneAreaM2 = snapshot.largestPlaneAreaM2,
@@ -28,14 +39,14 @@ object FloorTrackingReducer {
             !snapshot.isFloorDetected -> {
                 val contouring = state.placedPoints.size >= 2 && snapshot.currentHitPoint != null
                 state.copy(
-                    trackingStatus = if (state.isPolygonClosed) {
-                        ArTrackingStatus.POLYGON_CLOSED
-                    } else if (contouring) {
-                        ArTrackingStatus.FLOOR_DETECTED
-                    } else {
-                        ArTrackingStatus.SEARCHING_FLOOR
+                    trackingStatus = when {
+                        state.isFinalized && state.isPolygonClosed -> ArTrackingStatus.FINALIZED
+                        state.isPolygonClosed -> ArTrackingStatus.POLYGON_CLOSED
+                        contouring -> ArTrackingStatus.FLOOR_DETECTED
+                        else -> ArTrackingStatus.SEARCHING_FLOOR
                     },
                     instruction = when {
+                        state.isFinalized -> ArInstruction.EMPTY
                         state.isPolygonClosed -> ArInstruction.CONTOUR_CLOSED
                         contouring -> ArInstruction.DETECTED
                         snapshot.largestPlaneAreaM2 >= MIN_SCAN_SURFACE_AREA_M2 -> ArInstruction.SURFACE_NEARBY
@@ -43,7 +54,12 @@ object FloorTrackingReducer {
                     },
                     hasCenterHit = snapshot.hasCenterHit || contouring,
                     currentHitPoint = snapshot.currentHitPoint,
-                    snappedPointIndex = null,
+                    snappedPointIndex = if (contouring && !state.isFinalized) state.snappedPointIndex else null,
+                    isPolygonClosed = when {
+                        state.isFinalized -> state.isPolygonClosed
+                        contouring -> state.isPolygonClosed
+                        else -> false
+                    },
                     horizontalPlaneCount = snapshot.horizontalPlaneCount,
                     selectedArea = snapshot.selectedArea,
                     largestPlaneAreaM2 = snapshot.largestPlaneAreaM2,
@@ -52,15 +68,15 @@ object FloorTrackingReducer {
                 )
             }
             else -> state.copy(
-                trackingStatus = if (state.isPolygonClosed) {
-                    ArTrackingStatus.POLYGON_CLOSED
-                } else {
-                    ArTrackingStatus.FLOOR_DETECTED
+                trackingStatus = when {
+                    state.isFinalized && state.isPolygonClosed -> ArTrackingStatus.FINALIZED
+                    state.isPolygonClosed -> ArTrackingStatus.POLYGON_CLOSED
+                    else -> ArTrackingStatus.FLOOR_DETECTED
                 },
-                instruction = if (state.isPolygonClosed) {
-                    ArInstruction.CONTOUR_CLOSED
-                } else {
-                    ArInstruction.DETECTED
+                instruction = when {
+                    state.isFinalized -> ArInstruction.EMPTY
+                    state.isPolygonClosed -> ArInstruction.CONTOUR_CLOSED
+                    else -> ArInstruction.DETECTED
                 },
                 hasCenterHit = true,
                 currentHitPoint = snapshot.currentHitPoint,
@@ -71,6 +87,24 @@ object FloorTrackingReducer {
                 focusedLabel = snapshot.focusedLabel
             )
         }
-        return FloorSnapReducer.applySnap(trackingFields)
+        val snapped = FloorSnapReducer.applySnap(trackingFields)
+        val preserveSnapDuringPlacement = state.placedPoints.size >= 2 &&
+            !state.isFinalized &&
+            snapshot.currentHitPoint == null &&
+            (state.isPolygonClosed || state.snappedPointIndex != null)
+        val preserveFinalizedClosed = state.isFinalized && state.isPolygonClosed
+        return when {
+            preserveFinalizedClosed -> snapped.copy(
+                isPolygonClosed = true,
+                snappedPointIndex = null,
+                trackingStatus = ArTrackingStatus.FINALIZED,
+                instruction = ArInstruction.EMPTY
+            )
+            preserveSnapDuringPlacement -> snapped.copy(
+                snappedPointIndex = state.snappedPointIndex,
+                isPolygonClosed = state.isPolygonClosed
+            )
+            else -> snapped
+        }
     }
 }

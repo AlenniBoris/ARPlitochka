@@ -27,6 +27,7 @@ import com.example.arplitka.shared.ar.domain.logic.FloorGeometry
 import com.example.arplitka.shared.ar.domain.logic.FloorSnapReducer
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import com.example.arplitka.shared.ar.domain.model.FloorFrameSnapshot
+import com.example.arplitka.shared.ar.domain.model.PlacedContourPoint
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCSignatureOverride
 import platform.ARKit.*
@@ -84,6 +85,7 @@ internal class IosArSessionCoordinator(
     private var placementFreezeApplied: Boolean = false
     private var placementUiFrameCounter: Int = 0
     private var lastPlacementRenderReticleSeconds: Double = 0.0
+    private var lastFinalizedContourRenderSyncSeconds: Double = 0.0
     private var lastPlacementPatchSmoothSeconds: Double = 0.0
     private var scanOverlaySyncCounter: Int = 0
     private var scanAnchorNodeUpdateCounter: Int = 0
@@ -380,6 +382,7 @@ internal class IosArSessionCoordinator(
     @ObjCSignatureOverride
     override fun renderer(renderer: SCNSceneRendererProtocol, updateAtTime: Double) {
         updateWorkingFloorPatchFromRenderer(updateAtTime)
+        syncFinalizedContourFromRenderer(updateAtTime)
     }
 
     @ObjCSignatureOverride
@@ -523,8 +526,29 @@ internal class IosArSessionCoordinator(
             focusedLabel = focusedLabel,
             largestPlaneAreaM2 = largestPlaneAreaM2
         )
-        val updatedPoints = anchorStore.placedPoints(didUpdateFrame, sectionFloorY)
+        val trackingStable = isPlacementAnchorTrackingStable(didUpdateFrame)
+        if (hasPlacedPoints) {
+            if (!trackingStable) {
+                markPlacementAnchorTrackingUnstable()
+            } else {
+                onPlacementAnchorTrackingRecovered(frameStartedAt)
+            }
+        }
+        val updatedPoints = if (hasPlacedPoints) {
+            anchorStore.placedPoints(
+                frame = didUpdateFrame,
+                sectionFloorY = sectionFloorY,
+                trackingStable = trackingStable,
+                hadTrackingInstability = placementAnchorHadInstability
+            )
+        } else {
+            emptyList()
+        }
         floorArController.onFrame(snapshot, updatedPoints)
+        if (hasPlacedPoints) {
+            clearPlacementAnchorInstabilityIfSettled(didUpdateFrame)
+            publishContourRealignAvailability()
+        }
         val snapActive = floorArController.currentState().snappedPointIndex != null
         if (!snapActive && canClearTapRejectionHint(livePlacementStatus, frameStartedAt, lastDelegateAtSeconds)) {
             onPlacementHintChanged(null)
@@ -720,7 +744,15 @@ internal class IosArSessionCoordinator(
         val selectedArea = workingFloorAreaM2
 
         placementUiFrameCounter++
-        if (placementUiFrameCounter % PLACEMENT_ANCHORED_POINTS_SYNC_INTERVAL_FRAMES == 0) {
+        val updatedPoints = anchorStore.placedPoints(
+            frame = frame,
+            sectionFloorY = effectiveSectionFloorY,
+            trackingStable = trackingStable,
+            hadTrackingInstability = placementAnchorHadInstability
+        )
+        val periodicSync = placementUiFrameCounter % PLACEMENT_ANCHORED_POINTS_SYNC_INTERVAL_FRAMES == 0
+        val immediateSync = contourPointsMoved(state.placedPoints, updatedPoints)
+        if (periodicSync || immediateSync) {
             val snapshot = FloorFrameSnapshot(
                 isTracking = isSessionTracking,
                 horizontalPlaneCount = 1,
@@ -731,22 +763,7 @@ internal class IosArSessionCoordinator(
                 focusedLabel = "placement",
                 largestPlaneAreaM2 = selectedArea
             )
-            floorArController.onFrame(
-                snapshot,
-                anchorStore.placedPoints(
-                    frame = frame,
-                    sectionFloorY = effectiveSectionFloorY,
-                    trackingStable = trackingStable,
-                    hadTrackingInstability = placementAnchorHadInstability
-                )
-            )
-        } else if (state.placedPoints.isNotEmpty()) {
-            anchorStore.placedPoints(
-                frame = frame,
-                sectionFloorY = effectiveSectionFloorY,
-                trackingStable = trackingStable,
-                hadTrackingInstability = placementAnchorHadInstability
-            )
+            floorArController.onFrame(snapshot, updatedPoints)
         }
 
         clearPlacementAnchorInstabilityIfSettled(frame)
@@ -812,6 +829,8 @@ internal class IosArSessionCoordinator(
         liveReticlePoint = point
         liveReticleResolvedSeconds = now
         liveReticleSourceLabel = hit.hitPathDebugLabel()
+        floorArController.updateLiveContourPoint(point)
+        syncContourRenderer()
 
         val rootNode = view.scene?.rootNode ?: return
         if (!placementFreezeApplied) {
@@ -829,6 +848,21 @@ internal class IosArSessionCoordinator(
             )
         }
         lastRendererMode = "working-floor+patch"
+    }
+
+    /** Keep fill/points/lines visible when delegate frames stall after close/finalize. */
+    private fun syncFinalizedContourFromRenderer(renderTimeSeconds: Double) {
+        val state = floorArController.currentState()
+        val keepContourVisible = state.placedPoints.isNotEmpty() &&
+            (state.isFinalized || state.isPolygonClosed)
+        if (!keepContourVisible) return
+        if (renderTimeSeconds - lastFinalizedContourRenderSyncSeconds <
+            PLACEMENT_RENDER_RETICLE_MIN_INTERVAL_SECONDS
+        ) {
+            return
+        }
+        lastFinalizedContourRenderSyncSeconds = renderTimeSeconds
+        syncContourRenderer()
     }
 
     private fun smoothPlacementPatchPoint(rawPoint: ArPoint3D, renderTimeSeconds: Double): ArPoint3D {
@@ -1106,7 +1140,21 @@ internal class IosArSessionCoordinator(
         if (!placementAnchorHadInstability) return
         if (!isPlacementAnchorTrackingStable(frame)) return
         if (anchorStore.canManuallyRealign()) return
+        when (anchorStore.correctionDebug().stateLabel) {
+            "frozen-unstable", "pending-small" -> return
+        }
         placementAnchorHadInstability = false
+    }
+
+    private fun contourPointsMoved(
+        previous: List<PlacedContourPoint>,
+        updated: List<PlacedContourPoint>,
+        epsilonM: Float = 0.01f
+    ): Boolean {
+        if (previous.size != updated.size) return true
+        return previous.zip(updated).any { (before, after) ->
+            FloorGeometry.distancePlanar(before.position, after.position) > epsilonM
+        }
     }
 
     private fun onPlacementAnchorTrackingRecovered(nowSeconds: Double) {

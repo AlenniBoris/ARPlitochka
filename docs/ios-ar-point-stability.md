@@ -82,6 +82,7 @@
 
 - `true` после `limited` / `relocalizing` / interruption / `Camera gap ≥ 500 ms`
 - Сбрасывается после успешного «Выровнять», очистки контура или когда рассогласование исчезло
+- Не сбрасывается, пока `Anchor corr` в `frozen-unstable` / `pending-small` (иначе auto-small после фриза не успевает примениться)
 
 ### 3.3. Защита от ложных срабатываний
 
@@ -100,7 +101,8 @@
 | `PLACEMENT_ANCHOR_SMALL_AUTO_CONFIRM_FRAMES` | 2 | Кадры для auto-small |
 | `PLACEMENT_ANCHOR_CONFIRM_FRAMES` | 3 | Подтверждение macro-candidate |
 | `PLACEMENT_ANCHOR_SIGNATURE_TOLERANCE_M` | 0.015 m | Квантование signature |
-| `PLACEMENT_ANCHORED_POINTS_SYNC_INTERVAL_FRAMES` | 6 | Sync точек в domain/UI |
+| `PLACEMENT_ANCHORED_POINTS_SYNC_INTERVAL_FRAMES` | 6 | Периодический sync точек в domain/UI |
+| immediate contour sync | при сдвиге ≥ 1 см | Немедленный push в domain после anchor-correction |
 | `PLACEMENT_ANCHOR_RECOVERY_CONTEXT_SECONDS` | 30 s | Legacy recovery window |
 | `TRACKING_DEGRADED_CAMERA_GAP_MS` | 500 ms | Порог деградации трекинга |
 
@@ -133,7 +135,19 @@
 
 ---
 
-## 7. Известные ограничения
+## 7. Контур после close / finalize
+
+| Состояние | Точки | Линии | Заливка | `Closed` |
+|-----------|-------|-------|---------|----------|
+| `Closed: Yes`, placement | видны | видны | видна (preview) | proximity snap |
+| После галочки (`FinalizeArea`) | видны | видны | видна | latched, не сбрасывается |
+| После фриза / finalize | anchor-correction активна | замыкающее ребро сохраняется при `Closed: Yes` | сохраняется при `Closed: Yes` | не сбрасывается `FloorSnapReducer` |
+
+После `FinalizeArea` coordinator продолжает вызывать `anchorStore.placedPoints(..., trackingStable, hadTrackingInstability)` в scan-пути, а не только в placement-пути.
+
+---
+
+## 8. Известные ограничения
 
 1. **Свободный `ARAnchor`** не привязан к `ARPlaneAnchor` — при некоторых типах drift коррекция ARKit может не совпадать с визуальным полом. Следующий шаг (не реализован): привязка root к plane anchor первого тапа.
 2. **Delegate starvation** (~10 с между `didUpdateFrame`) — отдельная проблема; placement patch частично обходится через render loop, sync точек — нет.
@@ -142,7 +156,7 @@
 
 ---
 
-## 8. Чеклист регрессии
+## 9. Чеклист регрессии
 
 1. Поставить 3–5 точек, походить — контур стабилен, `Anchor corr: micro`
 2. Краткий фриз (без закрытия камеры) — при сдвиге 3–8 см точки возвращаются сами (`auto-small`)
@@ -150,10 +164,13 @@
 4. Нажать «Выровнять» — контур переезжает, `Anchor corr: manual`, кнопка исчезает
 5. После первой точки — нет фриза delegate (anchor lookup не в render loop)
 6. Undo всех точек — root anchor удалён, кнопка скрыта
+7. Замкнуть контур до галочки — зелёные точки, синие линии и preview-заливка видны (`Closed: Yes`, `Finalized: No`)
+8. Нажать галочку — точки, заливка и замыкающее ребро остаются (`Closed: Yes`, `Finalized: Yes`)
+9. Фриз после finalize — контур не «открывается», anchor-correction и realign работают как в placement
 
 ---
 
-## 9. История
+## 10. История
 
 | Дата | Изменение |
 |------|-----------|
@@ -161,6 +178,9 @@
 | Июнь 2026 | Root anchor + local XZ + transient debounce |
 | Июнь 2026 | Трёхуровневая политика, display delta, кнопка «Выровнять» |
 | Июнь 2026 | Auto-small (3–8 см) после нестабильности трекинга |
+| Июнь 2026 | Preview-fill при `Closed: Yes`, latched closed после finalize, anchor sync post-finalize |
+| Июнь 2026 | Точки остаются после finalize; render-loop sync контура при delegate starvation |
+| Июнь 2026 | Насыщенная синяя заливка и двойной winding (нормали вверх/вниз) |
 
 ---
 

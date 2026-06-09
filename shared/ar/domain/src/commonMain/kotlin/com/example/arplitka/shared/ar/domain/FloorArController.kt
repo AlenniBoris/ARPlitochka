@@ -6,6 +6,7 @@ import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.shared.ar.contracts.state.FloorArEvent
 import com.example.arplitka.shared.ar.domain.logic.AddPointValidation
 import com.example.arplitka.shared.ar.domain.logic.FloorContourReducer
+import com.example.arplitka.shared.ar.domain.logic.FloorSnapReducer
 import com.example.arplitka.shared.ar.domain.logic.FloorTrackingReducer
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import com.example.arplitka.shared.ar.domain.model.FloorFrameSnapshot
@@ -52,6 +53,34 @@ class FloorArController(
             placedPoints = state.placedPoints + PlacedContourPoint(id, position)
         )
         publish()
+    }
+
+    /** Fast snap/close path for platforms that update the live reticle outside throttled onFrame. */
+    fun updateLiveContourPoint(livePoint: ArPoint3D?) {
+        if (state.isFinalized || state.placedPoints.isEmpty() || livePoint == null) return
+        val base = state.copy(
+            currentHitPoint = livePoint,
+            hasCenterHit = state.hasCenterHit || state.placedPoints.size >= 2
+        )
+        val snapped = FloorSnapReducer.applySnap(base).let { result ->
+            if (result.isPolygonClosed) {
+                result.copy(
+                    trackingStatus = ArTrackingStatus.POLYGON_CLOSED,
+                    instruction = ArInstruction.CONTOUR_CLOSED
+                )
+            } else {
+                result
+            }
+        }
+        if (snapped.snappedPointIndex == state.snappedPointIndex &&
+            snapped.isPolygonClosed == state.isPolygonClosed &&
+            snapped.trackingStatus == state.trackingStatus &&
+            snapped.instruction == state.instruction
+        ) {
+            return
+        }
+        state = snapped
+        publishIfUiChanged()
     }
 
     private fun handleAddPoint(): List<FloorArEffect> =

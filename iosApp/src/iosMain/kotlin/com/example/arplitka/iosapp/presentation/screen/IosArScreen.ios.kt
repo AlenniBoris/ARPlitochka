@@ -126,6 +126,7 @@ actual fun IosArScreen(onBack: () -> Unit) {
                     "Center hit" to if (contourState.hasCenterHit) "Yes" else "No",
                     "Points" to contourState.placedPoints.size.toString(),
                     "Closed" to if (contourState.isPolygonClosed) "Yes" else "No",
+                    "Finalized" to if (contourState.isFinalized) "Yes" else "No",
                     "Phase" to planeDebugMetrics.sessionPhase,
                     "Perf" to planeDebugMetrics.perfDiagnosis,
                     "Plane renderer" to planeDebugMetrics.rendererMode,

@@ -79,6 +79,12 @@ SCNGeometry *pg_create_contour_lines_geometry(
     float yM,
     float halfWidthM
 );
+#define PG_MAX_CONTOUR_FILL_POINTS 256
+SCNGeometry *pg_create_contour_fill_geometry(
+    int pointCount,
+    const float *pointsXZ,
+    float yM
+);
 #define PG_MAX_BOUNDARY_VERTICES 256
 int pg_copy_plane_boundary_xz(
     void *planeAnchor,

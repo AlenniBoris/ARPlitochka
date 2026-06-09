@@ -5,11 +5,10 @@ import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 
 object FloorSnapReducer {
     fun applySnap(state: FloorContourUiState): FloorContourUiState {
-        if (
-            state.isFinalized ||
-            state.currentHitPoint == null ||
-            state.placedPoints.isEmpty()
-        ) {
+        if (state.isFinalized) {
+            return state.copy(snappedPointIndex = null)
+        }
+        if (state.currentHitPoint == null || state.placedPoints.isEmpty()) {
             return state.copy(snappedPointIndex = null, isPolygonClosed = false)
         }
 

@@ -1049,6 +1049,82 @@ SCNGeometry *pg_create_contour_lines_geometry(
     return [SCNGeometry geometryWithSources:@[source] elements:@[element]];
 }
 
+static SCNMaterial *PGCreateContourFillMaterial(void) {
+    SCNMaterial *material = [SCNMaterial material];
+    material.diffuse.contents = [UIColor colorWithRed:0.18f green:0.62f blue:0.98f alpha:0.58f];
+    material.lightingModelName = SCNLightingModelConstant;
+    material.doubleSided = YES;
+    material.readsFromDepthBuffer = YES;
+    material.writesToDepthBuffer = NO;
+    material.transparencyMode = SCNTransparencyModeAOne;
+    return material;
+}
+
+SCNGeometry *pg_create_contour_fill_geometry(
+    int pointCount,
+    const float *pointsXZ,
+    float yM
+) {
+    if (pointCount < 3 || pointsXZ == NULL) {
+        return nil;
+    }
+    if (pointCount > PG_MAX_CONTOUR_FILL_POINTS) {
+        pointCount = PG_MAX_CONTOUR_FILL_POINTS;
+    }
+
+    float centroidX = 0.0f;
+    float centroidZ = 0.0f;
+    for (int i = 0; i < pointCount; i++) {
+        centroidX += pointsXZ[i * 2 + 0];
+        centroidZ += pointsXZ[i * 2 + 1];
+    }
+    centroidX /= (float)pointCount;
+    centroidZ /= (float)pointCount;
+
+    NSInteger vertexCount = pointCount + 1;
+    NSMutableData *vertexData = [NSMutableData dataWithCapacity:(NSUInteger)vertexCount * sizeof(PGGridVertex)];
+    PGGridVertex centroidVertex = {centroidX, yM, centroidZ};
+    [vertexData appendBytes:&centroidVertex length:sizeof(centroidVertex)];
+    for (int i = 0; i < pointCount; i++) {
+        PGGridVertex vertex = {pointsXZ[i * 2 + 0], yM, pointsXZ[i * 2 + 1]};
+        [vertexData appendBytes:&vertex length:sizeof(vertex)];
+    }
+
+    NSInteger triangleCount = pointCount * 2;
+    NSMutableData *indexData = [NSMutableData dataWithCapacity:(NSUInteger)triangleCount * 3 * sizeof(uint16_t)];
+    for (int i = 0; i < pointCount; i++) {
+        int next = (i + 1) % pointCount;
+        uint16_t forward[3] = {
+            0,
+            (uint16_t)(i + 1),
+            (uint16_t)(next + 1)
+        };
+        uint16_t reversed[3] = {
+            0,
+            (uint16_t)(next + 1),
+            (uint16_t)(i + 1)
+        };
+        [indexData appendBytes:forward length:sizeof(forward)];
+        [indexData appendBytes:reversed length:sizeof(reversed)];
+    }
+
+    SCNGeometrySource *source = [SCNGeometrySource geometrySourceWithData:vertexData
+                                                                 semantic:SCNGeometrySourceSemanticVertex
+                                                              vectorCount:vertexCount
+                                                          floatComponents:YES
+                                                      componentsPerVector:3
+                                                        bytesPerComponent:sizeof(float)
+                                                               dataOffset:0
+                                                               dataStride:sizeof(PGGridVertex)];
+    SCNGeometryElement *element = [SCNGeometryElement geometryElementWithData:indexData
+                                                                primitiveType:SCNGeometryPrimitiveTypeTriangles
+                                                               primitiveCount:triangleCount
+                                                                bytesPerIndex:sizeof(uint16_t)];
+    SCNGeometry *geometry = [SCNGeometry geometryWithSources:@[source] elements:@[element]];
+    geometry.materials = @[PGCreateContourFillMaterial()];
+    return geometry;
+}
+
 SCNGeometry *pg_create_grid_line_geometry(
     float widthM,
     float depthM,
