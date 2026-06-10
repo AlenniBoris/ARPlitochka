@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,9 +49,9 @@ fun ArSceneLayer(
 
     val pointMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF00E676)) }
     val snappingPointMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF69F0AE)) }
-    val lineMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF2196F3)) }
-    val previewLineMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF00A2FF)) }
     val fillMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0x802196F3)) }
+    val lineStripBitmap = remember { createLineStripBitmap() }
+    val previewLineStripBitmap = remember { createPreviewLineStripBitmap() }
 
     ARSceneView(
         modifier = modifier.fillMaxSize(),
@@ -119,11 +120,13 @@ fun ArSceneLayer(
             )
         }
 
-        // Render Lines
+        // Render Lines (flat ImageNode strips — CubeNode was occluded by fill/plane depth)
         if (uiState.showContourLines) {
             for (i in 0 until uiState.points.size - 1) {
-                val p1 = uiState.points[i].pose
-                val p2 = uiState.points[i+1].pose
+                val startPoint = uiState.points[i]
+                val endPoint = uiState.points[i + 1]
+                val p1 = startPoint.pose
+                val p2 = endPoint.pose
                 val segment = createSegmentGeometry(
                     rawStart = Position(p1.tx(), p1.ty(), p1.tz()),
                     rawEnd = Position(p2.tx(), p2.ty(), p2.tz()),
@@ -132,25 +135,33 @@ fun ArSceneLayer(
                     endInset = POINT_RADIUS_M
                 )
                 if (segment != null) {
-                    CubeNode(
-                        size = Float3(segment.visualLength, LINE_HEIGHT_M, LINE_WIDTH_M),
-                        materialInstance = lineMaterial,
-                        position = Float3(segment.midPosition.x, segment.midPosition.y, segment.midPosition.z),
-                        rotation = Float3(0f, segment.rotationY, 0f)
-                    )
-                    val labelText = segment.measuredLength.formatMeters()
-                    val labelBitmap = remember(labelText) { createDistanceLabelBitmap(labelText) }
-                    ImageNode(
-                        bitmap = labelBitmap,
-                        size = Float3(LABEL_WIDTH_M, LABEL_HEIGHT_M, 0f),
-                        position = Float3(segment.midPosition.x, segment.midPosition.y + LABEL_VISUAL_OFFSET_M, segment.midPosition.z),
-                        rotation = Float3(-90f, readableLineRotationYDegrees(segment.dx, segment.dz), 0f)
-                    )
+                    key(startPoint.id, endPoint.id) {
+                        ImageNode(
+                            bitmap = lineStripBitmap,
+                            size = Float3(segment.visualLength, LINE_WIDTH_M, 0f),
+                            position = Float3(segment.midPosition.x, segment.midPosition.y, segment.midPosition.z),
+                            rotation = Float3(-90f, segment.rotationY, 0f)
+                        )
+                        val labelText = segment.measuredLength.formatMeters()
+                        val labelBitmap = remember(labelText) { createDistanceLabelBitmap(labelText) }
+                        ImageNode(
+                            bitmap = labelBitmap,
+                            size = Float3(LABEL_WIDTH_M, LABEL_HEIGHT_M, 0f),
+                            position = Float3(
+                                segment.midPosition.x,
+                                segment.midPosition.y + LABEL_VISUAL_OFFSET_M,
+                                segment.midPosition.z
+                            ),
+                            rotation = Float3(-90f, readableLineRotationYDegrees(segment.dx, segment.dz), 0f)
+                        )
+                    }
                 }
             }
             if (uiState.isPolygonClosed) {
-                val p1 = uiState.points.last().pose
-                val p2 = uiState.points.first().pose
+                val startPoint = uiState.points.last()
+                val endPoint = uiState.points.first()
+                val p1 = startPoint.pose
+                val p2 = endPoint.pose
                 val segment = createSegmentGeometry(
                     rawStart = Position(p1.tx(), p1.ty(), p1.tz()),
                     rawEnd = Position(p2.tx(), p2.ty(), p2.tz()),
@@ -159,20 +170,26 @@ fun ArSceneLayer(
                     endInset = POINT_RADIUS_M
                 )
                 if (segment != null) {
-                    CubeNode(
-                        size = Float3(segment.visualLength, LINE_HEIGHT_M, LINE_WIDTH_M),
-                        materialInstance = lineMaterial,
-                        position = Float3(segment.midPosition.x, segment.midPosition.y, segment.midPosition.z),
-                        rotation = Float3(0f, segment.rotationY, 0f)
-                    )
-                    val labelText = segment.measuredLength.formatMeters()
-                    val labelBitmap = remember(labelText) { createDistanceLabelBitmap(labelText) }
-                    ImageNode(
-                        bitmap = labelBitmap,
-                        size = Float3(LABEL_WIDTH_M, LABEL_HEIGHT_M, 0f),
-                        position = Float3(segment.midPosition.x, segment.midPosition.y + LABEL_VISUAL_OFFSET_M, segment.midPosition.z),
-                        rotation = Float3(-90f, readableLineRotationYDegrees(segment.dx, segment.dz), 0f)
-                    )
+                    key(startPoint.id, endPoint.id, "closing") {
+                        ImageNode(
+                            bitmap = lineStripBitmap,
+                            size = Float3(segment.visualLength, LINE_WIDTH_M, 0f),
+                            position = Float3(segment.midPosition.x, segment.midPosition.y, segment.midPosition.z),
+                            rotation = Float3(-90f, segment.rotationY, 0f)
+                        )
+                        val labelText = segment.measuredLength.formatMeters()
+                        val labelBitmap = remember(labelText) { createDistanceLabelBitmap(labelText) }
+                        ImageNode(
+                            bitmap = labelBitmap,
+                            size = Float3(LABEL_WIDTH_M, LABEL_HEIGHT_M, 0f),
+                            position = Float3(
+                                segment.midPosition.x,
+                                segment.midPosition.y + LABEL_VISUAL_OFFSET_M,
+                                segment.midPosition.z
+                            ),
+                            rotation = Float3(-90f, readableLineRotationYDegrees(segment.dx, segment.dz), 0f)
+                        )
+                    }
                 }
             }
         }
@@ -189,12 +206,14 @@ fun ArSceneLayer(
                 endInset = 0f
             )
             if (segment != null) {
-                CubeNode(
-                    size = Float3(segment.visualLength, PREVIEW_LINE_HEIGHT_M, PREVIEW_LINE_WIDTH_M),
-                    materialInstance = previewLineMaterial,
-                    position = Float3(segment.midPosition.x, segment.midPosition.y, segment.midPosition.z),
-                    rotation = Float3(0f, segment.rotationY, 0f)
-                )
+                key("preview-line") {
+                    ImageNode(
+                        bitmap = previewLineStripBitmap,
+                        size = Float3(segment.visualLength, PREVIEW_LINE_WIDTH_M, 0f),
+                        position = Float3(segment.midPosition.x, segment.midPosition.y, segment.midPosition.z),
+                        rotation = Float3(-90f, segment.rotationY, 0f)
+                    )
+                }
             }
         }
 

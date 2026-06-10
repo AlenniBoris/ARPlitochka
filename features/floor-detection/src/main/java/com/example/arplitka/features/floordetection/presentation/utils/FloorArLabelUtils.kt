@@ -6,6 +6,18 @@ import android.graphics.Paint
 import android.graphics.RectF
 import java.util.Locale
 
+internal fun createLineStripBitmap(): Bitmap = createSolidStripBitmap(color = "#FF2196F3")
+
+internal fun createPreviewLineStripBitmap(): Bitmap = createSolidStripBitmap(color = "#FF00A2FF")
+
+private fun createSolidStripBitmap(color: String): Bitmap {
+    val width = 64
+    val height = 16
+    return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+        Canvas(bitmap).drawColor(android.graphics.Color.parseColor(color))
+    }
+}
+
 internal fun createDistanceLabelBitmap(text: String): Bitmap {
     val width = 320
     val height = 112

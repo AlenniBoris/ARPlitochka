@@ -31,7 +31,7 @@ class FloorArGeometryUtilsTest {
     @Test
     fun `createSegmentGeometry returns null for short segments`() {
         val start = Position(0f, 0f, 0f)
-        val end = Position(0.01f, 0f, 0f) // 1cm, less than MIN_LINE_LENGTH_M
+        val end = Position(0.0005f, 0f, 0f) // 0.5 mm, less than MIN_LINE_LENGTH_M
         val segment = createSegmentGeometry(start, end, 0f, 0f, 0f)
         assertNull(segment)
     }

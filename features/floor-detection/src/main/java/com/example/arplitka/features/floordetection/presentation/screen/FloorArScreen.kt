@@ -126,6 +126,9 @@ fun FloorArScreen(
                     "Points" to uiState.points.size.toString(),
                     "Closed" to uiState.isPolygonClosed.toString(),
                     "Confirmed" to uiState.isContourConfirmed.toString(),
+                    "Show pts" to if (uiState.showContourPoints) "Yes" else "No",
+                    "Show lines" to if (uiState.showContourLines) "Yes" else "No",
+                    "Show fill" to if (uiState.showSectionFill) "Yes" else "No",
                     "Tile" to if (uiState.isTileVisible) "On" else "Off",
                     "Texture rotation" to (uiState.textureRotation.ordinal * 45).toString()
                 ),

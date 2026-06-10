@@ -49,8 +49,9 @@ data class FloorUiState(
     val currentHitResult: HitResult? = null,
     val snappedPointIndex: Int? = null
 ) {
+    /** Android parity with shared `FloorContourUiState`: points stay until tile mode. */
     val showContourPoints: Boolean
-        get() = points.isNotEmpty() && !isContourConfirmed
+        get() = points.isNotEmpty() && !isTileVisible
 
     val showContourLines: Boolean
         get() = points.size >= 2 && !isTileVisible
@@ -64,8 +65,9 @@ data class FloorUiState(
     val showPlaneRenderer: Boolean
         get() = !isContourConfirmed
 
+    /** Preview fill on close (`Closed: Yes`), same as shared/iOS contract. */
     val showSectionFill: Boolean
-        get() = isContourConfirmed && isPolygonClosed && points.size >= 3
+        get() = isPolygonClosed && points.size >= 3
 }
 
 data class ArFrameResult(

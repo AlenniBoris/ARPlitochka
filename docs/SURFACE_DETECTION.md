@@ -78,7 +78,8 @@
 | «+» | Точка в `currentHitResult`, anchor на hit pose |
 | Линии | Между точками; preview к прицелу |
 | Snap / close | Snap 0.02 m; замыкание к первой 0.10 m (≥3 точек) |
-| OK (замкнут) | `confirmContour()` → синяя заливка, plane renderer off |
+| Замкнут (`Closed: Yes`) | preview-заливка сразу; точки/линии остаются |
+| OK (замкнут) | `confirmContour()` → plane renderer off; точки/линии/fill остаются до tile mode |
 | Плитка | Toggle, смена типа, поворот 0°/45°/90°/135° |
 | Стабильность Y | Контур/линии/заливка на **Y первой точки** (`sectionFloorY`), чтобы точки не «плыли» при drift anchor |
 

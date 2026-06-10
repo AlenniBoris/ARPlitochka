@@ -4,6 +4,7 @@ import com.example.arplitka.features.floordetection.domain.model.ArPoint
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Position2
 import kotlin.math.atan2
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 internal data class PolygonBounds(
@@ -63,7 +64,7 @@ internal fun List<Position2>.bounds(): PolygonBounds {
 }
 
 internal fun Float.roundToMillimeters(): Int {
-    return (this * 1000f).toInt()
+    return (this * 1000f).roundToInt()
 }
 
 internal fun createSegmentGeometry(

@@ -3,9 +3,9 @@ package com.example.arplitka.features.floordetection.presentation.viewmodel
 import androidx.compose.ui.unit.IntSize
 import app.cash.turbine.test
 import com.example.arplitka.features.floordetection.domain.model.ArFrameResult
-import com.example.arplitka.features.floordetection.domain.model.ArInstruction
-import com.example.arplitka.features.floordetection.domain.model.ArStatus
 import com.example.arplitka.features.floordetection.domain.model.FloorDetectionState
+import com.example.arplitka.shared.ar.contracts.model.ArInstruction
+import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.features.floordetection.domain.model.TextureRotation
 import com.example.arplitka.features.floordetection.domain.model.TileType
 import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFrameUseCase
@@ -48,9 +48,9 @@ class FloorArViewModelTest {
     fun `initial state is correct`() = runTest {
         viewModel.uiState.test {
             val state = awaitItem()
-            assertEquals(ArStatus.INITIALIZATION, state.status)
+            assertEquals(ArTrackingStatus.INITIALIZING, state.status)
             assertEquals(ArInstruction.PLEASE_WAIT, state.instruction)
-            assertEquals(TileType.PAVING_STONES_V1, state.selectedTileType)
+            assertEquals(TileType.MODERN, state.selectedTileType)
             assertEquals(TextureRotation.DEGREES_0, state.textureRotation)
         }
     }
@@ -79,12 +79,13 @@ class FloorArViewModelTest {
         viewModel.uiState.test {
             val state = awaitItem()
             assertEquals(FloorDetectionState.CandidateFound, state.detectionState)
-            assertEquals(ArStatus.FLOOR_DETECTED, state.status)
+            assertEquals(ArTrackingStatus.FLOOR_DETECTED, state.status)
             assertEquals(ArInstruction.DETECTED, state.instruction)
             assertEquals(1.5f, state.selectedArea)
         }
     }
 
+    @Test
     fun `changeTileType keeps selection when contour is open`() = runTest {
         viewModel.changeTileType()
         assertEquals(TileType.MODERN, viewModel.uiState.value.selectedTileType)
