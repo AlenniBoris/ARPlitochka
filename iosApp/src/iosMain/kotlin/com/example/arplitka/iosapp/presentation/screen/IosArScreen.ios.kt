@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -122,6 +124,70 @@ actual fun IosArScreen(onBack: () -> Unit) {
                 )
             }
 
+            if (contourState.showTileControls) {
+                if (contourState.isTileVisible) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
+                            .padding(horizontal = 18.dp, vertical = 14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Поворот текстуры: ${contourState.textureRotation.degrees}°",
+                                color = Color.White
+                            )
+                            Button(
+                                onClick = { coordinator.dispatchEvent(FloorArEvent.RotateTexture) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Text("Повернуть")
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = { coordinator.dispatchEvent(FloorArEvent.ToggleTileVisibility) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (contourState.isTileVisible) {
+                                Color.Black.copy(alpha = 0.72f)
+                            } else {
+                                Color(0xFF4CAF50)
+                            },
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Text(if (contourState.isTileVisible) "Убрать плитку" else "Добавить плитку")
+                    }
+
+                    if (contourState.isTileVisible) {
+                        Button(
+                            onClick = { coordinator.dispatchEvent(FloorArEvent.ChangeTileType) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White.copy(alpha = 0.92f),
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Text("Сменить плитку")
+                        }
+                    }
+                }
+            }
+
             Button(
                 onClick = { coordinator.rescanSession() },
                 colors = ButtonDefaults.buttonColors(
@@ -145,6 +211,9 @@ actual fun IosArScreen(onBack: () -> Unit) {
                     "Points" to contourState.placedPoints.size.toString(),
                     "Closed" to if (contourState.isPolygonClosed) "Yes" else "No",
                     "Finalized" to if (contourState.isFinalized) "Yes" else "No",
+                    "Tile" to if (contourState.isTileVisible) "On" else "Off",
+                    "Texture rotation" to contourState.textureRotation.degrees.toString(),
+                    "Tile type" to contourState.selectedTileType.resourceName,
                     "Phase" to planeDebugMetrics.sessionPhase,
                     "Perf" to planeDebugMetrics.perfDiagnosis,
                     "Plane renderer" to planeDebugMetrics.rendererMode,

@@ -1789,3 +1789,57 @@ UIImage *pg_create_contour_distance_label_image(const char *text) {
     UIGraphicsEndImageContext();
     return image;
 }
+
+static UIImage *PGRotatedImage(UIImage *source, CGFloat degrees) {
+    if (source == nil || fabs(degrees) < 0.01f) {
+        return source;
+    }
+    CGFloat radians = degrees * (CGFloat)M_PI / 180.0;
+    CGRect bounds = CGRectMake(0.0, 0.0, source.size.width, source.size.height);
+    UIGraphicsBeginImageContextWithOptions(bounds.size, NO, source.scale);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    UIImage *image = nil;
+    if (ctx != NULL) {
+        CGContextTranslateCTM(ctx, bounds.size.width * 0.5, bounds.size.height * 0.5);
+        CGContextRotateCTM(ctx, radians);
+        [source drawInRect:CGRectMake(
+            -bounds.size.width * 0.5,
+            -bounds.size.height * 0.5,
+            bounds.size.width,
+            bounds.size.height
+        )];
+        image = UIGraphicsGetImageFromCurrentImageContext();
+    }
+    UIGraphicsEndImageContext();
+    return image ?: source;
+}
+
+static UIImage *PGLoadTileTextureSource(const char *resourceName) {
+    if (resourceName == NULL) {
+        return nil;
+    }
+    NSString *stem = [NSString stringWithUTF8String:resourceName];
+    if (stem.length == 0) {
+        return nil;
+    }
+    UIImage *image = [UIImage imageNamed:stem];
+    if (image != nil) {
+        return image;
+    }
+    NSString *withFolder = [NSString stringWithFormat:@"mock/tiles/textures/%@", stem];
+    image = [UIImage imageNamed:withFolder];
+    if (image != nil) {
+        return image;
+    }
+    NSBundle *bundle = [NSBundle mainBundle];
+    NSString *path = [bundle pathForResource:stem ofType:@"png" inDirectory:@"mock/tiles/textures"];
+    if (path.length > 0) {
+        return [UIImage imageWithContentsOfFile:path];
+    }
+    return nil;
+}
+
+UIImage *pg_load_tile_texture_image(const char *resourceName, float rotationDegrees) {
+    UIImage *source = PGLoadTileTextureSource(resourceName);
+    return PGRotatedImage(source, (CGFloat)rotationDegrees);
+}

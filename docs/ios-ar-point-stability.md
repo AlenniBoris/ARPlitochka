@@ -8,6 +8,7 @@
 Связанные документы:
 - [IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md](./IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md) — placement patch, `workingFloorY`, render loop
 - [SURFACE_DETECTION.md § iOS Debug Panel](./SURFACE_DETECTION.md#ios-debug-panel--справочник-полей) — поле `Anchor corr`
+- [ios-tile-placement.md](./ios-tile-placement.md) — плитка после finalize (toggle, rotate, смена типа)
 - [ios-ar-delegate-starvation-handoff-prompt.md](./ios-ar-delegate-starvation-handoff-prompt.md) — starvation delegate (отдельная проблема)
 
 ---

@@ -17,6 +17,8 @@ data class FloorContourUiState(
     val isPolygonClosed: Boolean = false,
     val isFinalized: Boolean = false,
     val isTileVisible: Boolean = false,
+    val selectedTileType: TileType = TileType.PAVING_STONES_V2,
+    val textureRotation: TextureRotation = TextureRotation.DEGREES_0,
     val snappedPointIndex: Int? = null,
     val currentHitPoint: ArPoint3D? = null
 ) {

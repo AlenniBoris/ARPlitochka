@@ -74,6 +74,8 @@ Distance labels и contour lines рендерятся в одном блоке `
 
 `FloorUiStateVisibilityTest` — контракт visibility для placement / closed / confirmed / tile.
 
+Shared KMP (iOS + будущая миграция Android): `FloorArControllerTileTest`, `FloorContourUiStateTileVisibilityTest` в `:shared:ar:domain` — toggle/rotate/change tile, visibility flags. См. [ios-tile-placement.md](./ios-tile-placement.md).
+
 ### Device QA
 
 1. Поставить 2 точки → видны точки, синие линии, distance labels.
@@ -94,4 +96,4 @@ Distance labels и contour lines рендерятся в одном блоке `
 ## Дальнейшие шаги (не в этом плане)
 
 - Постепенная миграция Android `FloorUiState` / `FloorArViewModel` на shared `FloorArController`, чтобы не поддерживать две модели.
-- Distance labels на iOS (отдельный план `ios_parity_features.plan.md`).
+- iOS tile placement parity — [ios-tile-placement.md](./ios-tile-placement.md) (реализовано в коде, device QA на iPhone).

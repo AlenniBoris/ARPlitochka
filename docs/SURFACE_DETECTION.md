@@ -5,7 +5,7 @@
 **Для агентов и разработчиков:**
 
 - **Android** — [статус и договорённости](#android--статус-и-договорённости): эталон поиска пола и **полный** flow контура/плитки.
-- **iOS** — [статус и договорённости](#ios--статус-и-договорённости): поиск и отображение поверхностей; **стратегия:** [IOS_AR_SURFACE_STRATEGY.md](./IOS_AR_SURFACE_STRATEGY.md); **стабильность точек контура:** [ios-ar-point-stability.md](./ios-ar-point-stability.md).
+- **iOS** — [статус и договорённости](#ios--статус-и-договорённости): поиск и отображение поверхностей; **стратегия:** [IOS_AR_SURFACE_STRATEGY.md](./IOS_AR_SURFACE_STRATEGY.md); **стабильность точек контура:** [ios-ar-point-stability.md](./ios-ar-point-stability.md); **плитка после finalize:** [ios-tile-placement.md](./ios-tile-placement.md).
 
 ## Цель UX
 
@@ -41,7 +41,7 @@
 | Синие линии | `showContourLines` | `showContourLines` |
 | Preview-линия | `showPreviewLine` (к прицелу) | **выкл.** — синие линии только между поставленными точками (≥2) |
 | Заливка секции | `showSectionFill` | `showSectionFill` |
-| Плитка (будущее) | `isTileVisible` | `isTileVisible` (пока false на iOS) |
+| Плитка | `isTileVisible` | `isTileVisible` |
 
 Правило: **белые точки видны до finalize контура** (`!isContourConfirmed` / `!isFinalized`). После OK белые точки скрываются, остаётся разметка.
 
@@ -247,7 +247,7 @@ Planes, Area, Tracking, Points, Closed, Confirmed, Tile, Texture rotation — `F
 | Тема | Причина |
 |------|---------|
 | **Белые точки во время разметки** | Продуктово конфликтует с FPS; fallback — статический snapshot, не live mesh. |
-| **Синяя заливка, плитка, rotate** | После стабильного контура на устройстве. |
+| **Синяя заливка, плитка, rotate** | ✅ Реализовано в `IosArContourRenderer` + shared `FloorArController`; QA на iPhone — [ios-tile-placement.md](./ios-tile-placement.md). |
 | **Merge якорей ARKit** | API iOS не даёт subsuming как ARCore; dedup только на уровне визуала и sticky floor. |
 
 ### Критерии «не ломать»
@@ -338,7 +338,7 @@ flowchart TD
 | Компонент | Поведение |
 |-----------|-----------|
 | `IosFloorAnchorStore` | Root `ARAnchor` + `rootLocalX/Z`; resolve из transform anchor; политика micro / auto-small / manual macro |
-| `IosArContourRenderer` | `syncIfChanged` на add/undo/close; distance labels через SceneKit planes |
+| `IosArContourRenderer` | `syncIfChanged` на add/undo/close/tile; distance labels; синяя заливка / текстура плитки |
 | Preview-линия к прицелу | **выкл.** (как Android policy для iOS) |
 | Manual realign | Кнопка «Выровнять контур» при сдвиге ≥ 8 см после нестабильности трекинга |
 
@@ -353,11 +353,11 @@ flowchart TD
 
 | Файл | Роль |
 |------|------|
-| `IosArScreen.ios.kt` | Coordinator, scan/contour modes, rescan |
+| `IosArScreen.ios.kt` | Coordinator, scan/contour modes, tile controls, rescan |
 | `IosArSessionRelocation.kt` | Auto/manual scan session reset (A+) |
 | `IosArPlaneSurfaceRenderer.kt` | Surface v2 polygon grid, cull/elevated (A+), elevation lock |
 | `IosArCenterRaycast.kt` | Center hit (`pg_center_raycast` + hitTest fallback) |
-| `IosArContourRenderer.kt` | Event-driven contour |
+| `IosArContourRenderer.kt` | Event-driven contour + section fill / tile texture |
 | `IosFloorAnchorStore.kt` | Anchor-based contour positions + correction policy |
 | `IosArPlaneRenderer.kt` | Legacy helpers (не coordinator path) |
 
@@ -367,7 +367,7 @@ flowchart TD
 
 | Аспект | Android (ARCore) — эталон | iOS (ARKit) |
 |--------|-------------------------|-------------|
-| Роль в продукте | Референс detection + **полный контур/плитка** | Surface зафиксирован; контур — догнать Android |
+| Роль в продукте | Референс detection + **полный контур/плитка** | Surface + контур + плитка (код ✅, device QA — [ios-tile-placement.md](./ios-tile-placement.md)) |
 | Визуализация пола | Нативный `planeRenderer` (все horizontal planes) | Polygon grid overlay + reticle patch только без floor под прицелом |
 | Скорость в contour mode | N/A | Surface **скрыта** после 1-й точки |
 | Выбор поверхности | Center hit + **`isPoseInPolygon`** | Confirmed extent hit + boundary check |
@@ -378,7 +378,7 @@ flowchart TD
 | Depth / LiDAR | Depth automatic | sceneReconstruction mesh optional |
 | Min area | 0.15 m² | 0.15 m² |
 | Белые точки до confirm | `showPlaneRenderer` | `showPlaneDots` |
-| Контур + заливка + плитка | ✅ | ❌ (в работе) |
+| Контур + заливка + плитка | ✅ | ✅ (код); device QA — [ios-tile-placement.md](./ios-tile-placement.md) |
 
 ---
 
@@ -506,6 +506,10 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | **Tracking** | `TRACKING`, `LIMITED`, `NOT_AVAILABLE` |
 | **Points** | Число поставленных точек контура |
 | **Closed** | Контур замкнут (`Yes` / `No`) |
+| **Finalized** | Контур подтверждён (OK) |
+| **Tile** | Режим плитки (`On` / `Off`) |
+| **Texture rotation** | Угол текстуры: 0 / 45 / 90 / 135 |
+| **Tile type** | `paving_stones_v1` / `paving_stones_v2` |
 
 ### Чеклист регрессии iOS (поверхность + контур)
 
@@ -530,7 +534,18 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | 12 | Потеря трекинга, сдвиг ≥ 8 см | Кнопка «Выровнять контур»; после нажатия `Anchor corr: manual` |
 | 13 | Обычная работа | `Anchor corr: micro`, нет рывков контура |
 
-Подробный чеклист: [ios-ar-point-stability.md §8](./ios-ar-point-stability.md#8-чеклист-регрессии).
+**Плитка (после finalize):** см. [ios-tile-placement.md § Чеклист QA](./ios-tile-placement.md#чеклист-qa-на-iphone).
+
+| # | Проверка | Ожидание |
+|---|----------|----------|
+| 14 | После OK | Кнопка «Добавить плитку» |
+| 15 | Добавить плитку | Текстурная заливка; точки/линии скрыты; `Tile: On` |
+| 16 | Сменить плитку | Переключение v1 ↔ v2 |
+| 17 | Поворот | 0° → 45° → 90° → 135° → 0° |
+| 18 | Убрать плитку | Синяя заливка; точки и линии снова видны |
+| 19 | «Пересканировать» в tile mode | Контур и плитка сброшены |
+
+Подробный чеклист стабильности: [ios-ar-point-stability.md §8](./ios-ar-point-stability.md#8-чеклист-регрессии).
 
 **По скринам тестировщиков (фаза A.5, после A+):**
 
@@ -622,6 +637,7 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 |----------|------------|
 | `features/floor-detection/README.md` | Android feature-модуль |
 | `shared/ui/kit/README.md` | AR UI kit |
+| `docs/ios-tile-placement.md` | iOS tile placement parity (shared state, SceneKit texture, QA) |
 | `docs/BACKEND_MOCKING_PLAN.md` | AR platform-specific в KMP |
 | План (Cursor) `ios-plane-speed` | История оптимизаций; todos completed; ARRaycast → hitTest |
 
@@ -640,4 +656,4 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | 2026-06 | iOS фаза A в коде: confirmed-only gate, patch filters, overlay budget |
 | 2026-06 | Скрины: плитка / трава / лестница-призраки → план **A+** в [IOS_AR_SURFACE_STRATEGY.md](./IOS_AR_SURFACE_STRATEGY.md) |
 | 2026-06 | iOS фаза **B** (B.1–B.5): ARRaycast bridge, polygon grid, outdoor strict, classification, mesh raycast |
-| 2026-06 | Grid lines: world-space 1.5 cm; elevation lock для surface; dedup overlap ±10 cm задокументирован |
+| 2026-06 | iOS: shared tile state + SceneKit texture fill; документ [ios-tile-placement.md](./ios-tile-placement.md) |
