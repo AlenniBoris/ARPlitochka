@@ -147,6 +147,12 @@ UIImage *pg_grid_pattern_image(void);
 UIImage *pg_grid_pattern_image_outdoor(void);
 UIImage *pg_create_contour_distance_label_image(const char *text);
 UIImage *pg_load_tile_texture_image(const char *resourceName, float rotationDegrees);
+UIImage *pg_create_tile_section_pattern_image(
+    const char *resourceName,
+    float widthMeters,
+    float heightMeters,
+    float rotationDegrees
+);
 #define PG_DOT_BOUNDARY_EXTENT 0
 #define PG_DOT_BOUNDARY_POLYGON 1
 

@@ -3,6 +3,7 @@ package com.example.arplitka.iosapp.platform.render
 import com.example.arplitka.iosapp.bridge.pg_create_contour_distance_label_image
 import com.example.arplitka.iosapp.bridge.pg_create_contour_fill_geometry
 import com.example.arplitka.iosapp.bridge.pg_create_contour_lines_geometry
+import com.example.arplitka.iosapp.bridge.pg_create_tile_section_pattern_image
 import com.example.arplitka.iosapp.bridge.pg_load_tile_texture_image
 import com.example.arplitka.shared.ar.domain.geometry.CONTOUR_LABEL_HEIGHT_M
 import com.example.arplitka.shared.ar.domain.geometry.CONTOUR_LABEL_WIDTH_M
@@ -123,7 +124,8 @@ internal class IosArContourRenderer {
             isFinalized = state.isFinalized,
             isTileVisible = state.isTileVisible,
             selectedTileType = state.selectedTileType,
-            textureRotation = state.textureRotation
+            textureRotation = state.textureRotation,
+            bounds = if (state.isTileVisible) sectionBoundsMeters(points) else null
         )
         if (fillBatchKey == lastFillBatchKey) {
             sectionFillNode?.hidden = false
@@ -154,7 +156,7 @@ internal class IosArContourRenderer {
             sectionFillNode = created
             rootNode?.addChildNode(created)
         }
-        geometry.materials = listOf(resolveFillMaterial(state))
+        geometry.materials = listOf(resolveFillMaterial(state, points))
         node.geometry = geometry
         node.renderingOrder = 5
         node.hidden = false
@@ -344,18 +346,44 @@ internal class IosArContourRenderer {
         return key
     }
 
-    private fun resolveFillMaterial(state: FloorContourUiState): SCNMaterial {
+    private fun resolveFillMaterial(
+        state: FloorContourUiState,
+        points: List<ArPoint3D>
+    ): SCNMaterial {
         if (!state.isTileVisible) return fillMaterial
+        val bounds = sectionBoundsMeters(points)
         val cacheKey = TileMaterialKey(
             tileType = state.selectedTileType,
-            textureRotation = state.textureRotation
+            textureRotation = state.textureRotation,
+            widthQuant = quant(bounds.widthM),
+            heightQuant = quant(bounds.heightM)
         )
         return tileMaterialCache.getOrPut(cacheKey) {
             createTileMaterial(
                 resourceName = state.selectedTileType.resourceName,
+                widthMeters = bounds.widthM,
+                heightMeters = bounds.heightM,
                 rotationDegrees = state.textureRotation.degrees.toFloat()
             )
         }
+    }
+
+    private fun sectionBoundsMeters(points: List<ArPoint3D>): SectionBoundsMeters {
+        if (points.isEmpty()) return SectionBoundsMeters(1f, 1f)
+        var minX = points.first().xMeters
+        var maxX = minX
+        var minZ = points.first().zMeters
+        var maxZ = minZ
+        points.forEach { point ->
+            minX = minOf(minX, point.xMeters)
+            maxX = maxOf(maxX, point.xMeters)
+            minZ = minOf(minZ, point.zMeters)
+            maxZ = maxOf(maxZ, point.zMeters)
+        }
+        return SectionBoundsMeters(
+            widthM = (maxX - minX).coerceAtLeast(0.5f),
+            heightM = (maxZ - minZ).coerceAtLeast(0.5f)
+        )
     }
 
     private fun fillBatchKey(
@@ -364,13 +392,18 @@ internal class IosArContourRenderer {
         isFinalized: Boolean,
         isTileVisible: Boolean,
         selectedTileType: TileType,
-        textureRotation: TextureRotation
+        textureRotation: TextureRotation,
+        bounds: SectionBoundsMeters?
     ): Int {
         var key = points.size * 31
         key = key * 31 + if (isFinalized) 1 else 0
         key = key * 31 + if (isTileVisible) 1 else 0
         key = key * 31 + selectedTileType.ordinal
         key = key * 31 + textureRotation.ordinal
+        if (bounds != null) {
+            key = key * 31 + quant(bounds.widthM)
+            key = key * 31 + quant(bounds.heightM)
+        }
         key = key * 31 + ((floorY ?: 0f) / POSITION_QUANT_M).roundToInt()
         points.forEach { point ->
             key = key * 31 + quant(point.xMeters)
@@ -409,7 +442,14 @@ internal class IosArContourRenderer {
 
 private data class TileMaterialKey(
     val tileType: TileType,
-    val textureRotation: TextureRotation
+    val textureRotation: TextureRotation,
+    val widthQuant: Int,
+    val heightQuant: Int
+)
+
+private data class SectionBoundsMeters(
+    val widthM: Float,
+    val heightM: Float
 )
 
 private fun eulerDegreesToRadians(degrees: Float): Float = degrees * PI.toFloat() / 180f
@@ -438,17 +478,26 @@ private fun createLabelMaterial(): SCNMaterial =
 @OptIn(ExperimentalForeignApi::class)
 private fun createTileMaterial(
     resourceName: String,
+    widthMeters: Float,
+    heightMeters: Float,
     rotationDegrees: Float
-): SCNMaterial =
-    SCNMaterial().apply {
-        diffuse.contents = pg_load_tile_texture_image(resourceName, rotationDegrees)
+): SCNMaterial {
+    val patternImage = pg_create_tile_section_pattern_image(
+        resourceName = resourceName,
+        widthMeters = widthMeters,
+        heightMeters = heightMeters,
+        rotationDegrees = rotationDegrees
+    )
+    return SCNMaterial().apply {
+        diffuse.contents = patternImage ?: pg_load_tile_texture_image(resourceName, rotationDegrees)
         lightingModelName = platform.SceneKit.SCNLightingModelConstant
         doubleSided = true
         readsFromDepthBuffer = true
         writesToDepthBuffer = false
-        diffuse.wrapS = platform.SceneKit.SCNWrapModeRepeat
-        diffuse.wrapT = platform.SceneKit.SCNWrapModeRepeat
+        diffuse.wrapS = platform.SceneKit.SCNWrapModeClamp
+        diffuse.wrapT = platform.SceneKit.SCNWrapModeClamp
     }
+}
 
 @OptIn(ExperimentalForeignApi::class)
 private fun createFillMaterial(

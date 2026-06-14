@@ -75,5 +75,5 @@ Android-референс: `ArActionButtons.kt`, `FloorArViewModel.kt`, `ArSceneL
 
 ## Известные ограничения
 
-- Масштаб текстуры на iOS использует SceneKit `wrapS`/`wrapT` repeat; Android генерирует bitmap по bounds полигона — возможны визуальные отличия плотности узора.
-- Если текстура не загрузилась из bundle, заливка может остаться пустой/чёрной — проверить наличие PNG в Xcode target Resources.
+- Текстура генерируется в native bridge по bounds полигона (как Android `toSectionPatternBitmap`), с UV 0–1 на `pg_create_contour_fill_geometry`.
+- Если PNG не попал в app bundle, заливка может остаться белой — проверить `Resources/mock/tiles/textures/*.png` в Xcode target.

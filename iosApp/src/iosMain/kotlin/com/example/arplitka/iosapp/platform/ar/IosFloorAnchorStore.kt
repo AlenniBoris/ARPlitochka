@@ -265,7 +265,8 @@ internal class IosFloorAnchorStore {
                 resolvedPositions = resolvedPositions,
                 rootOrigin = rootOrigin,
                 correctionDelta = correctionDelta,
-                hadTrackingInstability = hadTrackingInstability
+                hadTrackingInstability = hadTrackingInstability,
+                forceOffer = true
             )
             correctionStateLabel = "frozen-unstable"
             return entries.map { it.lastResolvedWorldPosition }
@@ -322,9 +323,10 @@ internal class IosFloorAnchorStore {
         rootOrigin: ArPoint3D,
         correctionDelta: Float,
         hadTrackingInstability: Boolean,
-        persistent: Boolean = false
+        persistent: Boolean = false,
+        forceOffer: Boolean = false
     ) {
-        if (!hadTrackingInstability && !persistent) return
+        if (!forceOffer && !hadTrackingInstability && !persistent) return
         if (correctionDelta < PLACEMENT_ANCHOR_MACRO_BLOCKED_M) return
         storePendingMacroCandidate(resolvedPositions, rootOrigin)
         manualRealignLatched = true

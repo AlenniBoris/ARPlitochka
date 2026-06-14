@@ -1090,6 +1090,35 @@ SCNGeometry *pg_create_contour_fill_geometry(
         [vertexData appendBytes:&vertex length:sizeof(vertex)];
     }
 
+    float minX = pointsXZ[0];
+    float maxX = pointsXZ[0];
+    float minZ = pointsXZ[1];
+    float maxZ = pointsXZ[1];
+    for (int i = 1; i < pointCount; i++) {
+        float x = pointsXZ[i * 2 + 0];
+        float z = pointsXZ[i * 2 + 1];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+    }
+    float spanX = maxX - minX;
+    float spanZ = maxZ - minZ;
+    if (spanX < 0.001f) spanX = 0.001f;
+    if (spanZ < 0.001f) spanZ = 0.001f;
+
+    NSMutableData *texcoordData = [NSMutableData dataWithCapacity:(NSUInteger)vertexCount * 2 * sizeof(float)];
+    float centroidU = (centroidX - minX) / spanX;
+    float centroidV = (centroidZ - minZ) / spanZ;
+    float centroidUv[2] = {centroidU, centroidV};
+    [texcoordData appendBytes:centroidUv length:sizeof(centroidUv)];
+    for (int i = 0; i < pointCount; i++) {
+        float x = pointsXZ[i * 2 + 0];
+        float z = pointsXZ[i * 2 + 1];
+        float uv[2] = {(x - minX) / spanX, (z - minZ) / spanZ};
+        [texcoordData appendBytes:uv length:sizeof(uv)];
+    }
+
     NSInteger triangleCount = pointCount * 2;
     NSMutableData *indexData = [NSMutableData dataWithCapacity:(NSUInteger)triangleCount * 3 * sizeof(uint16_t)];
     for (int i = 0; i < pointCount; i++) {
@@ -1116,11 +1145,19 @@ SCNGeometry *pg_create_contour_fill_geometry(
                                                         bytesPerComponent:sizeof(float)
                                                                dataOffset:0
                                                                dataStride:sizeof(PGGridVertex)];
+    SCNGeometrySource *texSource = [SCNGeometrySource geometrySourceWithData:texcoordData
+                                                                    semantic:SCNGeometrySourceSemanticTexcoord
+                                                                 vectorCount:vertexCount
+                                                             floatComponents:YES
+                                                         componentsPerVector:2
+                                                           bytesPerComponent:sizeof(float)
+                                                                  dataOffset:0
+                                                                  dataStride:2 * sizeof(float)];
     SCNGeometryElement *element = [SCNGeometryElement geometryElementWithData:indexData
                                                                 primitiveType:SCNGeometryPrimitiveTypeTriangles
                                                                primitiveCount:triangleCount
                                                                 bytesPerIndex:sizeof(uint16_t)];
-    SCNGeometry *geometry = [SCNGeometry geometryWithSources:@[source] elements:@[element]];
+    SCNGeometry *geometry = [SCNGeometry geometryWithSources:@[source, texSource] elements:@[element]];
     geometry.materials = @[PGCreateContourFillMaterial()];
     return geometry;
 }
@@ -1822,7 +1859,12 @@ static UIImage *PGLoadTileTextureSource(const char *resourceName) {
     if (stem.length == 0) {
         return nil;
     }
+    NSBundle *bundle = [NSBundle mainBundle];
     UIImage *image = [UIImage imageNamed:stem];
+    if (image != nil) {
+        return image;
+    }
+    image = [UIImage imageNamed:[NSString stringWithFormat:@"%@.png", stem]];
     if (image != nil) {
         return image;
     }
@@ -1831,12 +1873,81 @@ static UIImage *PGLoadTileTextureSource(const char *resourceName) {
     if (image != nil) {
         return image;
     }
-    NSBundle *bundle = [NSBundle mainBundle];
+    image = [UIImage imageNamed:[NSString stringWithFormat:@"mock/tiles/textures/%@.png", stem]];
+    if (image != nil) {
+        return image;
+    }
     NSString *path = [bundle pathForResource:stem ofType:@"png" inDirectory:@"mock/tiles/textures"];
+    if (path.length > 0) {
+        image = [UIImage imageWithContentsOfFile:path];
+        if (image != nil) {
+            return image;
+        }
+    }
+    path = [bundle pathForResource:stem ofType:@"png"];
     if (path.length > 0) {
         return [UIImage imageWithContentsOfFile:path];
     }
     return nil;
+}
+
+static const CGFloat PG_TILE_TEXTURE_WIDTH_M = 0.78f;
+static const CGFloat PG_TILE_TEXTURE_HEIGHT_M = 1.04f;
+static const int PG_MIN_SECTION_TEXTURE_PX = 64;
+static const int PG_MAX_SECTION_TEXTURE_PX = 2048;
+
+UIImage *pg_create_tile_section_pattern_image(
+    const char *resourceName,
+    float widthMeters,
+    float heightMeters,
+    float rotationDegrees
+) {
+    UIImage *source = PGLoadTileTextureSource(resourceName);
+    if (source == nil || widthMeters <= 0.0f || heightMeters <= 0.0f) {
+        return nil;
+    }
+    CGFloat srcW = source.size.width;
+    CGFloat srcH = source.size.height;
+    if (srcW <= 1.0 || srcH <= 1.0) {
+        return nil;
+    }
+
+    int outW = (int)((srcW / PG_TILE_TEXTURE_WIDTH_M) * widthMeters);
+    int outH = (int)((srcH / PG_TILE_TEXTURE_HEIGHT_M) * heightMeters);
+    if (outW < PG_MIN_SECTION_TEXTURE_PX) outW = PG_MIN_SECTION_TEXTURE_PX;
+    if (outH < PG_MIN_SECTION_TEXTURE_PX) outH = PG_MIN_SECTION_TEXTURE_PX;
+    if (outW > PG_MAX_SECTION_TEXTURE_PX) outW = PG_MAX_SECTION_TEXTURE_PX;
+    if (outH > PG_MAX_SECTION_TEXTURE_PX) outH = PG_MAX_SECTION_TEXTURE_PX;
+
+    CGSize outputSize = CGSizeMake((CGFloat)outW, (CGFloat)outH);
+    UIGraphicsBeginImageContextWithOptions(outputSize, NO, 1.0);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    UIImage *image = nil;
+    if (ctx != NULL) {
+        CGContextTranslateCTM(ctx, outputSize.width * 0.5, outputSize.height * 0.5);
+        CGContextRotateCTM(ctx, (CGFloat)rotationDegrees * (CGFloat)M_PI / 180.0);
+        CGContextTranslateCTM(ctx, -outputSize.width * 0.5, -outputSize.height * 0.5);
+
+        CGFloat tileW = PG_TILE_TEXTURE_WIDTH_M * outputSize.width / (CGFloat)widthMeters;
+        CGFloat tileH = PG_TILE_TEXTURE_HEIGHT_M * outputSize.height / (CGFloat)heightMeters;
+        CGFloat diagonal = sqrt(
+            outputSize.width * outputSize.width + outputSize.height * outputSize.height
+        );
+        CGRect drawRect = CGRectMake(
+            -diagonal,
+            -diagonal,
+            outputSize.width + diagonal * 2.0,
+            outputSize.height + diagonal * 2.0
+        );
+        for (CGFloat y = drawRect.origin.y; y < drawRect.origin.y + drawRect.size.height; y += tileH) {
+            for (CGFloat x = drawRect.origin.x; x < drawRect.origin.x + drawRect.size.width; x += tileW) {
+                [source drawInRect:CGRectMake(x, y, tileW, tileH)];
+            }
+        }
+        image = UIGraphicsGetImageFromCurrentImageContext();
+    }
+    UIGraphicsEndImageContext();
+    return image;
 }
 
 UIImage *pg_load_tile_texture_image(const char *resourceName, float rotationDegrees) {
