@@ -19,11 +19,11 @@ internal const val PLACEMENT_ANCHORED_POINTS_SYNC_INTERVAL_FRAMES = 6
 /** Imperceptible anchor drift — applied immediately when tracking is stable. */
 internal const val PLACEMENT_ANCHOR_MICRO_CORRECTION_M = 0.03f
 /** Shifts above this never auto-apply; user confirms via the realign button. */
-internal const val PLACEMENT_ANCHOR_MACRO_BLOCKED_M = 0.08f
-/** Stable frames required before auto-applying a small (3–8 cm) post-freeze correction. */
+internal const val PLACEMENT_ANCHOR_MACRO_BLOCKED_M = 0.06f
+/** Stable frames required before auto-applying a small (3–6 cm) post-freeze correction. */
 internal const val PLACEMENT_ANCHOR_SMALL_AUTO_CONFIRM_FRAMES = 2
 internal const val PLACEMENT_ANCHOR_CONFIRM_FRAMES = 3
-internal const val PLACEMENT_ANCHOR_SIGNATURE_TOLERANCE_M = 0.015f
+internal const val PLACEMENT_ANCHOR_SIGNATURE_TOLERANCE_M = 0.04f
 /** Legacy recovery window; instability latch below is the primary realign trigger. */
 internal const val PLACEMENT_ANCHOR_RECOVERY_CONTEXT_SECONDS = 30.0
 internal const val PLACEMENT_FLOOR_BAND_TOLERANCE_M = 0.10f

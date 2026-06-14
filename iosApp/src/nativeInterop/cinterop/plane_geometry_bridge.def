@@ -1749,3 +1749,43 @@ UIImage *pg_grid_pattern_image(void) {
 UIImage *pg_grid_pattern_image_outdoor(void) {
     return PGGridPatternImageOutdoor();
 }
+
+UIImage *pg_create_contour_distance_label_image(const char *text) {
+    if (text == NULL) {
+        return nil;
+    }
+    NSString *label = [NSString stringWithUTF8String:text];
+    if (label.length == 0) {
+        return nil;
+    }
+    const CGFloat width = 320.0;
+    const CGFloat height = 112.0;
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(width, height), NO, 0.0);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    UIImage *image = nil;
+    if (ctx != NULL) {
+        CGContextSetFillColorWithColor(ctx, [UIColor colorWithWhite:1.0 alpha:1.0].CGColor);
+        CGRect bounds = CGRectMake(0.0, 0.0, width, height);
+        CGContextAddPath(ctx, [UIBezierPath bezierPathWithRoundedRect:bounds cornerRadius:28.0].CGPath);
+        CGContextFillPath(ctx);
+
+        NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+        style.alignment = NSTextAlignmentCenter;
+        NSDictionary *attrs = @{
+            NSFontAttributeName: [UIFont boldSystemFontOfSize:38.0],
+            NSForegroundColorAttributeName: [UIColor blackColor],
+            NSParagraphStyleAttributeName: style
+        };
+        CGSize textSize = [label sizeWithAttributes:attrs];
+        CGRect textRect = CGRectMake(
+            (width - textSize.width) * 0.5,
+            (height - textSize.height) * 0.5,
+            textSize.width,
+            textSize.height
+        );
+        [label drawInRect:textRect withAttributes:attrs];
+        image = UIGraphicsGetImageFromCurrentImageContext();
+    }
+    UIGraphicsEndImageContext();
+    return image;
+}

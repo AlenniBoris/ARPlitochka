@@ -1,7 +1,13 @@
 package com.example.arplitka.iosapp.platform.render
 
+import com.example.arplitka.iosapp.bridge.pg_create_contour_distance_label_image
 import com.example.arplitka.iosapp.bridge.pg_create_contour_fill_geometry
 import com.example.arplitka.iosapp.bridge.pg_create_contour_lines_geometry
+import com.example.arplitka.shared.ar.domain.geometry.CONTOUR_LABEL_HEIGHT_M
+import com.example.arplitka.shared.ar.domain.geometry.CONTOUR_LABEL_WIDTH_M
+import com.example.arplitka.shared.ar.domain.geometry.buildContourSegmentLabels
+import com.example.arplitka.shared.ar.domain.geometry.contourDistanceLabelBatchKey
+import com.example.arplitka.shared.ar.domain.geometry.formatContourDistanceMeters
 import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -10,8 +16,10 @@ import kotlinx.cinterop.usePinned
 import platform.SceneKit.SCNCylinder
 import platform.SceneKit.SCNMaterial
 import platform.SceneKit.SCNNode
+import platform.SceneKit.SCNPlane
 import platform.SceneKit.SCNVector3Make
 import platform.UIKit.UIColor
+import kotlin.math.PI
 import kotlin.math.roundToInt
 
 private const val POINT_RADIUS_M = 0.016f
@@ -31,9 +39,12 @@ internal class IosArContourRenderer {
     private val pointNodes = mutableMapOf<String, SCNNode>()
     private var batchedLinesNode: SCNNode? = null
     private var sectionFillNode: SCNNode? = null
+    private val distanceLabelNodes = mutableMapOf<String, SCNNode>()
+    private val lastDistanceLabelTexts = mutableMapOf<String, String>()
     private var lastContourStateKey: Int = Int.MIN_VALUE
     private var lastLineBatchKey: Int = Int.MIN_VALUE
     private var lastFillBatchKey: Int = Int.MIN_VALUE
+    private var lastDistanceLabelBatchKey: Int = Int.MIN_VALUE
     private val lastPointPositionKeys = mutableMapOf<String, Int>()
 
     private val pointMaterial = createContourMaterial(red = 0.0, green = 0.9, blue = 0.46)
@@ -58,11 +69,15 @@ internal class IosArContourRenderer {
         batchedLinesNode = null
         sectionFillNode?.removeFromParentNode()
         sectionFillNode = null
+        distanceLabelNodes.values.forEach { it.removeFromParentNode() }
+        distanceLabelNodes.clear()
+        lastDistanceLabelTexts.clear()
         rootNode?.removeFromParentNode()
         rootNode = null
         lastContourStateKey = Int.MIN_VALUE
         lastLineBatchKey = Int.MIN_VALUE
         lastFillBatchKey = Int.MIN_VALUE
+        lastDistanceLabelBatchKey = Int.MIN_VALUE
         lastPointPositionKeys.clear()
     }
 
@@ -82,6 +97,7 @@ internal class IosArContourRenderer {
         val lodActive = state.placedPoints.size >= LOD_POINT_COUNT_THRESHOLD
         syncSectionFill(state, floorY)
         syncBatchedLines(state, floorY, lodActive)
+        syncDistanceLabels(state, floorY)
         syncPointNodes(state, floorY, lodActive)
     }
 
@@ -238,6 +254,64 @@ internal class IosArContourRenderer {
         node.hidden = false
     }
 
+    private fun syncDistanceLabels(
+        state: FloorContourUiState,
+        floorY: Float?
+    ) {
+        val segments = buildContourSegmentLabels(state, floorY)
+        if (!state.showContourLines || segments.isEmpty()) {
+            distanceLabelNodes.values.forEach { it.hidden = true }
+            lastDistanceLabelBatchKey = Int.MIN_VALUE
+            return
+        }
+
+        val activeKeys = segments.map { it.key }.toSet()
+        distanceLabelNodes.keys.filterNot { it in activeKeys }.forEach { key ->
+            distanceLabelNodes.remove(key)?.removeFromParentNode()
+            lastDistanceLabelTexts.remove(key)
+        }
+
+        val labelBatchKey = contourDistanceLabelBatchKey(segments, floorY, state.showContourLines)
+        val geometryChanged = labelBatchKey != lastDistanceLabelBatchKey
+        if (geometryChanged) {
+            lastDistanceLabelBatchKey = labelBatchKey
+        }
+
+        segments.forEach { segment ->
+            val labelText = segment.distanceMeters.formatContourDistanceMeters()
+            val node = distanceLabelNodes.getOrPut(segment.key) {
+                SCNNode().also { created ->
+                    rootNode?.addChildNode(created)
+                }
+            }
+            if (geometryChanged || lastDistanceLabelTexts[segment.key] != labelText) {
+                lastDistanceLabelTexts[segment.key] = labelText
+                node.geometry = createDistanceLabelPlane(labelText)
+            }
+            node.position = SCNVector3Make(segment.midpointX, segment.midpointY, segment.midpointZ)
+            node.eulerAngles = SCNVector3Make(
+                eulerDegreesToRadians(-90f),
+                eulerDegreesToRadians(segment.rotationYDegrees),
+                0f
+            )
+            node.renderingOrder = 8
+            node.hidden = false
+            rootNode?.addChildNode(node)
+        }
+    }
+
+    private fun createDistanceLabelPlane(labelText: String): SCNPlane {
+        val image = pg_create_contour_distance_label_image(labelText)
+        val plane = SCNPlane.planeWithWidth(
+            width = CONTOUR_LABEL_WIDTH_M.toDouble(),
+            height = CONTOUR_LABEL_HEIGHT_M.toDouble()
+        )
+        val material = createLabelMaterial()
+        material.diffuse.contents = image
+        plane.materials = listOf(material)
+        return plane
+    }
+
     private fun contourStructureKey(state: FloorContourUiState): Int {
         var key = state.placedPoints.size * 31
         state.placedPoints.forEach { point ->
@@ -298,6 +372,8 @@ internal class IosArContourRenderer {
     private fun quant(value: Float): Int = (value / POSITION_QUANT_M).roundToInt()
 }
 
+private fun eulerDegreesToRadians(degrees: Float): Float = degrees * PI.toFloat() / 180f
+
 @OptIn(ExperimentalForeignApi::class)
 private fun createContourMaterial(
     red: Double,
@@ -308,6 +384,15 @@ private fun createContourMaterial(
     SCNMaterial().apply {
         diffuse.contents = UIColor.colorWithRed(red, green, blue, alpha = alpha)
         lightingModelName = platform.SceneKit.SCNLightingModelConstant
+    }
+
+@OptIn(ExperimentalForeignApi::class)
+private fun createLabelMaterial(): SCNMaterial =
+    SCNMaterial().apply {
+        lightingModelName = platform.SceneKit.SCNLightingModelConstant
+        doubleSided = true
+        readsFromDepthBuffer = true
+        writesToDepthBuffer = false
     }
 
 @OptIn(ExperimentalForeignApi::class)

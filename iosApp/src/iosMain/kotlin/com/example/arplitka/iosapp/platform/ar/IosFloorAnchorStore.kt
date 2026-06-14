@@ -284,11 +284,13 @@ internal class IosFloorAnchorStore {
             correctionDelta >= PLACEMENT_ANCHOR_MACRO_BLOCKED_M -> {
                 storePendingMacroCandidate(resolvedPositions, rootOrigin)
                 accumulatePendingCorrection(resolvedPositions)
+                val persistent = pendingCorrectionFrames >= PLACEMENT_ANCHOR_CONFIRM_FRAMES
                 maybeOfferManualRealign(
                     resolvedPositions = resolvedPositions,
                     rootOrigin = rootOrigin,
                     correctionDelta = correctionDelta,
-                    hadTrackingInstability = hadTrackingInstability
+                    hadTrackingInstability = hadTrackingInstability,
+                    persistent = persistent
                 )
                 correctionStateLabel = if (manualRealignLatched) {
                     "offer-realign"
@@ -319,9 +321,10 @@ internal class IosFloorAnchorStore {
         resolvedPositions: List<ArPoint3D>,
         rootOrigin: ArPoint3D,
         correctionDelta: Float,
-        hadTrackingInstability: Boolean
+        hadTrackingInstability: Boolean,
+        persistent: Boolean = false
     ) {
-        if (!hadTrackingInstability) return
+        if (!hadTrackingInstability && !persistent) return
         if (correctionDelta < PLACEMENT_ANCHOR_MACRO_BLOCKED_M) return
         storePendingMacroCandidate(resolvedPositions, rootOrigin)
         manualRealignLatched = true
@@ -386,14 +389,10 @@ internal class IosFloorAnchorStore {
     }
 
     private fun correctionSignature(points: List<ArPoint3D>): Int {
-        var signature = points.size
-        points.forEach { point ->
-            val bucketX = (point.xMeters / PLACEMENT_ANCHOR_SIGNATURE_TOLERANCE_M).roundToInt()
-            val bucketZ = (point.zMeters / PLACEMENT_ANCHOR_SIGNATURE_TOLERANCE_M).roundToInt()
-            signature = signature * 31 + bucketX
-            signature = signature * 31 + bucketZ
-        }
-        return signature
+        val first = points.firstOrNull() ?: return 0
+        val bucketX = (first.xMeters / PLACEMENT_ANCHOR_SIGNATURE_TOLERANCE_M).roundToInt()
+        val bucketZ = (first.zMeters / PLACEMENT_ANCHOR_SIGNATURE_TOLERANCE_M).roundToInt()
+        return bucketX * 31 + bucketZ
     }
 
     private fun horizontalDistance(ax: Float, az: Float, bx: Float, bz: Float): Float {

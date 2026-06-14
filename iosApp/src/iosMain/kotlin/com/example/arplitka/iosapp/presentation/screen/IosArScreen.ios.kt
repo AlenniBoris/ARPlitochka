@@ -1,13 +1,15 @@
 package com.example.arplitka.iosapp.presentation.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -87,33 +89,49 @@ actual fun IosArScreen(onBack: () -> Unit) {
             state = contourState.toReticleState(placementHint, planeDebugMetrics.placementStatus)
         )
 
-        if (showContourRealignButton && contourState.showContourActions) {
-            Button(
-                onClick = { coordinator.applyContourRealignment() },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFF9800),
-                    contentColor = Color.White
-                ),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 196.dp)
-            ) {
-                Text("Выровнять контур")
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 120.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (showContourRealignButton) {
+                Button(
+                    onClick = { coordinator.applyContourRealignment() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9800),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Text("Выровнять контур")
+                }
             }
-        }
 
-        if (contourState.showContourActions) {
-            ArContourActionButtons(
-                hasCenterHit = contourState.hasCenterHit || contourState.isPolygonClosed,
-                isPolygonClosed = contourState.isPolygonClosed,
-                hasPoints = contourState.placedPoints.isNotEmpty(),
-                onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
-                onUndoPoint = { coordinator.dispatchEvent(FloorArEvent.UndoPoint) },
-                addContentDescription = "Добавить точку",
-                undoContentDescription = "Отменить",
-                okContentDescription = "Готово",
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
+            if (contourState.showContourActions) {
+                ArContourActionButtons(
+                    hasCenterHit = contourState.hasCenterHit || contourState.isPolygonClosed,
+                    isPolygonClosed = contourState.isPolygonClosed,
+                    hasPoints = contourState.placedPoints.isNotEmpty(),
+                    onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
+                    onUndoPoint = { coordinator.dispatchEvent(FloorArEvent.UndoPoint) },
+                    addContentDescription = "Добавить точку",
+                    undoContentDescription = "Отменить",
+                    okContentDescription = "Готово"
+                )
+            }
+
+            Button(
+                onClick = { coordinator.rescanSession() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White.copy(alpha = 0.92f),
+                    contentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Text("Пересканировать")
+            }
         }
 
         if (isDebugBuild()) {
@@ -166,19 +184,5 @@ actual fun IosArScreen(onBack: () -> Unit) {
             onBack = onBack,
             modifier = Modifier.align(Alignment.TopStart)
         )
-
-        if (contourState.placedPoints.isEmpty()) {
-            TextButton(
-                onClick = { coordinator.rescanSession() },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 36.dp, end = 12.dp)
-            ) {
-                Text(
-                    text = "Пересканировать",
-                    color = Color.White
-                )
-            }
-        }
     }
 }

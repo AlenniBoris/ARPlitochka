@@ -170,10 +170,10 @@ internal class IosArSessionCoordinator(
     fun rescanSession() {
         val view = sceneView ?: return
         if (floorArController.currentState().placedPoints.isNotEmpty()) {
-            onPlacementHintChanged("Очистите контур перед пересканированием")
-            return
+            dispatchEvent(FloorArEvent.Reset)
+        } else {
+            onPlacementHintChanged(null)
         }
-        onPlacementHintChanged(null)
         performScanReset(
             session = view.session,
             request = RelocationResetRequest(reason = "manual"),
@@ -244,13 +244,14 @@ internal class IosArSessionCoordinator(
         val effects = floorArController.onEvent(event)
         applyEffects(effects)
         if (event == FloorArEvent.Reset) {
+            onPlacementHintChanged(null)
             workingFloorY = null
             workingFloorAreaM2 = 0f
             smoothedPlacementPatchPoint = null
             lastPlacementPatchSmoothSeconds = 0.0
             placementAnchorTrackingWasUnstable = false
-        placementAnchorHadInstability = false
-        placementAnchorRecoveryContextUntilSeconds = 0.0
+            placementAnchorHadInstability = false
+            placementAnchorRecoveryContextUntilSeconds = 0.0
             anchorStore.setSectionPlaneAnchorId(null)
             placementFreezeApplied = false
             planeSurfaceRenderer.exitPlacementHitOnlyMode()

@@ -338,7 +338,7 @@ flowchart TD
 | Компонент | Поведение |
 |-----------|-----------|
 | `IosFloorAnchorStore` | Root `ARAnchor` + `rootLocalX/Z`; resolve из transform anchor; политика micro / auto-small / manual macro |
-| `IosArContourRenderer` | `syncIfChanged` на add/undo/close |
+| `IosArContourRenderer` | `syncIfChanged` на add/undo/close; distance labels через SceneKit planes |
 | Preview-линия к прицелу | **выкл.** (как Android policy для iOS) |
 | Manual realign | Кнопка «Выровнять контур» при сдвиге ≥ 8 см после нестабильности трекинга |
 
@@ -517,8 +517,10 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | 1b | Прицел на стол/тумбу | `scan-multi+reticle` или `scan-reticle-patch`; патч 1.5 m; «+» только confirmed |
 | 2 | До первой точки | Сетка видна, FPS стабилен |
 | 3 | Первая зелёная точка | **Нет** фриза ~6 с; `contour-hidden` |
-| 4 | 2–5 точек + undo | Точки под прицелом (confirmed), линии между точками |
-| 5 | Замыкание / OK | Контур стабилен, без preview-линии к прицелу |
+| 4 | 2–5 точек + undo | Точки под прицелом (confirmed), линии и distance labels между точками |
+| 4b | «Пересканировать» при ≥1 точке | Контур очищается, scan reset, `Points: 0`, поиск плоскости заново |
+| 5 | Замыкание / OK | Контур стабилен, labels на всех сегментах включая closing edge, без preview-линии к прицелу |
+| 5b | «Пересканировать» после finalize | Зона исчезает, scan reset, `Finalized: No` |
 | 6 | Delegate Hz / Perf | В scan и placement: Perf ≠ `delegate blocked`; Frame work <100 ms |
 | 7 | Reticle в scan | Активен при confirmed (фаза A.2) |
 | 8 | Reticle в contour | Только при **confirmed** |

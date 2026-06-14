@@ -40,8 +40,8 @@
 | `IosFloorAnchorStore.kt` | Root anchor, local XZ, политика коррекций, manual realign |
 | `IosArSessionCoordinator.kt` | Tracking gates, sync anchor points, UI callbacks |
 | `IosArPlacementRules.kt` | Пороги коррекции, debug-форматирование |
-| `IosArContourRenderer.kt` | Отрисовка точек/линий по `placedPoints` из domain |
-| `IosArScreen.ios.kt` | Кнопка «Выровнять контур», подсказка |
+| `IosArContourRenderer.kt` | Отрисовка точек/линий/заливки/distance labels по `placedPoints` из domain |
+| `IosArScreen.ios.kt` | Кнопки «+»/undo/OK, «Удалить зону», «Выровнять контур», подсказка |
 
 ### 2.3. Что не смешивать с коррекцией точек
 
@@ -137,13 +137,33 @@
 
 ## 7. Контур после close / finalize
 
-| Состояние | Точки | Линии | Заливка | `Closed` |
-|-----------|-------|-------|---------|----------|
-| `Closed: Yes`, placement | видны | видны | видна (preview) | proximity snap |
-| После галочки (`FinalizeArea`) | видны | видны | видна | latched, не сбрасывается |
-| После фриза / finalize | anchor-correction активна | замыкающее ребро сохраняется при `Closed: Yes` | сохраняется при `Closed: Yes` | не сбрасывается `FloorSnapReducer` |
+| Состояние | Точки | Линии | Labels | Заливка | `Closed` |
+|-----------|-------|-------|--------|---------|----------|
+| `Closed: Yes`, placement | видны | видны | видны | видна (preview) | proximity snap |
+| После галочки (`FinalizeArea`) | видны | видны | видны | видна | latched, не сбрасывается |
+| После фриза / finalize | anchor-correction активна | замыкающее ребро сохраняется при `Closed: Yes` | обновляются на midpoint сегментов | сохраняется при `Closed: Yes` | не сбрасывается `FloorSnapReducer` |
 
 После `FinalizeArea` coordinator продолжает вызывать `anchorStore.placedPoints(..., trackingStable, hadTrackingInstability)` в scan-пути, а не только в placement-пути.
+
+### 7.1. Сброс зоны и пересканирование
+
+- Отдельной кнопки «Удалить зону» нет: **«Пересканировать»** в нижней колонке очищает контур (`FloorArEvent.Reset`) и перезапускает поиск рабочей плоскости
+- Кнопка видна всегда (до первой точки, во время расстановки и после finalize)
+- После reset: `Points: 0`, `Closed: No`, `Finalized: No`; белая сетка снова ищется через scan reset
+
+### 7.2. Нижняя колонка кнопок
+
+Сверху вниз, по условиям:
+1. **«Выровнять контур»** — оранжевая, когда доступна anchor-correction
+2. **Undo / «+» / OK** — только в placement (`showContourActions`)
+3. **«Пересканировать»** — всегда
+
+### 7.3. Distance labels (плашки расстояния)
+
+- Рендерятся в `IosArContourRenderer.syncDistanceLabels()` через `SCNPlane` + `pg_create_contour_distance_label_image`
+- Геометрия сегментов/формат расстояния — `shared/ar/domain/geometry/ContourSegmentLabels.kt` (planar XZ)
+- Ориентация вдоль сегмента: `contourLineRotationYDegrees` + `eulerAngles` в радианах (SceneKit)
+- Labels привязаны к `showContourLines`; cache по batch key; позиция обновляется при anchor-correction
 
 ---
 
@@ -164,9 +184,12 @@
 4. Нажать «Выровнять» — контур переезжает, `Anchor corr: manual`, кнопка исчезает
 5. После первой точки — нет фриза delegate (anchor lookup не в render loop)
 6. Undo всех точек — root anchor удалён, кнопка скрыта
-7. Замкнуть контур до галочки — зелёные точки, синие линии и preview-заливка видны (`Closed: Yes`, `Finalized: No`)
-8. Нажать галочку — точки, заливка и замыкающее ребро остаются (`Closed: Yes`, `Finalized: Yes`)
+7. Замкнуть контур до галочки — зелёные точки, синие линии, distance labels и preview-заливка видны (`Closed: Yes`, `Finalized: No`)
+8. Нажать галочку — точки, линии, labels, заливка и замыкающее ребро остаются (`Closed: Yes`, `Finalized: Yes`)
 9. Фриз после finalize — контур не «открывается», anchor-correction и realign работают как в placement
+10. Поставить 2+ точки — distance labels на midpoint каждого сегмента; при замыкании — label на closing edge
+11. Нажать «Пересканировать» с точками на полу — контур очищается, сессия пересканирует плоскость, `Points: 0`
+12. После finalize нажать «Пересканировать» — зона сбрасывается и начинается новый поиск пола
 
 ---
 
