@@ -7,9 +7,6 @@ internal const val POINT_VISUAL_OFFSET_M = 0.008f
 internal const val LINE_WIDTH_M = 0.012f
 /** Flat strip offset above floor; must stay above fill and ARCore plane mesh. */
 internal const val LINE_VISUAL_OFFSET_M = 0.010f
-/** Preview segment uses the same strip path as contour lines. */
-internal const val PREVIEW_LINE_VISUAL_OFFSET_M = 0.010f
-internal const val PREVIEW_LINE_WIDTH_M = 0.014f
 internal const val FILL_VISUAL_OFFSET_M = 0.001f
 internal const val LABEL_WIDTH_M = 0.13f
 internal const val LABEL_HEIGHT_M = 0.045f

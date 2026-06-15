@@ -117,7 +117,10 @@ class FloorArViewModel @Inject constructor(
                     }
                 }
             } else if (!newState.isContourConfirmed && !newState.isTileVisible) {
-                newState = newState.copy(snappedPointIndex = null)
+                newState = newState.copy(
+                    snappedPointIndex = null,
+                    isPolygonClosed = false
+                )
             }
 
             applyContourPhaseUi(newState)

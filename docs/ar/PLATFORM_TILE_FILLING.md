@@ -42,9 +42,29 @@ Events:
 - `FinalizeArea` устанавливает `isFinalized = true` и `isTileVisible = false`.
 - `Reset` сбрасывает tile state к значениям по умолчанию.
 
+## Референсный Алгоритм (Shared)
+
+Референсные файлы:
+
+- `shared/ar/domain/.../geometry/AlignedSectionGeometry.kt`
+- `features/floor-detection/.../ArSceneLayer.kt`
+- `iosApp/.../IosArContourRenderer.kt`
+
+Алгоритм:
+
+1. Найти самое длинное ребро закрытого полигона.
+2. Построить локальную систему координат зоны (Aligned Geometry).
+3. Спроецировать точки в local XY (0..bounds).
+4. Сгенерировать section bitmap под размер локальных bounds.
+5. Использовать **Unlit** материал (без влияния теней/света AR-сцены) для максимальной яркости.
+6. На Android: `ShapeNode` с нормализованным `polygonPath` (0..1) и `scale` узла.
+7. На iOS: SceneKit geometry с UV 0..1.
+
+Это гарантирует полный паритет масштаба и яркости между платформами.
+
 ## Repeat Pattern И Размер Плитки
 
-`repeatPattern` — это физический размер одного полного повторяющегося изображения-текстуры на полу. Это не обязательно размер одного отдельного камня или одного tile variant.
+`repeatPattern` — это физический размер одного полного повторяющегося изображения-текстуры на полу.
 
 Текущие mock-данные:
 
@@ -56,60 +76,15 @@ Events:
 - Android: `TILE_TEXTURE_WIDTH_M = 0.78f`, `TILE_TEXTURE_HEIGHT_M = 1.04f`
 - iOS bridge: `PG_TILE_TEXTURE_WIDTH_M = 0.78f`, `PG_TILE_TEXTURE_HEIGHT_M = 1.04f`
 
-Размер изображения в пикселях используется для качества и плотности bitmap. Физический размер на AR-полу задаётся через `repeatPattern`, а не через pixel size картинки.
-
-Архитектурный долг: Android и iOS renderers сейчас hardcode'ят `0.78 x 1.04 m`. Следующая стабильная схема должна передавать `repeatPattern` выбранной текстуры из tile catalog/shared model в AR renderer.
-
-## Референсный Алгоритм Android
-
-Референсные файлы:
-
-- `features/floor-detection/.../ArSceneLayer.kt`
-- `features/floor-detection/.../FloorArGeometryUtils.kt`
-- `features/floor-detection/.../FloorArTextureUtils.kt`
-- `features/floor-detection/.../FloorArRenderConfig.kt`
-
-Алгоритм:
-
-1. Посчитать centroid контура.
-2. Найти самое длинное ребро контура.
-3. Построить локальные координаты зоны, где local X идёт вдоль самого длинного ребра.
-4. Посчитать local bounds по выровненному polygon.
-5. Сгенерировать section bitmap через `toSectionPatternBitmap(widthMeters, heightMeters, rotationDegrees)`.
-6. Повторить исходный bitmap через `BitmapShader(REPEAT)`.
-7. Применить сгенерированный bitmap как fill material.
-8. Повернуть отрисованную shape обратно в world space.
-
-Это означает, что Android мапит текстуру в локальной системе координат контура, а не в world X/Z.
+Материал плитки теперь всегда **Unlit** (`createImageInstance` на Android, `SCNLightingModelConstant` на iOS), чтобы цвета соответствовали исходному PNG независимо от освещения комнаты.
 
 ## iOS Renderer
 
-Референсные файлы:
-
-- `iosApp/.../IosArContourRenderer.kt`
-- `iosApp/src/nativeInterop/cinterop/plane_geometry_bridge.def`
-- `iosApp/src/nativeInterop/headers/PlaneGeometryBridge.h`
-
-Текущее поведение iOS:
-
-- SceneKit geometry строится через native bridge.
-- Texture images загружаются из app bundle resources.
-- Для tile material используется сгенерированный bitmap pattern.
-- UV coordinates обязательны; без UV SceneKit может отрисовать белую или однотонную заливку.
-
-Текущий parity gap:
-
-- Android выравнивает bounds по самому длинному ребру контура.
-- iOS сейчас считает fill bounds из world X/Z.
-- Поэтому iOS pattern scale/orientation может отличаться от Android для той же физической зоны.
-
-Ожидаемый fix: вынести aligned section geometry в shared code и заставить iOS использовать те же local bounds и local polygon geometry, что Android.
+iOS полностью синхронизирован с Android через shared `AlignedSectionGeometry`. Больше нет расхождения в масштабе из-за world-axis bounds.
 
 ## Ground Truth
 
-Пока продуктовые требования не говорят обратного, Android является референсом для tile filling, потому что он уже реализует полный AR tile flow и bounds-aware pattern generation в локальной системе зоны.
-
-Если продукт позже решит, что масштаб Android неверный, обе платформы нужно менять вместе через `repeatPattern` / texture metadata, а не через platform-specific renderer tweaks.
+Обе платформы теперь используют единую математику выравнивания и рендеринга. Android и iOS являются равноправными референсами для визуального контроля.
 
 ## Тесты
 

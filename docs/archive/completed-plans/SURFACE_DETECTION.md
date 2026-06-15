@@ -41,9 +41,13 @@
 | Белые точки / plane | `showPlaneRenderer` | `showPlaneDots` / `showPlaneRenderer` |
 | Зелёные точки | `showContourPoints` | `showContourPoints` |
 | Синие линии | `showContourLines` | `showContourLines` |
-| Preview-линия | `showPreviewLine` (к прицелу) | **выкл.** — синие линии только между поставленными точками (≥2) |
+| Preview-линия | **выкл.** (как на iOS) | **выкл.** — синие линии только между поставленными точками (≥2) |
 | Заливка секции | `showSectionFill` | `showSectionFill` |
 | Плитка | `isTileVisible` | `isTileVisible` |
+| Масштаб плитки | **Fixed** (Normalized UV) | **Fixed** (Shared Geometry) |
+| Яркость плитки | **Fixed** (Unlit) | **Fixed** (Unlit) |
+| Debug Area | **Плоскость AR** (ARCore plane) | **AR plane** (Reticle anchor area) |
+| Debug Bounds | **Контур (заливка)** (bbox) | **N/A** |
 
 Правило: **белые точки видны до finalize контура** (`!isContourConfirmed` / `!isFinalized`). После OK белые точки скрываются, остаётся разметка.
 
@@ -78,11 +82,12 @@
 |------|-----------|
 | Прицел | `CenterReticle` активен при `hasCenterHit && !isContourConfirmed` |
 | «+» | Точка в `currentHitResult`, anchor на hit pose |
-| Линии | Между точками; preview к прицелу |
+| Линии | Между точками; **без** preview к прицелу (parity с iOS) |
 | Snap / close | Snap 0.02 m; замыкание к первой 0.10 m (≥3 точек) |
 | Замкнут (`Closed: Yes`) | preview-заливка сразу; точки/линии остаются |
 | OK (замкнут) | `confirmContour()` → plane renderer off; точки/линии/fill остаются до tile mode |
-| Плитка | Toggle, смена типа, поворот 0°/45°/90°/135° |
+| Плитка | Toggle, смена типа, поворот 0°/45°/90°/135°; **Unlit** материал |
+| Масштаб | **Normalized UV** (0..1) + node scale; parity с iOS |
 | Стабильность Y | Контур/линии/заливка на **Y первой точки** (`sectionFloorY`), чтобы точки не «плыли» при drift anchor |
 
 ### Что сознательно не делаем на Android

@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.IntSize
 import com.example.arplitka.features.floordetection.domain.model.FloorUiState
 import com.example.arplitka.features.floordetection.domain.model.TextureRotation
 import com.example.arplitka.features.floordetection.presentation.utils.*
+import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
+import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
 import com.google.android.filament.MaterialInstance
 import com.google.android.filament.Texture
 import com.google.ar.core.Config
@@ -49,9 +51,8 @@ fun ArSceneLayer(
 
     val pointMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF00E676)) }
     val snappingPointMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF69F0AE)) }
-    val fillMaterial = remember(materialLoader) { materialLoader.createColorInstance(Color(0x802196F3)) }
+    val fillMaterial = remember(materialLoader) { materialLoader.createUnlitColorInstance(Color(0x802196F3)) }
     val lineStripBitmap = remember { createLineStripBitmap() }
-    val previewLineStripBitmap = remember { createPreviewLineStripBitmap() }
 
     ARSceneView(
         modifier = modifier.fillMaxSize(),
@@ -76,22 +77,44 @@ fun ArSceneLayer(
 
         // Render filled area
         if (uiState.showSectionFill) {
-            val centroidX = uiState.points.map { it.pose.tx() }.average().toFloat()
-            val centroidZ = uiState.points.map { it.pose.tz() }.average().toFloat()
+            val points3D = uiState.points.map { point ->
+                ArPoint3D(
+                    xMeters = point.pose.tx(),
+                    yMeters = point.pose.ty(),
+                    zMeters = point.pose.tz()
+                )
+            }
+            val aligned = buildAlignedSectionGeometry(points3D)
+            val minLocalX = aligned.localPoints.minOf { it.xMeters }
+            val minLocalY = aligned.localPoints.minOf { it.yMeters }
+            val polygonPath = aligned.localPoints.map { local ->
+                Float2(
+                    x = (local.xMeters - minLocalX) / aligned.boundsWidthM,
+                    y = (local.yMeters - minLocalY) / aligned.boundsHeightM
+                )
+            }
+            val anchorX = aligned.centroidX +
+                minLocalX * aligned.axisX + minLocalY * aligned.perpendicularX
+            val anchorZ = aligned.centroidZ +
+                minLocalX * aligned.axisZ + minLocalY * aligned.perpendicularZ
 
             val useTexture = uiState.isTileVisible
-            val sectionGeometry = uiState.points.toAlignedSectionGeometry(centroidX, centroidZ)
-            val polygonBounds = sectionGeometry.polygonPath.bounds()
             var sectionMaterials by remember { mutableStateOf<Map<TextureRotation, MaterialInstance>>(emptyMap()) }
 
             if (useTexture) {
-                LaunchedEffect(engine, materialLoader, pavingBitmap, polygonBounds.width, polygonBounds.height) {
+                LaunchedEffect(
+                    engine,
+                    materialLoader,
+                    pavingBitmap,
+                    aligned.boundsWidthM,
+                    aligned.boundsHeightM
+                ) {
                     val sourceBitmap = pavingBitmap ?: return@LaunchedEffect
                     sectionMaterials = withContext(Dispatchers.IO) {
                         TextureRotation.entries.associateWith { rotation ->
                             sourceBitmap.toSectionPatternBitmap(
-                                widthMeters = polygonBounds.width,
-                                heightMeters = polygonBounds.height,
+                                widthMeters = aligned.boundsWidthM,
+                                heightMeters = aligned.boundsHeightM,
                                 rotationDegrees = rotation.ordinal * 45
                             )
                         }
@@ -104,20 +127,35 @@ fun ArSceneLayer(
                             .levels(1)
                             .build(engine)
                         texture.setBitmap(engine, bitmap)
-                        materialLoader.createTextureInstance(texture)
+                        materialLoader.createSectionFillTextureInstance(texture)
                     }
                 }
             }
 
-            val material = if (useTexture) sectionMaterials[uiState.textureRotation] ?: fillMaterial else fillMaterial
-
-            ShapeNode(
-                polygonPath = sectionGeometry.polygonPath.map { Float2(it.x, it.y) },
-                materialInstance = material,
-                uvScale = Float2(1f, 1f),
-                position = Float3(centroidX, (sectionFloorY ?: 0f) + FILL_VISUAL_OFFSET_M, centroidZ),
-                rotation = Float3(-90f, sectionGeometry.rotationY, 0f)
-            )
+            val textureMaterial = if (useTexture) sectionMaterials[uiState.textureRotation] else null
+            val material = textureMaterial ?: if (!useTexture) fillMaterial else null
+            if (material != null) {
+                key(
+                    aligned.boundsWidthM,
+                    aligned.boundsHeightM,
+                    aligned.rotationYDegrees,
+                    uiState.points.size,
+                    uiState.isTileVisible,
+                    material
+                ) {
+                    ShapeNode(
+                        polygonPath = polygonPath,
+                        materialInstance = material,
+                        position = Float3(
+                            anchorX,
+                            (sectionFloorY ?: 0f) + FILL_VISUAL_OFFSET_M,
+                            anchorZ
+                        ),
+                        rotation = Float3(-90f, aligned.rotationYDegrees, 0f),
+                        scale = Float3(aligned.boundsWidthM, aligned.boundsHeightM, 1f)
+                    )
+                }
+            }
         }
 
         // Render Lines (flat ImageNode strips — CubeNode was occluded by fill/plane depth)
@@ -190,29 +228,6 @@ fun ArSceneLayer(
                             rotation = Float3(-90f, readableLineRotationYDegrees(segment.dx, segment.dz), 0f)
                         )
                     }
-                }
-            }
-        }
-
-        // Render Preview Line
-        if (uiState.showPreviewLine) {
-            val start = uiState.points.last().pose
-            val endPose = uiState.currentHitPose!!
-            val segment = createSegmentGeometry(
-                rawStart = Position(start.tx(), start.ty(), start.tz()),
-                rawEnd = Position(endPose.tx(), endPose.ty(), endPose.tz()),
-                y = (sectionFloorY ?: start.ty()) + PREVIEW_LINE_VISUAL_OFFSET_M,
-                startInset = POINT_RADIUS_M,
-                endInset = 0f
-            )
-            if (segment != null) {
-                key("preview-line") {
-                    ImageNode(
-                        bitmap = previewLineStripBitmap,
-                        size = Float3(segment.visualLength, PREVIEW_LINE_WIDTH_M, 0f),
-                        position = Float3(segment.midPosition.x, segment.midPosition.y, segment.midPosition.z),
-                        rotation = Float3(-90f, segment.rotationY, 0f)
-                    )
                 }
             }
         }

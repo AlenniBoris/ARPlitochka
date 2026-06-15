@@ -43,7 +43,7 @@ Platform-specific code должен владеть:
 | Surface visualization | Нативный SceneView/ARCore `planeRenderer` | Кастомные SceneKit polygon grid overlays |
 | Placement hit | ARCore `Frame.hitTest` + `Plane.isPoseInPolygon` | ARKit raycast / hit-test bridge |
 | Стабильность контура | ARCore anchors / Android state | Root-anchor store + correction policy |
-| Заливка плиткой | Local bounds-aware bitmap pattern | SceneKit/native bridge; parity work продолжается |
+| Заливка плиткой | Shared AlignedSectionGeometry + Unlit | Shared AlignedSectionGeometry + Unlit |
 | UI shell | Android Compose | Compose Multiplatform + UIKitView |
 
 ## Правила Принятия Решений

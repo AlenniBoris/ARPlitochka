@@ -8,8 +8,6 @@ import java.util.Locale
 
 internal fun createLineStripBitmap(): Bitmap = createSolidStripBitmap(color = "#FF2196F3")
 
-internal fun createPreviewLineStripBitmap(): Bitmap = createSolidStripBitmap(color = "#FF00A2FF")
-
 private fun createSolidStripBitmap(color: String): Bitmap {
     val width = 64
     val height = 16

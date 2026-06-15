@@ -1,10 +1,9 @@
 package com.example.arplitka.features.floordetection.presentation.utils
 
 import android.graphics.Bitmap
-import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Shader
+import android.graphics.RectF
 import com.example.arplitka.features.floordetection.domain.model.TextureRotation
 import kotlin.math.sqrt
 
@@ -22,13 +21,27 @@ internal fun Bitmap.toSectionPatternBitmap(
 
     val output = Bitmap.createBitmap(outputWidth, outputHeight, config ?: Bitmap.Config.ARGB_8888)
     val canvas = Canvas(output)
-    val shader = BitmapShader(this, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.shader = shader
-    }
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val tileWidthPx = TILE_TEXTURE_WIDTH_M * outputWidth / widthMeters
+    val tileHeightPx = TILE_TEXTURE_HEIGHT_M * outputHeight / heightMeters
     val diagonal = sqrt((outputWidth * outputWidth + outputHeight * outputHeight).toFloat())
+
     canvas.rotate(rotationDegrees.toFloat(), outputWidth / 2f, outputHeight / 2f)
-    canvas.drawRect(-diagonal, -diagonal, outputWidth + diagonal, outputHeight + diagonal, paint)
+
+    var y = -diagonal
+    while (y < outputHeight + diagonal) {
+        var x = -diagonal
+        while (x < outputWidth + diagonal) {
+            canvas.drawBitmap(
+                this,
+                null,
+                RectF(x, y, x + tileWidthPx, y + tileHeightPx),
+                paint
+            )
+            x += tileWidthPx
+        }
+        y += tileHeightPx
+    }
     return output
 }
 
