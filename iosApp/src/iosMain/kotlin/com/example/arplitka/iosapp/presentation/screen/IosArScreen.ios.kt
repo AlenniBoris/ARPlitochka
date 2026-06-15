@@ -205,7 +205,7 @@ actual fun IosArScreen(onBack: () -> Unit) {
                 debugLines = mapOf(
                     "Planes" to contourState.horizontalPlaneCount.toString(),
                     "Focused" to contourState.focusedLabel,
-                    "Reticle area" to "${(contourState.selectedArea * 100).roundToInt() / 100.0} m²",
+                    "AR plane" to "${(contourState.selectedArea * 100).roundToInt() / 100.0} m²",
                     "Tracking" to trackingStateName,
                     "Center hit" to if (contourState.hasCenterHit) "Yes" else "No",
                     "Points" to contourState.placedPoints.size.toString(),

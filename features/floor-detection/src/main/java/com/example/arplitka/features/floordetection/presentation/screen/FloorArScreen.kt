@@ -1,7 +1,6 @@
 package com.example.arplitka.features.floordetection.presentation.screen
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,13 +24,17 @@ import com.example.arplitka.features.floordetection.R
 import com.example.arplitka.features.floordetection.presentation.components.ArActionButtons
 import com.example.arplitka.features.floordetection.presentation.components.ArSceneLayer
 import com.example.arplitka.features.floordetection.presentation.components.ArStatusOverlay
+import com.example.arplitka.features.floordetection.presentation.utils.decodePavingBitmap
 import com.example.arplitka.features.floordetection.presentation.viewmodel.FloorArViewModel
-import com.example.arplitka.shared.ui.kit.ArTopBar
+import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
+import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
 import com.example.arplitka.shared.ui.kit.BlockingMessage
 import com.example.arplitka.shared.ui.kit.CenterReticle
 import com.example.arplitka.shared.ui.kit.DebugPanel
 import com.example.arplitka.shared.ui.kit.isDebugBuild
 import androidx.compose.foundation.layout.padding
+import com.example.arplitka.shared.ui.kit.ArTopBar
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -63,9 +66,7 @@ fun FloorArScreen(
         }
         runCatching {
             pavingBitmap = withContext(Dispatchers.IO) {
-                context.assets.open(uiState.selectedTileType.assetPath).use { inputStream ->
-                    BitmapFactory.decodeStream(inputStream)
-                }
+                context.assets.open(uiState.selectedTileType.assetPath).use(::decodePavingBitmap)
             }
         }.onFailure {
             android.util.Log.e("FloorArScreen", "Async texture load failed", it)
@@ -118,10 +119,27 @@ fun FloorArScreen(
         )
 
         if (isDebugBuild()) {
+            val fillBoundsLabel = if (uiState.points.size >= 3) {
+                val aligned = buildAlignedSectionGeometry(
+                    uiState.points.map { point ->
+                        ArPoint3D(
+                            xMeters = point.pose.tx(),
+                            yMeters = point.pose.ty(),
+                            zMeters = point.pose.tz()
+                        )
+                    }
+                )
+                val width = (aligned.boundsWidthM * 100).roundToInt() / 100f
+                val height = (aligned.boundsHeightM * 100).roundToInt() / 100f
+                "$width x $height m"
+            } else {
+                "-"
+            }
             DebugPanel(
                 debugLines = mapOf(
                     stringResource(R.string.debug_planes) to uiState.horizontalPlaneCount.toString(),
                     stringResource(R.string.debug_area) to stringResource(R.string.area_format, uiState.selectedArea),
+                    stringResource(R.string.debug_fill_bounds) to fillBoundsLabel,
                     stringResource(R.string.debug_tracking) to uiState.trackingState.name,
                     "Points" to uiState.points.size.toString(),
                     "Closed" to uiState.isPolygonClosed.toString(),

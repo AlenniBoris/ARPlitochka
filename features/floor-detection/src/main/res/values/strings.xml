@@ -13,7 +13,8 @@
     <string name="please_wait">Пожалуйста, подождите</string>
     <string name="ar_session_failed">Не удалось запустить AR-сессию</string>
     <string name="debug_planes">Плоскости</string>
-    <string name="debug_area">Площадь</string>
+    <string name="debug_area">Плоскость AR</string>
+    <string name="debug_fill_bounds">Контур (заливка)</string>
     <string name="debug_tracking">Tracking</string>
     <string name="debug_depth_api">Depth API</string>
     <string name="debug_center_hit">Center hit</string>

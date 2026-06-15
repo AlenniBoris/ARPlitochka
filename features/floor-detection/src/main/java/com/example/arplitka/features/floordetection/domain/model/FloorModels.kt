@@ -2,6 +2,8 @@ package com.example.arplitka.features.floordetection.domain.model
 
 import com.example.arplitka.shared.ar.contracts.model.ArInstruction
 import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
+import com.example.arplitka.shared.ar.domain.logic.FloorGeometry
+import kotlin.math.sqrt
 import com.google.ar.core.Anchor
 import com.google.ar.core.HitResult
 import com.google.ar.core.Pose
@@ -55,12 +57,6 @@ data class FloorUiState(
 
     val showContourLines: Boolean
         get() = points.size >= 2 && !isTileVisible
-
-    val showPreviewLine: Boolean
-        get() = !isContourConfirmed &&
-                points.isNotEmpty() &&
-                !isPolygonClosed &&
-                currentHitPose != null
 
     val showPlaneRenderer: Boolean
         get() = !isContourConfirmed
