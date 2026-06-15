@@ -1,5 +1,7 @@
 # Обнаружение горизонтальных поверхностей (Android и iOS)
 
+> Канонические AR-документы теперь находятся в [`docs/ar/`](../../ar/README.md). Этот файл оставлен как расширенный исторический reference по surface detection и этапам iOS AR.
+
 Документ описывает, как приложение **AR Plitka** находит пол и другие горизонтальные поверхности, как отображает их пользователю и чем отличаются реализации на Android (ARCore) и iOS (ARKit).
 
 **Для агентов и разработчиков:**
@@ -528,7 +530,7 @@ Xcode, **реальный iPhone**. Экран: `IosArScreen`.
 | 6 | Delegate Hz / Perf | В scan и placement: Perf ≠ `delegate blocked`; Frame work <100 ms |
 | 7 | Reticle в scan | Активен при confirmed (фаза A.2) |
 | 8 | Reticle в contour | Только при **confirmed** |
-| 9 | Area ≥ 0.15 под прицелом | Status «обнаружено» |
+| 9 | `Area` ≥ 0.15 под прицелом | Статус «обнаружено» |
 | 10 | Undo все точки | Surface снова `scan-multi-surface` |
 | 11 | Лёгкий фриз трекинга, сдвиг 3–8 см | `Anchor corr: auto-small`, точки возвращаются без кнопки |
 | 12 | Потеря трекинга, сдвиг ≥ 8 см | Кнопка «Выровнять контур»; после нажатия `Anchor corr: manual` |

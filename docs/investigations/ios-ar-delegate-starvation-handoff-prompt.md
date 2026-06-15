@@ -1,6 +1,8 @@
 # iOS AR: handoff prompt — ARKit delegate starvation (~10 s между кадрами)
 
-**Статус (июнь 2026):** проблема **не решена**. Частичный обход для placement explore patch: render loop `renderer(updateAtTime:)` + `workingFloorY` (см. [IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md § Фаза 5](./IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md)). Стабильность **точек контура** — отдельно: [ios-ar-point-stability.md](./ios-ar-point-stability.md).
+> Исторический handoff prompt для отдельного расследования. Канонические AR-документы находятся в [`AR/`](../ar/README.md).
+
+**Статус (июнь 2026):** проблема **не решена**. Частичный обход для placement explore patch: render loop `renderer(updateAtTime:)` + `workingFloorY` (см. [IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md § Фаза 5](../archive/completed-plans/IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md)). Стабильность **точек контура** — отдельно: [ios-ar-point-stability.md](../archive/completed-plans/ios-ar-point-stability.md).
 
 Скопируй этот текст целиком и передай другой нейросети / разработчику.
 

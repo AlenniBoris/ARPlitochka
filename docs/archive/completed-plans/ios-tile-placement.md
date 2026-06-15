@@ -1,5 +1,7 @@
 # iOS: размещение плитки (tile placement parity)
 
+> Исторический task-док по реализации iOS tile placement. Канонический контракт заполнения плиткой находится в [`AR/TILE_FILLING.md`](../../ar/PLATFORM_TILE_FILLING.md), а правила platform parity — в [`AR/PLATFORM_PARITY.md`](../../ar/PLATFORM_PARITY.md).
+
 **Статус:** реализовано в коде (июнь 2026), требует проверки на iPhone  
 **Ветка:** `feature/ios_ar_screen`
 
@@ -7,7 +9,7 @@ Android-референс: `ArActionButtons.kt`, `FloorArViewModel.kt`, `ArSceneL
 
 Связанные документы:
 - [SURFACE_DETECTION.md](./SURFACE_DETECTION.md) — общий статус Android/iOS, чеклисты регрессии
-- [android-contour-visibility.md](./android-contour-visibility.md) — контракт visibility точек/линий/fill
+- [android-contour-visibility.md](../../investigations/android-contour-visibility.md) — контракт visibility точек/линий/fill
 - [TESTING.md](./TESTING.md) — shared domain tests (`FloorArControllerTileTest`)
 
 ---
