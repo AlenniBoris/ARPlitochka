@@ -1,6 +1,8 @@
 package com.example.arplitka.features.floordetection.presentation.utils
 
 import com.example.arplitka.features.floordetection.domain.model.ArPoint
+import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
+import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Position2
 import kotlin.math.atan2
@@ -27,28 +29,22 @@ internal data class SegmentGeometry(
 )
 
 internal fun List<ArPoint>.toAlignedSectionGeometry(
-    centroidX: Float,
-    centroidZ: Float
+    @Suppress("UNUSED_PARAMETER") centroidX: Float,
+    @Suppress("UNUSED_PARAMETER") centroidZ: Float
 ): SectionGeometry {
-    val longestEdge = longestEdgeDirection()
-    val ux = longestEdge.x
-    val uz = longestEdge.z
-    val perpendicularX = uz
-    val perpendicularZ = -ux
-
-    val polygonPath = map { point ->
-        val dx = point.pose.tx() - centroidX
-        val dz = point.pose.tz() - centroidZ
-
-        Position2(
-            x = dx * ux + dz * uz,
-            y = dx * perpendicularX + dz * perpendicularZ
+    val points3D = map { point ->
+        ArPoint3D(
+            xMeters = point.pose.tx(),
+            yMeters = point.pose.ty(),
+            zMeters = point.pose.tz()
         )
     }
-
+    val aligned = buildAlignedSectionGeometry(points3D)
     return SectionGeometry(
-        polygonPath = polygonPath,
-        rotationY = -Math.toDegrees(atan2(uz, ux).toDouble()).toFloat()
+        polygonPath = aligned.localPoints.map { local ->
+            Position2(x = local.xMeters, y = local.yMeters)
+        },
+        rotationY = aligned.rotationYDegrees
     )
 }
 
@@ -114,40 +110,6 @@ internal fun readableLineRotationYDegrees(dx: Float, dz: Float): Float {
         angle < -90f -> angle + 180f
         else -> angle
     }
-}
-
-private data class EdgeDirection(
-    val x: Float,
-    val z: Float
-)
-
-private fun List<ArPoint>.longestEdgeDirection(): EdgeDirection {
-    if (size < 2) return EdgeDirection(x = 1f, z = 0f)
-
-    var longestLength = 0f
-    var longestDx = 1f
-    var longestDz = 0f
-
-    indices.forEach { index ->
-        val start = this[index].pose
-        val end = this[(index + 1) % size].pose
-        val dx = end.tx() - start.tx()
-        val dz = end.tz() - start.tz()
-        val length = sqrt(dx * dx + dz * dz)
-
-        if (length > longestLength) {
-            longestLength = length
-            longestDx = dx
-            longestDz = dz
-        }
-    }
-
-    if (longestLength <= MIN_LINE_LENGTH_M) return EdgeDirection(x = 1f, z = 0f)
-
-    return EdgeDirection(
-        x = longestDx / longestLength,
-        z = longestDz / longestLength
-    )
 }
 
 private fun lineRotationYDegrees(dx: Float, dz: Float): Float {
