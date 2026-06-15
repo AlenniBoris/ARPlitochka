@@ -1,7 +1,9 @@
 # Задача: Исправление стабильности точек ARKit и дрейфа координат
 
+> Историческая постановка задачи. Канонический контракт стабильности контура находится в [`AR/CONTOUR_STABILITY.md`](../ar/PLATFORM_CONTOUR_STABILITY.md).
+
 > **Статус:** ✅ реализовано (июнь 2026)  
-> **Документация по реализации:** [ios-ar-point-stability.md](./ios-ar-point-stability.md)
+> **Документация по реализации:** [ios-ar-point-stability.md](../archive/completed-plans/ios-ar-point-stability.md)
 
 ---
 
@@ -36,7 +38,7 @@
 | Релокализация | Трёхуровневая политика: micro / auto-small / manual macro (кнопка) |
 | Целостность контура | Единый root — контур двигается как rigid body |
 
-Подробности: [ios-ar-point-stability.md](./ios-ar-point-stability.md).
+Подробности: [ios-ar-point-stability.md](../archive/completed-plans/ios-ar-point-stability.md).
 
 ### Открытые пункты (не в scope текущего фикса)
 

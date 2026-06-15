@@ -48,7 +48,7 @@ KMP unit-тесты в `shared/ar/domain/src/commonTest` — общий конт
 .\gradlew.bat :shared:ar:domain:testDebugUnitTest
 ```
 
-Документация по плитке на iOS: [ios-tile-placement.md](./ios-tile-placement.md).
+Документация по плитке на iOS: [ios-tile-placement.md](./archive/completed-plans/ios-tile-placement.md).
 
 ## Примеры
 

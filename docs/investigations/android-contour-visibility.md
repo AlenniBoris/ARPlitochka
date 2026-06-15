@@ -1,6 +1,8 @@
 # Android: видимость контура — анализ и исправления
 
-Документ фиксирует результаты плана **Android Contour Logic Analysis** (июнь 2026).
+> Исторический analysis-док по конкретному исправлению Android visibility. Канонический контракт visibility и стабильности находится в [`AR/CONTOUR_STABILITY.md`](../ar/PLATFORM_CONTOUR_STABILITY.md), tile behavior — в [`AR/TILE_FILLING.md`](../ar/PLATFORM_TILE_FILLING.md).
+
+Документ фиксирует результаты плана **Анализ Логики Контура Android** (июнь 2026).
 
 ## Контекст
 
@@ -74,7 +76,7 @@ Distance labels и contour lines рендерятся в одном блоке `
 
 `FloorUiStateVisibilityTest` — контракт visibility для placement / closed / confirmed / tile.
 
-Shared KMP (iOS + будущая миграция Android): `FloorArControllerTileTest`, `FloorContourUiStateTileVisibilityTest` в `:shared:ar:domain` — toggle/rotate/change tile, visibility flags. См. [ios-tile-placement.md](./ios-tile-placement.md).
+Shared KMP (iOS + будущая миграция Android): `FloorArControllerTileTest`, `FloorContourUiStateTileVisibilityTest` в `:shared:ar:domain` — toggle/rotate/change tile, visibility flags. См. [ios-tile-placement.md](../archive/completed-plans/ios-tile-placement.md).
 
 ### Device QA
 
@@ -96,4 +98,4 @@ Shared KMP (iOS + будущая миграция Android): `FloorArControllerTi
 ## Дальнейшие шаги (не в этом плане)
 
 - Постепенная миграция Android `FloorUiState` / `FloorArViewModel` на shared `FloorArController`, чтобы не поддерживать две модели.
-- iOS tile placement parity — [ios-tile-placement.md](./ios-tile-placement.md) (реализовано в коде, device QA на iPhone).
+- iOS tile placement parity — [ios-tile-placement.md](../archive/completed-plans/ios-tile-placement.md) (реализовано в коде, device QA на iPhone).
