@@ -1906,8 +1906,12 @@ UIImage *pg_create_tile_section_pattern_image(
     if (source == nil || widthMeters <= 0.0f || heightMeters <= 0.0f) {
         return nil;
     }
-    CGFloat srcW = source.size.width;
-    CGFloat srcH = source.size.height;
+    CGImageRef sourceImage = source.CGImage;
+    if (sourceImage == NULL) {
+        return nil;
+    }
+    CGFloat srcW = (CGFloat)CGImageGetWidth(sourceImage);
+    CGFloat srcH = (CGFloat)CGImageGetHeight(sourceImage);
     if (srcW <= 1.0 || srcH <= 1.0) {
         return nil;
     }

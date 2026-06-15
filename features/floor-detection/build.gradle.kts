@@ -33,6 +33,7 @@ android {
 dependencies {
     implementation(project(":shared:ar:core"))
     implementation(project(":shared:ar:contracts"))
+    implementation(project(":shared:ar:domain"))
     implementation(project(":shared:ui:kit"))
     implementation(project(":shared:ui:core"))
 

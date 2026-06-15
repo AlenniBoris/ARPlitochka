@@ -9,6 +9,8 @@ import com.example.arplitka.shared.ar.domain.geometry.CONTOUR_LABEL_HEIGHT_M
 import com.example.arplitka.shared.ar.domain.geometry.CONTOUR_LABEL_WIDTH_M
 import com.example.arplitka.shared.ar.domain.geometry.buildContourSegmentLabels
 import com.example.arplitka.shared.ar.domain.geometry.contourDistanceLabelBatchKey
+import com.example.arplitka.shared.ar.domain.geometry.AlignedSectionGeometry
+import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
 import com.example.arplitka.shared.ar.domain.geometry.formatContourDistanceMeters
 import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
@@ -118,6 +120,7 @@ internal class IosArContourRenderer {
         }
 
         val points = state.placedPoints.map { it.position }
+        val aligned = buildAlignedSectionGeometry(points)
         val fillBatchKey = fillBatchKey(
             points = points,
             floorY = floorY,
@@ -125,7 +128,7 @@ internal class IosArContourRenderer {
             isTileVisible = state.isTileVisible,
             selectedTileType = state.selectedTileType,
             textureRotation = state.textureRotation,
-            bounds = if (state.isTileVisible) sectionBoundsMeters(points) else null
+            aligned = aligned
         )
         if (fillBatchKey == lastFillBatchKey) {
             sectionFillNode?.hidden = false
@@ -134,18 +137,18 @@ internal class IosArContourRenderer {
         lastFillBatchKey = fillBatchKey
 
         val yBase = (floorY ?: points.first().yMeters) + FILL_VISUAL_OFFSET_M
-        val pointBuffer = FloatArray(points.size * 2)
-        points.forEachIndexed { index, point ->
+        val pointBuffer = FloatArray(aligned.localPoints.size * 2)
+        aligned.localPoints.forEachIndexed { index, local ->
             val offset = index * 2
-            pointBuffer[offset] = point.xMeters
-            pointBuffer[offset + 1] = point.zMeters
+            pointBuffer[offset] = local.xMeters
+            pointBuffer[offset + 1] = local.yMeters
         }
 
         val geometry = pointBuffer.usePinned { pinned ->
             pg_create_contour_fill_geometry(
-                pointCount = points.size,
+                pointCount = aligned.localPoints.size,
                 pointsXZ = pinned.addressOf(0),
-                yM = yBase
+                yM = 0f
             )
         } ?: run {
             sectionFillNode?.hidden = true
@@ -156,8 +159,14 @@ internal class IosArContourRenderer {
             sectionFillNode = created
             rootNode?.addChildNode(created)
         }
-        geometry.materials = listOf(resolveFillMaterial(state, points))
+        geometry.materials = listOf(resolveFillMaterial(state, aligned))
         node.geometry = geometry
+        node.position = SCNVector3Make(aligned.centroidX, yBase, aligned.centroidZ)
+        node.eulerAngles = SCNVector3Make(
+            0f,
+            eulerDegreesToRadians(aligned.rotationYDegrees),
+            0f
+        )
         node.renderingOrder = 5
         node.hidden = false
         rootNode?.addChildNode(node)
@@ -348,42 +357,23 @@ internal class IosArContourRenderer {
 
     private fun resolveFillMaterial(
         state: FloorContourUiState,
-        points: List<ArPoint3D>
+        aligned: AlignedSectionGeometry
     ): SCNMaterial {
         if (!state.isTileVisible) return fillMaterial
-        val bounds = sectionBoundsMeters(points)
         val cacheKey = TileMaterialKey(
             tileType = state.selectedTileType,
             textureRotation = state.textureRotation,
-            widthQuant = quant(bounds.widthM),
-            heightQuant = quant(bounds.heightM)
+            widthQuant = quant(aligned.boundsWidthM),
+            heightQuant = quant(aligned.boundsHeightM)
         )
         return tileMaterialCache.getOrPut(cacheKey) {
             createTileMaterial(
                 resourceName = state.selectedTileType.resourceName,
-                widthMeters = bounds.widthM,
-                heightMeters = bounds.heightM,
+                widthMeters = aligned.boundsWidthM,
+                heightMeters = aligned.boundsHeightM,
                 rotationDegrees = state.textureRotation.degrees.toFloat()
             )
         }
-    }
-
-    private fun sectionBoundsMeters(points: List<ArPoint3D>): SectionBoundsMeters {
-        if (points.isEmpty()) return SectionBoundsMeters(1f, 1f)
-        var minX = points.first().xMeters
-        var maxX = minX
-        var minZ = points.first().zMeters
-        var maxZ = minZ
-        points.forEach { point ->
-            minX = minOf(minX, point.xMeters)
-            maxX = maxOf(maxX, point.xMeters)
-            minZ = minOf(minZ, point.zMeters)
-            maxZ = maxOf(maxZ, point.zMeters)
-        }
-        return SectionBoundsMeters(
-            widthM = (maxX - minX).coerceAtLeast(0.5f),
-            heightM = (maxZ - minZ).coerceAtLeast(0.5f)
-        )
     }
 
     private fun fillBatchKey(
@@ -393,17 +383,16 @@ internal class IosArContourRenderer {
         isTileVisible: Boolean,
         selectedTileType: TileType,
         textureRotation: TextureRotation,
-        bounds: SectionBoundsMeters?
+        aligned: AlignedSectionGeometry
     ): Int {
         var key = points.size * 31
         key = key * 31 + if (isFinalized) 1 else 0
         key = key * 31 + if (isTileVisible) 1 else 0
         key = key * 31 + selectedTileType.ordinal
         key = key * 31 + textureRotation.ordinal
-        if (bounds != null) {
-            key = key * 31 + quant(bounds.widthM)
-            key = key * 31 + quant(bounds.heightM)
-        }
+        key = key * 31 + quant(aligned.boundsWidthM)
+        key = key * 31 + quant(aligned.boundsHeightM)
+        key = key * 31 + aligned.rotationYDegrees.roundToInt()
         key = key * 31 + ((floorY ?: 0f) / POSITION_QUANT_M).roundToInt()
         points.forEach { point ->
             key = key * 31 + quant(point.xMeters)
@@ -445,11 +434,6 @@ private data class TileMaterialKey(
     val textureRotation: TextureRotation,
     val widthQuant: Int,
     val heightQuant: Int
-)
-
-private data class SectionBoundsMeters(
-    val widthM: Float,
-    val heightM: Float
 )
 
 private fun eulerDegreesToRadians(degrees: Float): Float = degrees * PI.toFloat() / 180f
