@@ -5,6 +5,7 @@ import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
 import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 
 data class FloorContourUiState(
+    val stage: FloorWorkflowStage = FloorWorkflowStage.INITIALIZING,
     val trackingStatus: ArTrackingStatus = ArTrackingStatus.INITIALIZING,
     val instruction: ArInstruction = ArInstruction.PLEASE_WAIT,
     val horizontalPlaneCount: Int = 0,
@@ -23,29 +24,26 @@ data class FloorContourUiState(
     val currentHitPoint: ArPoint3D? = null
 ) {
     val showContourPoints: Boolean
-        get() = placedPoints.isNotEmpty() && !isTileVisible
+        get() = placedPoints.isNotEmpty() && stage != FloorWorkflowStage.TILE_LAYOUT
 
     val showContourLines: Boolean
-        get() = placedPoints.size >= 2 && !isTileVisible
+        get() = placedPoints.size >= 2 && stage != FloorWorkflowStage.TILE_LAYOUT
 
     val showPreviewLine: Boolean
-        get() = !isFinalized &&
-                !isPolygonClosed &&
-                placedPoints.isNotEmpty() &&
-                currentHitPoint != null
+        get() = stage == FloorWorkflowStage.PLACEMENT_ACTIVE || stage == FloorWorkflowStage.PLACEMENT_EMPTY
 
     val showPlaneDots: Boolean
-        get() = !isFinalized
+        get() = stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
 
     val showPlaneRenderer: Boolean
         get() = showPlaneDots
 
     val showContourActions: Boolean
-        get() = !isFinalized
+        get() = stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
 
     val showSectionFill: Boolean
-        get() = isPolygonClosed && placedPoints.size >= 3
+        get() = (stage == FloorWorkflowStage.CONTOUR_CLOSED || stage.ordinal >= FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal) && placedPoints.size >= 3
 
     val showTileControls: Boolean
-        get() = isFinalized && isPolygonClosed && placedPoints.size >= 3
+        get() = stage == FloorWorkflowStage.TILE_LAYOUT
 }

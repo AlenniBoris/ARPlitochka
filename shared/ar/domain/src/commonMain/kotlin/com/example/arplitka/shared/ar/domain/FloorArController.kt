@@ -9,6 +9,7 @@ import com.example.arplitka.shared.ar.domain.logic.FloorContourReducer
 import com.example.arplitka.shared.ar.domain.logic.FloorSnapReducer
 import com.example.arplitka.shared.ar.domain.logic.FloorTrackingReducer
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.shared.ar.domain.model.FloorFrameSnapshot
 import com.example.arplitka.shared.ar.domain.model.PlacedContourPoint
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiPublishSnapshot
@@ -33,11 +34,26 @@ class FloorArController(
         snapshot: FloorFrameSnapshot,
         updatedPoints: List<PlacedContourPoint>
     ) {
+        val baseState = state.copy(placedPoints = updatedPoints)
         state = FloorTrackingReducer.applyFrame(
-            state = state.copy(placedPoints = updatedPoints),
+            state = baseState,
             snapshot = snapshot
         )
+        updateStage()
         publishIfUiChanged()
+    }
+
+    private fun updateStage() {
+        val nextStage = when {
+            state.trackingStatus == ArTrackingStatus.TRACKING_LOST -> FloorWorkflowStage.INITIALIZING
+            !state.isFloorDetected -> FloorWorkflowStage.SEARCHING_FLOOR
+            state.isTileVisible -> FloorWorkflowStage.TILE_LAYOUT
+            state.isFinalized -> FloorWorkflowStage.CONTOUR_CONFIRMED
+            state.isPolygonClosed -> FloorWorkflowStage.CONTOUR_CLOSED
+            state.placedPoints.isEmpty() -> FloorWorkflowStage.PLACEMENT_EMPTY
+            else -> FloorWorkflowStage.PLACEMENT_ACTIVE
+        }
+        state = state.copy(stage = nextStage)
     }
 
     fun onEvent(event: FloorArEvent): List<FloorArEffect> {
@@ -53,6 +69,7 @@ class FloorArController(
             FloorArEvent.RotateTexture -> handleRotateTexture()
             is FloorArEvent.PlatformPointUpdated -> Unit
         }
+        updateStage()
         publish()
         return effects
     }
@@ -61,6 +78,7 @@ class FloorArController(
         state = state.copy(
             placedPoints = state.placedPoints + PlacedContourPoint(id, position)
         )
+        updateStage()
         publish()
     }
 
@@ -89,6 +107,7 @@ class FloorArController(
             return
         }
         state = snapped
+        updateStage()
         publishIfUiChanged()
     }
 

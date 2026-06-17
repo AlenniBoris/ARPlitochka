@@ -2,6 +2,7 @@ package com.example.arplitka.features.floordetection.domain.model
 
 import com.example.arplitka.shared.ar.contracts.model.ArInstruction
 import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.shared.ar.domain.logic.FloorGeometry
 import kotlin.math.sqrt
 import com.google.ar.core.Anchor
@@ -33,6 +34,7 @@ data class ArPoint(
 )
 
 data class FloorUiState(
+    val stage: FloorWorkflowStage = FloorWorkflowStage.INITIALIZING,
     val detectionState: FloorDetectionState = FloorDetectionState.SearchingFloor,
     val trackingState: TrackingState = TrackingState.STOPPED,
     val horizontalPlaneCount: Int = 0,
@@ -53,17 +55,17 @@ data class FloorUiState(
 ) {
     /** Android parity with shared `FloorContourUiState`: points stay until tile mode. */
     val showContourPoints: Boolean
-        get() = points.isNotEmpty() && !isTileVisible
+        get() = points.isNotEmpty() && stage != FloorWorkflowStage.TILE_LAYOUT
 
     val showContourLines: Boolean
-        get() = points.size >= 2 && !isTileVisible
+        get() = points.size >= 2 && stage != FloorWorkflowStage.TILE_LAYOUT
 
     val showPlaneRenderer: Boolean
-        get() = !isContourConfirmed
+        get() = stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
 
     /** Preview fill on close (`Closed: Yes`), same as shared/iOS contract. */
     val showSectionFill: Boolean
-        get() = isPolygonClosed && points.size >= 3
+        get() = (stage == FloorWorkflowStage.CONTOUR_CLOSED || stage.ordinal >= FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal) && points.size >= 3
 }
 
 data class ArFrameResult(
