@@ -1,48 +1,48 @@
-# Project Context Prompt for AI Assistants
+# Промпт с контекстом проекта для ИИ-ассистентов
 
-Copy and paste the content below into a new chat to provide the AI with full context of the project.
+Скопируйте и вставьте содержимое ниже в новый чат, чтобы предоставить ИИ полный контекст проекта.
 
 ---
 
-# Context: Mobile AR Application "AR Plitka" (Kotlin Multiplatform)
+# Контекст: Мобильное AR-приложение "AR Plitka" (Kotlin Multiplatform)
 
-**Role:** You are an expert AR developer (iOS/ARKit/SceneKit & Android/ARCore).
+**Роль:** Ты — эксперт по разработке дополненной реальности (iOS/ARKit/SceneKit и Android/ARCore).
 
-**Project Goal:** A cross-platform app for measuring floor areas and visualizing tile placement using AR.
+**Цель проекта:** Кроссплатформенное приложение для измерения площади пола и визуализации раскладки плитки с помощью AR.
 
-**Current Tech Stack:**
+**Текущий технологический стек:**
 - **Shared:** Kotlin Multiplatform (KMP), Compose Multiplatform.
-- **iOS:** Kotlin/Native, ARKit, SceneKit, custom C++ bridge for geometry.
+- **iOS:** Kotlin/Native, ARKit, SceneKit, кастомный C++ bridge для генерации геометрии.
 - **Android:** ARCore, SceneView.
 
-**Current Project State (Overall Completion: ~65%)**
+**Текущее состояние проекта (Общая готовность: ~65%)**
 
-### 1. What is implemented:
-- **Core Engine:** Shared logic for point placement, contour calculation, and tile UV-mapping.
-- **Android:** Fully functional and stable (Reference implementation).
-- **iOS Infrastructure:** 
-    - Custom AR Session Coordinator and Renderers.
-    - Native C++ bridge for high-performance geometry creation.
-    - "Hybrid Stability Model": World-locked points during placement + Anchor-relative (Dead Grip) for finalized tiles.
-    - One Euro Filter for smoothing ARKit noise.
-    - Asynchronous geometry building (Stage 1) to offload Main Thread.
-- **UI:** Shared TopBar, ActionButtons, and StatusPanels.
+### 1. Что реализовано:
+- **Core Engine:** Общая логика расстановки точек, расчета контура и UV-маппинга плитки.
+- **Android:** Полностью функционален и стабилен (эталонная реализация).
+- **iOS Инфраструктура:** 
+    - Кастомные AR Session Coordinator и рендереры.
+    - Нативный C++ bridge для высокопроизводительного создания геометрии.
+    - «Гибридная модель стабильности»: точки зафиксированы в мировых координатах во время расстановки + привязка к якорю (Dead Grip) для готовой плитки.
+    - One Euro Filter для сглаживания шумов ARKit.
+    - Асинхронная сборка геометрии (Stage 1) для разгрузки основного потока (Main Thread).
+- **UI:** Общие компоненты TopBar, ActionButtons и StatusPanels.
 
-### 2. Current Status & Known Issues:
-- **iOS Stability:** We just finished a deep optimization cycle. The app is stable for small/medium zones (< 20m²).
-- **Large Zone Limitation:** On iOS, very large zones (> 20-30m²) or complex contours (> 15 points) still experience "jumps" due to ARKit world-map re-localization. We have documented this in `docs/ar/LIMITATIONS_LARGE_ZONES.md` and decided to move forward for now.
-- **Performance:** Most heavy lifting (mesh generation) is moved to background threads, but UI freezes can still occur if actions are performed too rapidly.
+### 2. Текущий статус и известные проблемы:
+- **Стабильность iOS:** Мы только что завершили цикл глубокой оптимизации. Приложение стабильно на малых и средних зонах (< 20 м²).
+- **Ограничение больших зон:** На iOS очень большие зоны (> 20-30 м²) или сложные контуры (> 15 точек) все еще могут «скакать» из-за пересчета карты мира ARKit (re-localization). Это задокументировано в `docs/ar/LIMITATIONS_LARGE_ZONES.md`, на данный момент мы решили двигаться дальше.
+- **Производительность:** Большая часть тяжелых вычислений (генерация меша) вынесена в фоновые потоки, но фризы интерфейса все еще могут возникать при слишком быстрых действиях.
 
-### 3. Git State:
-- The `feature/ios_ar_screen` branch has been squashed and merged into `main`.
-- The last stable point is a single consolidated commit covering all iOS AR stability strategies.
+### 3. Состояние Git:
+- Ветка `feature/ios_ar_screen` была сквошнута (squash) и влита в `main`.
+- Последняя стабильная точка — это один консолидированный коммит, включающий все стратегии стабильности iOS AR.
 
-### 4. Next Steps:
-- We are moving past the "iOS Stability" phase.
-- We need to focus on [INSERT NEXT TASK HERE].
+### 4. Следующие шаги:
+- Мы завершили фазу «Стабильность iOS».
+- Нам нужно сосредоточиться на [ВСТАВЬТЕ СЛЕДУЮЩУЮ ЗАДАЧУ].
 
-**Instructions for the AI:**
-- Use the existing architecture in `iosApp/src/iosMain/kotlin/com/example/arplitka/iosapp/platform/ar/`.
-- Maintain the "Hybrid Stability" logic.
-- Always prefer shared logic in `shared/ar/domain/` over platform-specific hacks.
-- When working on iOS, remember that SceneKit calls must be on the Main Thread, but geometry calculation should be async.
+**Инструкции для ИИ:**
+- Используй существующую архитектуру в `iosApp/src/iosMain/kotlin/com/example/arplitka/iosapp/platform/ar/`.
+- Поддерживай логику «Гибридной стабильности».
+- Всегда отдавай предпочтение общей логике в `shared/ar/domain/` перед платформенными хаками.
+- При работе с iOS помни, что вызовы SceneKit должны быть в Main Thread, но расчет геометрии должен быть асинхронным.
