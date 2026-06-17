@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntSize
 import com.example.arplitka.features.floordetection.domain.model.FloorUiState
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.features.floordetection.domain.model.TextureRotation
 import com.example.arplitka.features.floordetection.presentation.utils.*
 import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
@@ -98,7 +99,7 @@ fun ArSceneLayer(
             val anchorZ = aligned.centroidZ +
                 minLocalX * aligned.axisZ + minLocalY * aligned.perpendicularZ
 
-            val useTexture = uiState.isTileVisible
+            val useTexture = uiState.stage == FloorWorkflowStage.TILE_LAYOUT
             var sectionMaterials by remember { mutableStateOf<Map<TextureRotation, MaterialInstance>>(emptyMap()) }
 
             if (useTexture) {

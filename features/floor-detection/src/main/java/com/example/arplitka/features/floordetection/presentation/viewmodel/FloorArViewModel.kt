@@ -7,6 +7,7 @@ import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.features.floordetection.domain.model.ArPoint
 import com.example.arplitka.features.floordetection.domain.model.FloorDetectionState
 import com.example.arplitka.features.floordetection.domain.model.FloorUiState
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.features.floordetection.domain.model.TextureRotation
 import com.example.arplitka.features.floordetection.domain.model.TileType
 import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFrameUseCase
@@ -81,7 +82,7 @@ class FloorArViewModel @Inject constructor(
                 )
             }
             
-            if (!newState.isContourConfirmed && !newState.isTileVisible && newState.hasCenterHit && newState.currentHitPose != null && newState.points.isNotEmpty()) {
+            if (newState.stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal && newState.hasCenterHit && newState.currentHitPose != null && newState.points.isNotEmpty()) {
                 val currentPose = newState.currentHitPose!!
                 val firstPoint = newState.points.first().pose
                 val distToFirst = calculateDistance(firstPoint.tx(), firstPoint.ty(), firstPoint.tz(), 
@@ -116,27 +117,46 @@ class FloorArViewModel @Inject constructor(
                         )
                     }
                 }
-            } else if (!newState.isContourConfirmed && !newState.isTileVisible) {
+            } else if (newState.stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal) {
                 newState = newState.copy(
                     snappedPointIndex = null,
                     isPolygonClosed = false
                 )
             }
 
-            applyContourPhaseUi(newState)
+            val nextStage = calculateNextStage(newState)
+            applyContourPhaseUi(newState.copy(stage = nextStage))
         }
     }
 
-    private fun applyContourPhaseUi(state: FloorUiState): FloorUiState = when {
-        state.isContourConfirmed && state.isTileVisible -> state.copy(
+    private fun calculateNextStage(state: FloorUiState): FloorWorkflowStage {
+        // If we are already in a "confirmed" stage, don't go back unless reset
+        if (state.stage == FloorWorkflowStage.TILE_LAYOUT) return FloorWorkflowStage.TILE_LAYOUT
+        if (state.stage == FloorWorkflowStage.CONTOUR_CONFIRMED) {
+            return if (state.isTileVisible) FloorWorkflowStage.TILE_LAYOUT else FloorWorkflowStage.CONTOUR_CONFIRMED
+        }
+
+        if (state.trackingState != TrackingState.TRACKING) return FloorWorkflowStage.INITIALIZING
+        if (state.detectionState == FloorDetectionState.SearchingFloor) return FloorWorkflowStage.SEARCHING_FLOOR
+        
+        return when {
+            state.isContourConfirmed -> FloorWorkflowStage.CONTOUR_CONFIRMED
+            state.isPolygonClosed -> FloorWorkflowStage.CONTOUR_CLOSED
+            state.points.isEmpty() -> FloorWorkflowStage.PLACEMENT_EMPTY
+            else -> FloorWorkflowStage.PLACEMENT_ACTIVE
+        }
+    }
+
+    private fun applyContourPhaseUi(state: FloorUiState): FloorUiState = when (state.stage) {
+        FloorWorkflowStage.TILE_LAYOUT -> state.copy(
             status = ArTrackingStatus.POLYGON_CLOSED,
             instruction = ArInstruction.TILE_VISIBLE
         )
-        state.isContourConfirmed -> state.copy(
+        FloorWorkflowStage.CONTOUR_CONFIRMED -> state.copy(
             status = ArTrackingStatus.POLYGON_CLOSED,
             instruction = ArInstruction.CONTOUR_CONFIRMED
         )
-        state.isPolygonClosed -> state.copy(
+        FloorWorkflowStage.CONTOUR_CLOSED -> state.copy(
             status = ArTrackingStatus.POLYGON_CLOSED,
             instruction = ArInstruction.CONTOUR_CLOSED
         )
@@ -145,7 +165,7 @@ class FloorArViewModel @Inject constructor(
     
     fun addPoint() {
         _uiState.update { state ->
-            if (state.isPolygonClosed || state.isContourConfirmed || state.isTileVisible) return@update state
+            if (state.stage.ordinal >= FloorWorkflowStage.CONTOUR_CLOSED.ordinal) return@update state
 
             if (state.snappedPointIndex != null) {
                 return@update state
@@ -177,21 +197,23 @@ class FloorArViewModel @Inject constructor(
             val anchor = runCatching { hitResult.createAnchor() }.getOrNull()
                 ?: return@update state
             
-            state.copy(points = state.points + ArPoint(anchor, anchor.pose))
+            val newState = state.copy(points = state.points + ArPoint(anchor, anchor.pose))
+            val nextStage = calculateNextStage(newState)
+            applyContourPhaseUi(newState.copy(stage = nextStage))
         }
     }
     
     fun undoPoint() {
         _uiState.update { state ->
-            if (state.isContourConfirmed || state.isTileVisible) return@update state
+            if (state.stage.ordinal >= FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal) return@update state
             if (state.points.isNotEmpty()) {
                 state.points.last().anchor.detach()
-                applyContourPhaseUi(
-                    state.copy(
-                        points = state.points.dropLast(1),
-                        isPolygonClosed = false
-                    )
+                val newState = state.copy(
+                    points = state.points.dropLast(1),
+                    isPolygonClosed = false
                 )
+                val nextStage = calculateNextStage(newState)
+                applyContourPhaseUi(newState.copy(stage = nextStage))
             } else {
                 state
             }
@@ -200,28 +222,33 @@ class FloorArViewModel @Inject constructor(
 
     fun confirmContour() {
         _uiState.update { state ->
-            if (!state.isPolygonClosed || state.isContourConfirmed) return@update state
-            applyContourPhaseUi(
-                state.copy(
-                    isContourConfirmed = true,
-                    isTileVisible = false,
-                    snappedPointIndex = null
-                )
+            if (state.stage != FloorWorkflowStage.CONTOUR_CLOSED) return@update state
+            val newState = state.copy(
+                isContourConfirmed = true,
+                isTileVisible = false,
+                snappedPointIndex = null,
+                stage = FloorWorkflowStage.CONTOUR_CONFIRMED
             )
+            applyContourPhaseUi(newState)
         }
     }
 
     fun toggleTileVisibility() {
         _uiState.update { state ->
-            if (!state.isContourConfirmed) return@update state
-            applyContourPhaseUi(state.copy(isTileVisible = !state.isTileVisible))
+            if (state.stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal) return@update state
+            val isVisible = !state.isTileVisible
+            val newState = state.copy(
+                isTileVisible = isVisible,
+                stage = if (isVisible) FloorWorkflowStage.TILE_LAYOUT else FloorWorkflowStage.CONTOUR_CONFIRMED
+            )
+            applyContourPhaseUi(newState)
         }
     }
 
     fun clearSection() {
         _uiState.update { state ->
             state.points.forEach { point -> point.anchor.detach() }
-            FloorUiState(
+            val newState = FloorUiState(
                 trackingState = state.trackingState,
                 horizontalPlaneCount = state.horizontalPlaneCount,
                 selectedArea = state.selectedArea,
@@ -231,6 +258,8 @@ class FloorArViewModel @Inject constructor(
                 instruction = state.instruction,
                 detectionState = state.detectionState
             )
+            val nextStage = calculateNextStage(newState)
+            applyContourPhaseUi(newState.copy(stage = nextStage))
         }
     }
 

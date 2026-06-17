@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.arplitka.features.floordetection.R
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.features.floordetection.presentation.components.ArActionButtons
 import com.example.arplitka.features.floordetection.presentation.components.ArSceneLayer
 import com.example.arplitka.features.floordetection.presentation.components.ArStatusOverlay
@@ -59,8 +60,8 @@ fun FloorArScreen(
     val context = LocalContext.current
 
     var pavingBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(context, uiState.isTileVisible, uiState.selectedTileType) {
-        if (!uiState.isTileVisible) {
+    LaunchedEffect(context, uiState.stage, uiState.selectedTileType) {
+        if (uiState.stage != FloorWorkflowStage.TILE_LAYOUT) {
             pavingBitmap = null
             return@LaunchedEffect
         }
@@ -92,7 +93,7 @@ fun FloorArScreen(
 
         CenterReticle(
             modifier = Modifier.align(Alignment.Center),
-            isActive = uiState.hasCenterHit && !uiState.isContourConfirmed
+            isActive = uiState.hasCenterHit && uiState.stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
         )
 
         ArTopBar(onBack = {
@@ -141,13 +142,14 @@ fun FloorArScreen(
                     stringResource(R.string.debug_area) to stringResource(R.string.area_format, uiState.selectedArea),
                     stringResource(R.string.debug_fill_bounds) to fillBoundsLabel,
                     stringResource(R.string.debug_tracking) to uiState.trackingState.name,
+                    "Stage" to uiState.stage.name,
                     "Points" to uiState.points.size.toString(),
                     "Closed" to uiState.isPolygonClosed.toString(),
                     "Confirmed" to uiState.isContourConfirmed.toString(),
                     "Show pts" to if (uiState.showContourPoints) "Yes" else "No",
                     "Show lines" to if (uiState.showContourLines) "Yes" else "No",
                     "Show fill" to if (uiState.showSectionFill) "Yes" else "No",
-                    "Tile" to if (uiState.isTileVisible) "On" else "Off",
+                    "Tile" to if (uiState.stage == FloorWorkflowStage.TILE_LAYOUT) "On" else "Off",
                     "Texture rotation" to (uiState.textureRotation.ordinal * 45).toString()
                 ),
                 modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)

@@ -29,6 +29,10 @@ import com.example.arplitka.iosapp.presentation.mapper.toReticleState
 import com.example.arplitka.iosapp.presentation.mapper.toStatusDetailText
 import com.example.arplitka.iosapp.presentation.model.IosArScreenModel
 import com.example.arplitka.shared.ar.contracts.state.FloorArEvent
+import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
+import com.example.arplitka.shared.ar.domain.model.TextureRotation
+import com.example.arplitka.shared.ar.domain.model.TileType
 import com.example.arplitka.shared.ui.kit.ArContourActionButtons
 import com.example.arplitka.shared.ui.kit.ArTopBar
 import com.example.arplitka.shared.ui.kit.CenterReticle
@@ -120,95 +124,79 @@ actual fun IosArScreen(onBack: () -> Unit) {
                 }
             }
 
-            if (contourState.showContourActions) {
-                ArContourActionButtons(
-                    hasCenterHit = when {
-                        contourState.isPolygonClosed -> true
-                        else -> contourState.hasCenterHit
-                    },
-                    isPolygonClosed = contourState.isPolygonClosed,
-                    hasPoints = contourState.placedPoints.isNotEmpty(),
-                    onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
-                    onUndoPoint = { coordinator.dispatchEvent(FloorArEvent.UndoPoint) },
-                    addContentDescription = "Добавить точку",
-                    undoContentDescription = "Отменить",
-                    okContentDescription = "Готово"
-                )
-            }
-
-            if (contourState.showTileControls) {
-                if (contourState.isTileVisible) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color.Black.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
-                            .padding(horizontal = 18.dp, vertical = 14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Поворот текстуры: ${contourState.textureRotation.degrees}°",
-                                color = Color.White
-                            )
-                            Button(
-                                onClick = { coordinator.dispatchEvent(FloorArEvent.RotateTexture) },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.White,
-                                    contentColor = Color.Black
-                                )
-                            ) {
-                                Text("Повернуть")
-                            }
-                        }
-                    }
+            when (contourState.stage) {
+                FloorWorkflowStage.INITIALIZING,
+                FloorWorkflowStage.SEARCHING_FLOOR -> {
+                    // No buttons
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                FloorWorkflowStage.PLACEMENT_EMPTY,
+                FloorWorkflowStage.PLACEMENT_ACTIVE -> {
+                    ArContourActionButtons(
+                        hasCenterHit = contourState.hasCenterHit,
+                        isPolygonClosed = false,
+                        hasPoints = contourState.placedPoints.isNotEmpty(),
+                        onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
+                        onUndoPoint = { coordinator.dispatchEvent(FloorArEvent.UndoPoint) },
+                        addContentDescription = "Добавить точку",
+                        undoContentDescription = "Отменить",
+                        okContentDescription = "Готово"
+                    )
+                }
+
+                FloorWorkflowStage.CONTOUR_CLOSED -> {
+                    ArContourActionButtons(
+                        hasCenterHit = true,
+                        isPolygonClosed = true,
+                        hasPoints = true,
+                        onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
+                        onUndoPoint = { coordinator.dispatchEvent(FloorArEvent.UndoPoint) },
+                        addContentDescription = "Добавить точку",
+                        undoContentDescription = "Отменить",
+                        okContentDescription = "Готово"
+                    )
+                }
+
+                FloorWorkflowStage.CONTOUR_CONFIRMED -> {
                     Button(
                         onClick = { coordinator.dispatchEvent(FloorArEvent.ToggleTileVisibility) },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (contourState.isTileVisible) {
-                                Color.Black.copy(alpha = 0.72f)
-                            } else {
-                                Color(0xFF4CAF50)
-                            },
+                            containerColor = Color(0xFF4CAF50),
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(24.dp)
                     ) {
-                        Text(if (contourState.isTileVisible) "Убрать плитку" else "Добавить плитку")
+                        Text("Добавить плитку")
                     }
+                }
 
-                    if (contourState.isTileVisible) {
-                        Button(
-                            onClick = { coordinator.dispatchEvent(FloorArEvent.ChangeTileType) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White.copy(alpha = 0.92f),
-                                contentColor = Color.Black
-                            ),
-                            shape = RoundedCornerShape(24.dp)
-                        ) {
-                            Text("Сменить плитку")
-                        }
-                    }
+                FloorWorkflowStage.TILE_LAYOUT -> {
+                    IosTileLayoutControls(
+                        contourState = contourState,
+                        onRotate = { coordinator.dispatchEvent(FloorArEvent.RotateTexture) },
+                        onToggleVisibility = { coordinator.dispatchEvent(FloorArEvent.ToggleTileVisibility) },
+                        onChangeType = { coordinator.dispatchEvent(FloorArEvent.ChangeTileType) }
+                    )
                 }
             }
 
-            Button(
-                onClick = { coordinator.rescanSession() },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White.copy(alpha = 0.92f),
-                    contentColor = Color.Black
-                ),
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Text("Пересканировать")
+            val canRescan = contourState.placedPoints.isNotEmpty() || 
+                    contourState.isFinalized ||
+                    contourState.stage == FloorWorkflowStage.PLACEMENT_EMPTY ||
+                    contourState.stage == FloorWorkflowStage.SEARCHING_FLOOR ||
+                    contourState.stage == FloorWorkflowStage.INITIALIZING
+
+            if (canRescan) {
+                Button(
+                    onClick = { coordinator.rescanSession() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White.copy(alpha = 0.92f),
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Text("Пересканировать")
+                }
             }
         }
 
@@ -235,6 +223,7 @@ actual fun IosArScreen(onBack: () -> Unit) {
                             "Texture rotation" to contourState.textureRotation.degrees.toString(),
                             "Tile type" to contourState.selectedTileType.resourceName,
                             "Phase" to planeDebugMetrics.sessionPhase,
+                            "Stage" to contourState.stage.name,
                             "Perf" to planeDebugMetrics.perfDiagnosis,
                             "Plane renderer" to planeDebugMetrics.rendererMode,
                             "Delegate Hz" to planeDebugMetrics.sessionDelegateHz.toString(),
@@ -304,5 +293,72 @@ actual fun IosArScreen(onBack: () -> Unit) {
             onBack = onBack,
             modifier = Modifier.align(Alignment.TopStart)
         )
+    }
+}
+
+@Composable
+private fun IosTileLayoutControls(
+    contourState: FloorContourUiState,
+    onRotate: () -> Unit,
+    onToggleVisibility: () -> Unit,
+    onChangeType: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
+                .padding(horizontal = 18.dp, vertical = 14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Поворот текстуры: ${contourState.textureRotation.degrees}°",
+                    color = Color.White
+                )
+                Button(
+                    onClick = onRotate,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Повернуть")
+                }
+            }
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = onToggleVisibility,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Black.copy(alpha = 0.72f),
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Text("Убрать плитку")
+            }
+
+            Button(
+                onClick = onChangeType,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White.copy(alpha = 0.92f),
+                    contentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Text("Сменить плитку")
+            }
+        }
     }
 }
