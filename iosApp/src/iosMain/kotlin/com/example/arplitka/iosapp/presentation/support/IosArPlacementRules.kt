@@ -5,6 +5,7 @@ import com.example.arplitka.iosapp.platform.ar.confirmedWorldFloorPoint
 import com.example.arplitka.iosapp.platform.ar.previewWorldFloorPoint
 import com.example.arplitka.iosapp.platform.ar.IosArSessionRelocationController
 import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
+import com.example.arplitka.shared.ar.domain.logic.PlacementSnapshotRules
 import platform.CoreFoundation.CFAbsoluteTimeGetCurrent
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -16,10 +17,12 @@ internal const val SCAN_OVERLAY_ELEVATION_INTERVAL_FRAMES = 2
 internal const val SCAN_ANCHOR_NODE_UPDATE_INTERVAL = 3
 internal const val PLACEMENT_MUTATION_COOLDOWN_FRAMES = 4
 internal const val PLACEMENT_ANCHORED_POINTS_SYNC_INTERVAL_FRAMES = 6
+internal const val CONTOUR_RENDER_INTERVAL_FRAMES = 2
+internal const val CONTOUR_FINALIZED_RENDER_INTERVAL_FRAMES = 12
 /** Imperceptible anchor drift — applied immediately when tracking is stable. */
-internal const val PLACEMENT_ANCHOR_MICRO_CORRECTION_M = 0.03f
+internal const val PLACEMENT_ANCHOR_MICRO_CORRECTION_M = 0.01f
 /** Shifts above this never auto-apply; user confirms via the realign button. */
-internal const val PLACEMENT_ANCHOR_MACRO_BLOCKED_M = 0.08f
+internal const val PLACEMENT_ANCHOR_MACRO_BLOCKED_M = 0.03f
 /** Stable frames required before auto-applying a small (3–8 cm) post-freeze correction. */
 internal const val PLACEMENT_ANCHOR_SMALL_AUTO_CONFIRM_FRAMES = 4
 internal const val PLACEMENT_ANCHOR_CONFIRM_FRAMES = 4
@@ -28,7 +31,7 @@ internal const val PLACEMENT_ANCHOR_SIGNATURE_TOLERANCE_M = 0.015f
 internal const val PLACEMENT_ANCHOR_RECOVERY_CONTEXT_SECONDS = 30.0
 internal const val PLACEMENT_FLOOR_BAND_TOLERANCE_M = 0.10f
 internal const val PLACEMENT_HIT_STALE_MS = 700
-internal const val PLACEMENT_RENDER_RETICLE_MIN_INTERVAL_SECONDS = 1.0 / 120.0
+internal const val PLACEMENT_RENDER_RETICLE_MIN_INTERVAL_SECONDS = 1.0 / 60.0
 internal const val PLACEMENT_PATCH_EURO_MIN_CUTOFF_HZ = 2.4
 internal const val PLACEMENT_PATCH_EURO_BETA = 1.1
 internal const val PLACEMENT_PATCH_EURO_D_CUTOFF_HZ = 3.5
@@ -37,16 +40,74 @@ internal const val PLACEMENT_PATCH_FAST_BLEND_FULL_MPS = 1.1f
 internal const val PLACEMENT_PATCH_FAST_BLEND_MAX = 0.75f
 internal const val PLACEMENT_RENDER_SMOOTHING_SNAP_M = 0.35f
 internal const val LIVE_RETICLE_UPDATE_INTERVAL_SECONDS = 0.066
-internal const val LIVE_RETICLE_UI_MAX_AGE_MS = 150
-internal const val LIVE_RETICLE_TAP_MAX_AGE_MS = 150
+internal val LIVE_RETICLE_UI_MAX_AGE_MS = PlacementSnapshotRules.LIVE_RETICLE_UI_MAX_AGE_MS
+internal val LIVE_RETICLE_TAP_MAX_AGE_MS = PlacementSnapshotRules.LIVE_RETICLE_TAP_MAX_AGE_MS
 internal const val TAP_MAX_PREVIEW_DELTA_CM = 5f
 /** Debug threshold only: tap no longer blocks on delegate age. */
 internal const val TAP_MAX_DELEGATE_AGE_MS = 150
-internal const val TRACKING_DEGRADED_CAMERA_GAP_MS = 500
+internal val TRACKING_DEGRADED_CAMERA_GAP_MS = PlacementSnapshotRules.TRACKING_DEGRADED_CAMERA_GAP_MS
+internal val PLACEABLE_STATUSES = PlacementSnapshotRules.PLACEABLE_STATUSES
+
 internal const val TAP_PLACEABLE_GRACE_SECONDS = 0.35
 internal const val TAP_PLACEABLE_MAX_CAMERA_MOVE_M = 0.08f
 internal const val TAP_PLACEABLE_MAX_UI_DELTA_M = 0.05f
-internal val PLACEABLE_STATUSES = setOf("scan-valid", "valid", "preview")
+
+internal enum class TapRejectReason {
+    NO_FRAME,
+    STALE_SNAPSHOT,
+    TRACKING_DEGRADED,
+    NO_POINT,
+    PREVIEW_DELTA,
+    DOMAIN_REJECT
+}
+
+internal fun isPlacementSnapshotStale(
+    ageMs: Int,
+    delegateAgeMs: Int,
+    isRelocalizing: Boolean,
+    trackingDegraded: Boolean,
+    status: String
+): Boolean = PlacementSnapshotRules.isSnapshotStale(
+    ageMs = ageMs,
+    delegateAgeMs = delegateAgeMs,
+    isRelocalizing = isRelocalizing,
+    trackingDegraded = trackingDegraded,
+    status = status
+)
+
+internal fun isPlacementSnapshotPlaceable(
+    snapshot: ResolvedPlacementSnapshot,
+    nowSeconds: Double,
+    isRelocalizing: Boolean,
+    lastDelegateAtSeconds: Double
+): Boolean {
+    if (isRelocalizing) return false
+    val ageMs = snapshot.ageMs(nowSeconds)
+    val delegateAgeMs = computeDelegateAgeMs(nowSeconds, lastDelegateAtSeconds)
+    if (!PlacementSnapshotRules.isSnapshotAgeFresh(ageMs, delegateAgeMs)) return false
+    if (snapshot.point == null) return false
+
+    val status = placementStatusLabel(
+        centerHit = snapshot.centerHit,
+        sectionFloorY = snapshot.sectionFloorY,
+        hitAgeMs = ageMs
+    )
+    if (status !in PLACEABLE_STATUSES) return false
+
+    val trackingDegraded = PlacementSnapshotRules.isTrackingDegraded(
+        cameraGapMs = snapshot.cameraGapMs,
+        snapshotAgeMs = ageMs,
+        delegateAgeMs = delegateAgeMs,
+        isRelocalizing = false
+    )
+    return !trackingDegraded
+}
+
+internal fun resolvePlacementStatus(
+    centerHit: CenterPlaneHit,
+    sectionFloorY: Float?,
+    hitAgeMs: Int
+): String = placementStatusLabel(centerHit, sectionFloorY, hitAgeMs)
 
 internal fun currentTimeSeconds(): Double =
     CFAbsoluteTimeGetCurrent()
@@ -102,9 +163,15 @@ internal fun formatTrackingQualityLabel(
 
 internal fun isTrackingDegraded(
     cameraGapMs: Int,
-    relocationController: IosArSessionRelocationController
-): Boolean =
-    cameraGapMs >= TRACKING_DEGRADED_CAMERA_GAP_MS || relocationController.isRelocalizing()
+    relocationController: IosArSessionRelocationController,
+    snapshotAgeMs: Int = 0,
+    delegateAgeMs: Int = 0
+): Boolean = PlacementSnapshotRules.isTrackingDegraded(
+    cameraGapMs = cameraGapMs,
+    snapshotAgeMs = snapshotAgeMs,
+    delegateAgeMs = delegateAgeMs,
+    isRelocalizing = relocationController.isRelocalizing()
+)
 
 /** Placement hint: ARKit tracking/relocalize only — not slow delegate frame interval. */
 internal fun shouldShowPlacementCatchupHint(

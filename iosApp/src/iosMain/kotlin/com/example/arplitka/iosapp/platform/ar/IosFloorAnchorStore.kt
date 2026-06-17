@@ -24,12 +24,14 @@ import kotlin.math.sqrt
 internal data class AnchorCorrectionDebug(
     val stateLabel: String,
     val rootDeltaCm: Float,
-    val displayDeltaCm: Float
+    val displayDeltaCm: Float,
+    val pendingCorrectionFrames: Int = 0,
+    val manualAlignEligible: Boolean = false
 )
 
 @OptIn(ExperimentalForeignApi::class)
 internal class IosFloorAnchorStore {
-    private data class Entry(
+    internal data class Entry(
         val logicalId: String,
         /** Fallback only. The stable source of truth is local XZ on [contourRootAnchorId]. */
         val tapWorldPosition: ArPoint3D,
@@ -86,9 +88,16 @@ internal class IosFloorAnchorStore {
             lastResolvedWorldPosition = worldPosition
         )
         lastAcceptedFloorY = worldPosition.yMeters
-        rootOrigin(rootAnchor)?.let { origin ->
+        val origin = rootOrigin(rootAnchor)
+        if (origin != null) {
             lastAcceptedRootX = origin.xMeters
             lastAcceptedRootZ = origin.zMeters
+            // CRITICAL: When registering a new point, commit current anchor state for all points
+            // to ensure they are all in the same coordinate space immediately.
+            val currentResolved = entries.map { entry ->
+                rootAnchor?.let { resolveEntryWorldPosition(entry, it) } ?: entry.lastResolvedWorldPosition
+            }
+            commitAcceptedPositions(currentResolved, origin)
         }
         resetPendingCorrection()
         clearManualRealignState()
@@ -111,11 +120,24 @@ internal class IosFloorAnchorStore {
     fun canManuallyRealign(): Boolean =
         entries.isNotEmpty() && (
             manualRealignLatched ||
-                lastDisplayDeltaCm >= PLACEMENT_ANCHOR_MACRO_BLOCKED_M * 100f
+                lastDisplayDeltaCm >= PLACEMENT_ANCHOR_MACRO_BLOCKED_M * 100f ||
+                lastRootDeltaCm >= PLACEMENT_ANCHOR_MACRO_BLOCKED_M * 100f ||
+                correctionStateLabel == "offer-realign" ||
+                correctionStateLabel == "pending-macro"
             )
 
     fun applyManualMacroRealignment(frame: ARFrame?): Boolean {
         if (entries.isEmpty()) return false
+        val pendingPositions = pendingMacroPositions
+        val pendingRootOrigin = pendingMacroRootOrigin
+        if (pendingPositions != null && pendingRootOrigin != null) {
+            commitAcceptedPositions(pendingPositions, pendingRootOrigin)
+            clearManualRealignState()
+            correctionStateLabel = "manual"
+            lastRootDeltaCm = 0f
+            lastDisplayDeltaCm = 0f
+            return true
+        }
         val rootAnchor = findContourRootAnchorInFrame(frame) ?: return false
         val rootOrigin = rootOrigin(rootAnchor) ?: return false
         val resolvedPositions = entries.map { entry ->
@@ -143,16 +165,20 @@ internal class IosFloorAnchorStore {
         AnchorCorrectionDebug(
             stateLabel = correctionStateLabel,
             rootDeltaCm = lastRootDeltaCm,
-            displayDeltaCm = lastDisplayDeltaCm
+            displayDeltaCm = lastDisplayDeltaCm,
+            pendingCorrectionFrames = pendingCorrectionFrames,
+            manualAlignEligible = canManuallyRealign()
         )
 
     fun placedPoints(
         frame: ARFrame?,
         sectionFloorY: Float?,
         trackingStable: Boolean = true,
-        hadTrackingInstability: Boolean = false
+        hadTrackingInstability: Boolean = false,
+        isFinalized: Boolean = false
     ): List<PlacedContourPoint> {
         if (entries.isEmpty()) return emptyList()
+        
         val rootAnchor = findContourRootAnchorInFrame(frame)
         val resolvedPositions = if (rootAnchor != null) {
             entries.map { entry ->
@@ -161,6 +187,9 @@ internal class IosFloorAnchorStore {
         } else {
             entries.map { it.lastResolvedWorldPosition }
         }
+
+        // We ALWAYS evaluate correction to update metrics (deltas) and trigger the realign button,
+        // even if we don't use the corrected positions for rendering during placement.
         val acceptedPositions = evaluateAnchorCorrection(
             resolvedPositions = resolvedPositions,
             rootAnchor = rootAnchor,
@@ -168,6 +197,16 @@ internal class IosFloorAnchorStore {
             hadTrackingInstability = hadTrackingInstability,
             anchorResolvedFromFrame = rootAnchor != null
         )
+
+        // PURE WORLD SPACE FOR PLACEMENT:
+        // To ensure 100% stability while drawing, we return the original tap positions.
+        // We only switch to anchor-relative positions after finalization.
+        if (!isFinalized) {
+            return entries.map { entry ->
+                PlacedContourPoint(id = entry.logicalId, position = entry.tapWorldPosition)
+            }
+        }
+
         val effectiveFloorY = lastAcceptedFloorY ?: sectionFloorY
         return entries.zip(acceptedPositions).map { (entry, resolved) ->
             val position = FloorGeometry.projectToSectionFloor(resolved, effectiveFloorY)
@@ -177,6 +216,10 @@ internal class IosFloorAnchorStore {
 
     fun anchoredFloorY(frame: ARFrame?): Float? =
         lastAcceptedFloorY ?: anchoredFloorY(findContourRootAnchor(frame))
+
+    fun entriesInternal() = entries
+    fun resolveEntryWorldPositionInternal(entry: Entry, rootAnchor: ARAnchor?) = resolveEntryWorldPosition(entry, rootAnchor)
+    fun findContourRootAnchor(frame: ARFrame?): ARAnchor? = findContourRootAnchorInFrame(frame) ?: lastContourRootAnchor
 
     private fun createContourRootAnchor(session: ARSession, worldPosition: ArPoint3D): ARAnchor? {
         val transform = floatArrayOf(
@@ -260,7 +303,13 @@ internal class IosFloorAnchorStore {
         lastRootDeltaCm = rootDelta * 100f
         lastDisplayDeltaCm = maxDisplayDelta * 100f
 
+        // DEAD GRIP STRATEGY: 
+        // If we have a stable anchor, we follow it 100% without any "micro-corrections"
+        // that cause jitter. We only block updates if tracking is unstable and drift is huge.
         if (!trackingStable) {
+            if (correctionDelta >= PLACEMENT_ANCHOR_MACRO_BLOCKED_M) {
+                storePendingMacroCandidate(resolvedPositions, rootOrigin)
+            }
             maybeOfferManualRealign(
                 resolvedPositions = resolvedPositions,
                 rootOrigin = rootOrigin,
@@ -268,20 +317,15 @@ internal class IosFloorAnchorStore {
                 hadTrackingInstability = hadTrackingInstability,
                 forceOffer = true
             )
-            correctionStateLabel = "frozen-unstable"
+            correctionStateLabel = if (manualRealignLatched) {
+                "offer-realign"
+            } else {
+                "frozen-unstable"
+            }
             return entries.map { it.lastResolvedWorldPosition }
         }
 
         when {
-            correctionDelta <= PLACEMENT_ANCHOR_MICRO_CORRECTION_M -> {
-                resetPendingCorrection()
-                if (!hadTrackingInstability) {
-                    clearManualRealignState()
-                }
-                correctionStateLabel = "micro"
-                commitAcceptedPositions(resolvedPositions, rootOrigin)
-                return resolvedPositions
-            }
             correctionDelta >= PLACEMENT_ANCHOR_MACRO_BLOCKED_M -> {
                 storePendingMacroCandidate(resolvedPositions, rootOrigin)
                 accumulatePendingCorrection(resolvedPositions)
@@ -301,18 +345,11 @@ internal class IosFloorAnchorStore {
                 return entries.map { it.lastResolvedWorldPosition }
             }
             else -> {
-                accumulatePendingCorrection(resolvedPositions)
-                val canAutoApplySmall = hadTrackingInstability &&
-                    pendingCorrectionFrames >= PLACEMENT_ANCHOR_SMALL_AUTO_CONFIRM_FRAMES
-                if (canAutoApplySmall) {
-                    resetPendingCorrection()
-                    clearManualRealignState()
-                    correctionStateLabel = "auto-small"
-                    commitAcceptedPositions(resolvedPositions, rootOrigin)
-                    return resolvedPositions
-                }
-                macroCorrectionBlocked = false
-                correctionStateLabel = "pending-small"
+                // WORLD-LOCKED DEAD GRIP:
+                // For points placement, we keep world positions rock-solid to avoid jitter.
+                // We only sync to the anchor in register() when a new point is added,
+                // or if the user finalizes the area.
+                correctionStateLabel = "world-locked"
                 return entries.map { it.lastResolvedWorldPosition }
             }
         }
@@ -403,6 +440,9 @@ internal class IosFloorAnchorStore {
         return sqrt(dx * dx + dz * dz)
     }
 
+    fun rootOrigin(frame: ARFrame?): ArPoint3D? =
+        rootOrigin(findContourRootAnchor(frame))
+
     private fun rootOrigin(rootAnchor: ARAnchor?): ArPoint3D? =
         rootAnchor?.let { anchor ->
             HitTransformReader.worldPointFromPlaneLocal(
@@ -423,9 +463,6 @@ internal class IosFloorAnchorStore {
         }
     }
 
-    private fun findContourRootAnchor(frame: ARFrame?): ARAnchor? =
-        findContourRootAnchorInFrame(frame) ?: lastContourRootAnchor
-
     private fun removeContourRootAnchor(session: ARSession, frame: ARFrame?) {
         val rootAnchorId = contourRootAnchorId ?: return
         frame?.findAnchor(rootAnchorId)?.let { session.removeAnchor(it) }
@@ -439,9 +476,8 @@ internal class IosFloorAnchorStore {
     }
 
     private fun ARFrame.findAnchor(anchorId: NSUUID): ARAnchor? {
-        val targetId = anchorId.UUIDString()
         return anchors.firstOrNull { anchor ->
-            (anchor as? ARAnchor)?.identifier?.UUIDString() == targetId
+            (anchor as? ARAnchor)?.identifier?.isEqual(anchorId) == true
         } as? ARAnchor
     }
 }

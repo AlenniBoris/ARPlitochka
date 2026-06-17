@@ -83,6 +83,11 @@ SCNGeometry *pg_create_contour_lines_geometry(
 SCNGeometry *pg_create_contour_fill_geometry(
     int pointCount,
     const float *pointsXZ,
+    const float *uvs,
+    float centroidX,
+    float centroidZ,
+    float centroidU,
+    float centroidV,
     float yM
 );
 #define PG_MAX_BOUNDARY_VERTICES 256

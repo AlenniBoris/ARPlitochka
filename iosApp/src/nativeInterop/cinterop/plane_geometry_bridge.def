@@ -1050,36 +1050,25 @@ SCNGeometry *pg_create_contour_lines_geometry(
 }
 
 static SCNMaterial *PGCreateContourFillMaterial(void) {
-    SCNMaterial *material = [SCNMaterial material];
-    material.diffuse.contents = [UIColor colorWithRed:0.18f green:0.62f blue:0.98f alpha:0.58f];
-    material.lightingModelName = SCNLightingModelConstant;
-    material.doubleSided = YES;
-    material.readsFromDepthBuffer = YES;
-    material.writesToDepthBuffer = NO;
-    material.transparencyMode = SCNTransparencyModeAOne;
-    return material;
+    return nil; // Removed: material creation moved to Kotlin for performance
 }
 
 SCNGeometry *pg_create_contour_fill_geometry(
     int pointCount,
     const float *pointsXZ,
+    const float *uvs,
+    float centroidX,
+    float centroidZ,
+    float centroidU,
+    float centroidV,
     float yM
 ) {
-    if (pointCount < 3 || pointsXZ == NULL) {
+    if (pointCount < 3 || pointsXZ == NULL || uvs == NULL) {
         return nil;
     }
     if (pointCount > PG_MAX_CONTOUR_FILL_POINTS) {
         pointCount = PG_MAX_CONTOUR_FILL_POINTS;
     }
-
-    float centroidX = 0.0f;
-    float centroidZ = 0.0f;
-    for (int i = 0; i < pointCount; i++) {
-        centroidX += pointsXZ[i * 2 + 0];
-        centroidZ += pointsXZ[i * 2 + 1];
-    }
-    centroidX /= (float)pointCount;
-    centroidZ /= (float)pointCount;
 
     NSInteger vertexCount = pointCount + 1;
     NSMutableData *vertexData = [NSMutableData dataWithCapacity:(NSUInteger)vertexCount * sizeof(PGGridVertex)];
@@ -1090,36 +1079,15 @@ SCNGeometry *pg_create_contour_fill_geometry(
         [vertexData appendBytes:&vertex length:sizeof(vertex)];
     }
 
-    float minX = pointsXZ[0];
-    float maxX = pointsXZ[0];
-    float minZ = pointsXZ[1];
-    float maxZ = pointsXZ[1];
-    for (int i = 1; i < pointCount; i++) {
-        float x = pointsXZ[i * 2 + 0];
-        float z = pointsXZ[i * 2 + 1];
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (z < minZ) minZ = z;
-        if (z > maxZ) maxZ = z;
-    }
-    float spanX = maxX - minX;
-    float spanZ = maxZ - minZ;
-    if (spanX < 0.001f) spanX = 0.001f;
-    if (spanZ < 0.001f) spanZ = 0.001f;
-
     NSMutableData *texcoordData = [NSMutableData dataWithCapacity:(NSUInteger)vertexCount * 2 * sizeof(float)];
-    float centroidU = (centroidX - minX) / spanX;
-    float centroidV = (centroidZ - minZ) / spanZ;
     float centroidUv[2] = {centroidU, centroidV};
     [texcoordData appendBytes:centroidUv length:sizeof(centroidUv)];
     for (int i = 0; i < pointCount; i++) {
-        float x = pointsXZ[i * 2 + 0];
-        float z = pointsXZ[i * 2 + 1];
-        float uv[2] = {(x - minX) / spanX, (z - minZ) / spanZ};
+        float uv[2] = {uvs[i * 2 + 0], uvs[i * 2 + 1]};
         [texcoordData appendBytes:uv length:sizeof(uv)];
     }
 
-    NSInteger triangleCount = pointCount * 2;
+    NSInteger triangleCount = pointCount;
     NSMutableData *indexData = [NSMutableData dataWithCapacity:(NSUInteger)triangleCount * 3 * sizeof(uint16_t)];
     for (int i = 0; i < pointCount; i++) {
         int next = (i + 1) % pointCount;
@@ -1128,13 +1096,7 @@ SCNGeometry *pg_create_contour_fill_geometry(
             (uint16_t)(i + 1),
             (uint16_t)(next + 1)
         };
-        uint16_t reversed[3] = {
-            0,
-            (uint16_t)(next + 1),
-            (uint16_t)(i + 1)
-        };
         [indexData appendBytes:forward length:sizeof(forward)];
-        [indexData appendBytes:reversed length:sizeof(reversed)];
     }
 
     SCNGeometrySource *source = [SCNGeometrySource geometrySourceWithData:vertexData
@@ -1157,9 +1119,7 @@ SCNGeometry *pg_create_contour_fill_geometry(
                                                                 primitiveType:SCNGeometryPrimitiveTypeTriangles
                                                                primitiveCount:triangleCount
                                                                 bytesPerIndex:sizeof(uint16_t)];
-    SCNGeometry *geometry = [SCNGeometry geometryWithSources:@[source, texSource] elements:@[element]];
-    geometry.materials = @[PGCreateContourFillMaterial()];
-    return geometry;
+    return [SCNGeometry geometryWithSources:@[source, texSource] elements:@[element]];
 }
 
 SCNGeometry *pg_create_grid_line_geometry(

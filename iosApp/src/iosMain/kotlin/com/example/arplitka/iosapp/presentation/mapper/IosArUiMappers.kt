@@ -41,7 +41,8 @@ internal fun FloorContourUiState.toStatusDetailText(): String? {
 
 internal fun FloorContourUiState.toReticleState(
     placementHint: String?,
-    placementStatus: String
+    placementStatus: String,
+    isPlacementPlaceable: Boolean
 ): CenterReticleState = when {
     isPolygonClosed -> CenterReticleState.CLOSED
     !showContourActions || !hasCenterHit -> CenterReticleState.INACTIVE
@@ -49,6 +50,8 @@ internal fun FloorContourUiState.toReticleState(
     placementStatus == "height" -> CenterReticleState.INVALID
     placementStatus == "stale" -> CenterReticleState.INACTIVE
     placementStatus == "no-hit" -> CenterReticleState.INACTIVE
+    !isPlacementPlaceable && placementStatus in setOf("scan-valid", "valid", "preview") ->
+        CenterReticleState.INVALID
     placementStatus == "preview" -> CenterReticleState.VALID
     placementHint != null -> CenterReticleState.INVALID
     else -> CenterReticleState.VALID

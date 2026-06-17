@@ -1,8 +1,6 @@
 package com.example.arplitka.iosapp.platform.render
 
 import com.example.arplitka.iosapp.bridge.pg_create_contour_distance_label_image
-import com.example.arplitka.iosapp.bridge.pg_create_contour_fill_geometry
-import com.example.arplitka.iosapp.bridge.pg_create_contour_lines_geometry
 import com.example.arplitka.iosapp.bridge.pg_create_tile_section_pattern_image
 import com.example.arplitka.iosapp.bridge.pg_load_tile_texture_image
 import com.example.arplitka.shared.ar.domain.geometry.CONTOUR_LABEL_HEIGHT_M
@@ -13,19 +11,22 @@ import com.example.arplitka.shared.ar.domain.geometry.AlignedSectionGeometry
 import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
 import com.example.arplitka.shared.ar.domain.geometry.formatContourDistanceMeters
 import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
+import com.example.arplitka.shared.ar.domain.logic.FloorGeometry
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import com.example.arplitka.shared.ar.domain.model.TextureRotation
 import com.example.arplitka.shared.ar.domain.model.TileType
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.usePinned
 import platform.SceneKit.SCNCylinder
 import platform.SceneKit.SCNMaterial
+import platform.SceneKit.SCNMatrix4MakeScale
 import platform.SceneKit.SCNNode
 import platform.SceneKit.SCNPlane
 import platform.SceneKit.SCNVector3Make
+import platform.SceneKit.SCNWrapModeRepeat
 import platform.UIKit.UIColor
 import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.roundToInt
 
 private const val POINT_RADIUS_M = 0.016f
@@ -37,7 +38,9 @@ private const val FILL_VISUAL_OFFSET_M = 0.004f
 private const val LOD_POINT_COUNT_THRESHOLD = 30
 private const val LOD_POINT_RADIUS_SCALE = 0.85f
 private const val LOD_LINE_WIDTH_SCALE = 0.80f
-private const val POSITION_QUANT_M = 0.01f
+private const val POSITION_QUANT_M = 0.005f // Increased to 5mm to ignore sensor noise
+private const val TILE_WIDTH_M = 0.78f
+private const val TILE_HEIGHT_M = 1.04f
 
 @OptIn(ExperimentalForeignApi::class)
 internal class IosArContourRenderer {
@@ -51,6 +54,7 @@ internal class IosArContourRenderer {
     private var lastLineBatchKey: Int = Int.MIN_VALUE
     private var lastFillBatchKey: Int = Int.MIN_VALUE
     private var lastDistanceLabelBatchKey: Int = Int.MIN_VALUE
+    private val asyncGeometryBuilder = AsyncContourGeometryBuilder()
     private val lastPointPositionKeys = mutableMapOf<String, Int>()
 
     private val pointMaterial = createContourMaterial(red = 0.0, green = 0.9, blue = 0.46)
@@ -87,23 +91,40 @@ internal class IosArContourRenderer {
         lastDistanceLabelBatchKey = Int.MIN_VALUE
         lastPointPositionKeys.clear()
         tileMaterialCache.clear()
+        asyncGeometryBuilder.cancelAll()
     }
 
-    fun syncIfChanged(state: FloorContourUiState): Boolean {
-        val structureKey = contourStructureKey(state)
+    fun lastStructureKey(): Int = lastContourStateKey
+
+    fun syncIfChanged(
+        state: FloorContourUiState,
+        lockedAlignedGeometry: AlignedSectionGeometry? = null,
+        anchorOrigin: ArPoint3D? = null
+    ): Boolean {
+        val structureKey = contourStructureKey(state, lockedAlignedGeometry, anchorOrigin)
         val structureChanged = structureKey != lastContourStateKey
-        if (structureChanged) {
-            lastContourStateKey = structureKey
+        if (!structureChanged) {
+            return false
         }
-        syncContour(state)
-        return structureChanged
+
+        lastContourStateKey = structureKey
+        lastFillBatchKey = Int.MIN_VALUE
+        lastLineBatchKey = Int.MIN_VALUE
+        lastDistanceLabelBatchKey = Int.MIN_VALUE
+
+        syncContour(state, lockedAlignedGeometry, anchorOrigin)
+        return true
     }
 
-    private fun syncContour(state: FloorContourUiState) {
+    private fun syncContour(
+        state: FloorContourUiState,
+        lockedAlignedGeometry: AlignedSectionGeometry?,
+        anchorOrigin: ArPoint3D?
+    ) {
         if (rootNode == null) return
         val floorY = state.placedPoints.firstOrNull()?.position?.yMeters
         val lodActive = state.placedPoints.size >= LOD_POINT_COUNT_THRESHOLD
-        syncSectionFill(state, floorY)
+        syncSectionFill(state, floorY, lockedAlignedGeometry, anchorOrigin)
         syncBatchedLines(state, floorY, lodActive)
         syncDistanceLabels(state, floorY)
         syncPointNodes(state, floorY, lodActive)
@@ -111,7 +132,9 @@ internal class IosArContourRenderer {
 
     private fun syncSectionFill(
         state: FloorContourUiState,
-        floorY: Float?
+        floorY: Float?,
+        lockedAlignedGeometry: AlignedSectionGeometry?,
+        anchorOrigin: ArPoint3D?
     ) {
         if (!state.showSectionFill || state.placedPoints.size < 3) {
             sectionFillNode?.hidden = true
@@ -120,56 +143,141 @@ internal class IosArContourRenderer {
         }
 
         val points = state.placedPoints.map { it.position }
-        val aligned = buildAlignedSectionGeometry(points)
+        val sectionY = floorY ?: points.first().yMeters
+        val coplanarPoints = points.map { FloorGeometry.projectToSectionFloor(it, sectionY) }
+        
+        // Use locked rotation if available, otherwise calculate current
+        val aligned = if (state.isTileVisible) {
+            lockedAlignedGeometry ?: buildAlignedSectionGeometry(coplanarPoints)
+        } else {
+            null
+        }
+
+        val precision = if (state.isFinalized) 10000f else 500f
+        
+        // STABILITY FIX: Use a lower precision for the batch key to avoid rebuilding 
+        // geometry on every 0.1mm jitter. 2mm (500f) is enough for visual stability.
+        val keyPrecision = 500f 
+        
         val fillBatchKey = fillBatchKey(
-            points = points,
-            floorY = floorY,
+            localPoints = aligned?.localPoints,
+            worldPoints = coplanarPoints,
             isFinalized = state.isFinalized,
             isTileVisible = state.isTileVisible,
             selectedTileType = state.selectedTileType,
             textureRotation = state.textureRotation,
-            aligned = aligned
+            aligned = aligned,
+            anchorOrigin = anchorOrigin,
+            precision = keyPrecision
         )
-        if (fillBatchKey == lastFillBatchKey) {
-            sectionFillNode?.hidden = false
-            return
-        }
-        lastFillBatchKey = fillBatchKey
 
-        val yBase = (floorY ?: points.first().yMeters) + FILL_VISUAL_OFFSET_M
-        val pointBuffer = FloatArray(aligned.localPoints.size * 2)
-        aligned.localPoints.forEachIndexed { index, local ->
-            val offset = index * 2
-            pointBuffer[offset] = local.xMeters
-            pointBuffer[offset + 1] = local.yMeters
-        }
-
-        val geometry = pointBuffer.usePinned { pinned ->
-            pg_create_contour_fill_geometry(
-                pointCount = aligned.localPoints.size,
-                pointsXZ = pinned.addressOf(0),
-                yM = 0f
-            )
-        } ?: run {
-            sectionFillNode?.hidden = true
-            return
-        }
-
+        val yBase = sectionY + FILL_VISUAL_OFFSET_M
         val node = sectionFillNode ?: SCNNode().also { created ->
             sectionFillNode = created
             rootNode?.addChildNode(created)
         }
-        geometry.materials = listOf(resolveFillMaterial(state, aligned))
-        node.geometry = geometry
-        node.position = SCNVector3Make(aligned.centroidX, yBase, aligned.centroidZ)
-        node.eulerAngles = SCNVector3Make(
-            0f,
-            eulerDegreesToRadians(aligned.rotationYDegrees),
-            0f
-        )
-        node.renderingOrder = 5
+
+        // Separate material update from geometry rebuild
+        val targetMaterial = if (aligned != null) {
+            resolveFillMaterial(state, aligned)
+        } else {
+            fillMaterial
+        }
+
+        if (fillBatchKey == lastFillBatchKey) {
+            node.hidden = false
+            node.position = SCNVector3Make(0f, yBase, 0f)
+            node.eulerAngles = SCNVector3Make(0f, 0f, 0f)
+            if (node.geometry?.firstMaterial != targetMaterial) {
+                node.geometry?.firstMaterial = targetMaterial
+            }
+            return
+        }
+
+        lastFillBatchKey = fillBatchKey
         node.hidden = false
-        rootNode?.addChildNode(node)
+        node.position = SCNVector3Make(0f, yBase, 0f)
+        node.eulerAngles = SCNVector3Make(0f, 0f, 0f)
+        if (node.geometry?.firstMaterial != targetMaterial) {
+            node.geometry?.firstMaterial = targetMaterial
+        }
+
+        val fillPointCount = coplanarPoints.size
+        val pointBuffer = FloatArray(fillPointCount * 2)
+        coplanarPoints.forEachIndexed { index, point ->
+            val offset = index * 2
+            pointBuffer[offset] = point.xMeters
+            pointBuffer[offset + 1] = point.zMeters
+        }
+
+        val uvBuffer = FloatArray(fillPointCount * 2)
+        val centroidU: Float
+        val centroidV: Float
+        val centroidX: Float
+        val centroidZ: Float
+
+        if (aligned != null) {
+            centroidX = anchorOrigin?.xMeters ?: aligned.centroidX
+            centroidZ = anchorOrigin?.zMeters ?: aligned.centroidZ
+            centroidU = 0f
+            centroidV = 0f
+
+            val baseAxisX = aligned.axisX
+            val baseAxisZ = aligned.axisZ
+            val basePerpX = aligned.perpendicularX
+            val basePerpZ = aligned.perpendicularZ
+
+            val angleRad = eulerDegreesToRadians(state.textureRotation.degrees.toFloat())
+            val cosR = cos(angleRad.toDouble()).toFloat()
+            val sinR = sin(angleRad.toDouble()).toFloat()
+
+            val axisX = baseAxisX * cosR - basePerpX * sinR
+            val axisZ = baseAxisZ * cosR - basePerpZ * sinR
+            val perpX = baseAxisX * sinR + basePerpX * cosR
+            val perpZ = baseAxisZ * sinR + basePerpZ * cosR
+
+            coplanarPoints.forEachIndexed { index, point ->
+                val dx = point.xMeters - centroidX
+                val dz = point.zMeters - centroidZ
+                uvBuffer[index * 2] = dx * axisX + dz * axisZ
+                uvBuffer[index * 2 + 1] = dx * perpX + dz * perpZ
+            }
+        } else {
+            centroidX = coplanarPoints.map { it.xMeters }.average().toFloat()
+            centroidZ = coplanarPoints.map { it.zMeters }.average().toFloat()
+            centroidU = 0.5f
+            centroidV = 0.5f
+            coplanarPoints.forEachIndexed { index, _ ->
+                uvBuffer[index * 2] = 0.5f
+                uvBuffer[index * 2 + 1] = 0.5f
+            }
+        }
+
+        asyncGeometryBuilder.requestFillBuild(
+            batchKey = fillBatchKey,
+            request = ContourFillBuildRequest(
+                pointBuffer = pointBuffer,
+                uvBuffer = uvBuffer,
+                fillPointCount = fillPointCount,
+                centroidX = centroidX,
+                centroidZ = centroidZ,
+                centroidU = centroidU,
+                centroidV = centroidV,
+                yM = 0f
+            )
+        ) { readyBatchKey, geometry ->
+            if (readyBatchKey != lastFillBatchKey) return@requestFillBuild
+            if (geometry == null) {
+                node.hidden = true
+                return@requestFillBuild
+            }
+            geometry.materials = listOf(targetMaterial)
+            node.geometry = geometry
+            node.position = SCNVector3Make(0f, yBase, 0f)
+            node.eulerAngles = SCNVector3Make(0f, 0f, 0f)
+            node.renderingOrder = 5
+            node.hidden = false
+        }
     }
 
     private fun syncPointNodes(
@@ -213,7 +321,6 @@ internal class IosArContourRenderer {
                 node.geometry?.firstMaterial = targetMaterial
             }
             node.hidden = false
-            rootNode?.addChildNode(node)
         }
     }
 
@@ -236,11 +343,18 @@ internal class IosArContourRenderer {
         }
 
         val lineBatchKey = lineBatchKey(points, segmentCount, floorY, state.isPolygonClosed, lodActive)
+        val node = batchedLinesNode ?: SCNNode().also { created ->
+            batchedLinesNode = created
+            rootNode?.addChildNode(created)
+        }
+
         if (lineBatchKey == lastLineBatchKey) {
-            batchedLinesNode?.hidden = false
+            node.hidden = false
             return
         }
+
         lastLineBatchKey = lineBatchKey
+        node.hidden = false
 
         val halfWidth = (if (lodActive) LINE_WIDTH_M * LOD_LINE_WIDTH_SCALE else LINE_WIDTH_M) * 0.5f
         val yBase = (floorY ?: points.first().yMeters) + LINE_VISUAL_OFFSET_M
@@ -255,26 +369,25 @@ internal class IosArContourRenderer {
             segmentBuffer[offset + 3] = end.zMeters
         }
 
-        val geometry = segmentBuffer.usePinned { pinned ->
-            pg_create_contour_lines_geometry(
+        asyncGeometryBuilder.requestLinesBuild(
+            batchKey = lineBatchKey,
+            request = ContourLinesBuildRequest(
+                segmentBuffer = segmentBuffer,
                 segmentCount = segmentCount,
-                segmentPairsXZ = pinned.addressOf(0),
                 yM = yBase,
                 halfWidthM = halfWidth
             )
-        } ?: run {
-            batchedLinesNode?.hidden = true
-            return
+        ) { readyBatchKey, geometry ->
+            if (readyBatchKey != lastLineBatchKey) return@requestLinesBuild
+            if (geometry == null) {
+                node.hidden = true
+                return@requestLinesBuild
+            }
+            node.geometry = geometry
+            node.geometry?.materials = listOf(lineMaterial)
+            node.renderingOrder = 6
+            node.hidden = false
         }
-
-        val node = batchedLinesNode ?: SCNNode().also { created ->
-            batchedLinesNode = created
-            rootNode?.addChildNode(created)
-        }
-        node.geometry = geometry
-        node.geometry?.materials = listOf(lineMaterial)
-        node.renderingOrder = 6
-        node.hidden = false
     }
 
     private fun syncDistanceLabels(
@@ -295,8 +408,8 @@ internal class IosArContourRenderer {
         }
 
         val labelBatchKey = contourDistanceLabelBatchKey(segments, floorY, state.showContourLines)
-        val geometryChanged = labelBatchKey != lastDistanceLabelBatchKey
-        if (geometryChanged) {
+        val structureChanged = labelBatchKey != lastDistanceLabelBatchKey
+        if (structureChanged) {
             lastDistanceLabelBatchKey = labelBatchKey
         }
 
@@ -307,7 +420,7 @@ internal class IosArContourRenderer {
                     rootNode?.addChildNode(created)
                 }
             }
-            if (geometryChanged || lastDistanceLabelTexts[segment.key] != labelText) {
+            if (lastDistanceLabelTexts[segment.key] != labelText) {
                 lastDistanceLabelTexts[segment.key] = labelText
                 node.geometry = createDistanceLabelPlane(labelText)
             }
@@ -319,7 +432,6 @@ internal class IosArContourRenderer {
             )
             node.renderingOrder = 8
             node.hidden = false
-            rootNode?.addChildNode(node)
         }
     }
 
@@ -335,12 +447,19 @@ internal class IosArContourRenderer {
         return plane
     }
 
-    private fun contourStructureKey(state: FloorContourUiState): Int {
+    private fun contourStructureKey(
+        state: FloorContourUiState,
+        lockedAlignedGeometry: AlignedSectionGeometry?,
+        anchorOrigin: ArPoint3D?
+    ): Int {
         var key = state.placedPoints.size * 31
+        
+        // Use high precision for finalized state to avoid quantization jumps
+        val precision = if (state.isFinalized) 10000f else 500f // 0.1mm vs 2mm
+        
         state.placedPoints.forEach { point ->
-            key = key * 31 + (point.position.xMeters * 100f).roundToInt()
-            key = key * 31 + (point.position.zMeters * 100f).roundToInt()
-            key = key * 31 + (point.position.yMeters * 100f).roundToInt()
+            key = key * 31 + (point.position.xMeters * precision).roundToInt()
+            key = key * 31 + (point.position.zMeters * precision).roundToInt()
         }
         key = key * 31 + (state.snappedPointIndex ?: -1)
         key = key * 31 + if (state.isPolygonClosed) 1 else 0
@@ -352,6 +471,15 @@ internal class IosArContourRenderer {
         key = key * 31 + state.selectedTileType.ordinal
         key = key * 31 + state.textureRotation.ordinal
         key = key * 31 + if (state.placedPoints.size >= LOD_POINT_COUNT_THRESHOLD) 1 else 0
+        if (lockedAlignedGeometry != null) {
+            key = key * 31 + (lockedAlignedGeometry.centroidX * precision).roundToInt()
+            key = key * 31 + (lockedAlignedGeometry.centroidZ * precision).roundToInt()
+            key = key * 31 + (lockedAlignedGeometry.rotationYDegrees * 10f).roundToInt()
+        }
+        if (anchorOrigin != null) {
+            key = key * 31 + (anchorOrigin.xMeters * precision).roundToInt()
+            key = key * 31 + (anchorOrigin.zMeters * precision).roundToInt()
+        }
         return key
     }
 
@@ -361,43 +489,48 @@ internal class IosArContourRenderer {
     ): SCNMaterial {
         if (!state.isTileVisible) return fillMaterial
         val cacheKey = TileMaterialKey(
-            tileType = state.selectedTileType,
-            textureRotation = state.textureRotation,
-            widthQuant = quant(aligned.boundsWidthM),
-            heightQuant = quant(aligned.boundsHeightM)
+            tileType = state.selectedTileType
         )
         return tileMaterialCache.getOrPut(cacheKey) {
             createTileMaterial(
-                resourceName = state.selectedTileType.resourceName,
-                widthMeters = aligned.boundsWidthM,
-                heightMeters = aligned.boundsHeightM,
-                rotationDegrees = state.textureRotation.degrees.toFloat()
+                resourceName = state.selectedTileType.resourceName
             )
         }
     }
 
     private fun fillBatchKey(
-        points: List<ArPoint3D>,
-        floorY: Float?,
+        localPoints: List<com.example.arplitka.shared.ar.contracts.model.ArPoint2D>?,
+        worldPoints: List<ArPoint3D>,
         isFinalized: Boolean,
         isTileVisible: Boolean,
         selectedTileType: TileType,
         textureRotation: TextureRotation,
-        aligned: AlignedSectionGeometry
+        aligned: AlignedSectionGeometry?,
+        anchorOrigin: ArPoint3D?,
+        precision: Float
     ): Int {
-        var key = points.size * 31
+        var key = worldPoints.size * 31
         key = key * 31 + if (isFinalized) 1 else 0
         key = key * 31 + if (isTileVisible) 1 else 0
         key = key * 31 + selectedTileType.ordinal
         key = key * 31 + textureRotation.ordinal
-        key = key * 31 + quant(aligned.boundsWidthM)
-        key = key * 31 + quant(aligned.boundsHeightM)
-        key = key * 31 + aligned.rotationYDegrees.roundToInt()
-        key = key * 31 + ((floorY ?: 0f) / POSITION_QUANT_M).roundToInt()
-        points.forEach { point ->
-            key = key * 31 + quant(point.xMeters)
-            key = key * 31 + quant(point.zMeters)
+
+        if (aligned != null) {
+            // Rotation is critical for the batch key
+            key = key * 31 + (aligned.rotationYDegrees * 100f).roundToInt()
         }
+        
+        if (anchorOrigin != null) {
+            // CRITICAL: Rebuild geometry if anchor moves, to update baked UVs
+            key = key * 31 + (anchorOrigin.xMeters * precision).roundToInt()
+            key = key * 31 + (anchorOrigin.zMeters * precision).roundToInt()
+        }
+
+        worldPoints.forEach { point ->
+            key = key * 31 + (point.xMeters * precision).roundToInt()
+            key = key * 31 + (point.zMeters * precision).roundToInt()
+        }
+        key = key * 31 + ((worldPoints.firstOrNull()?.yMeters ?: 0f) * precision).roundToInt()
         return key
     }
 
@@ -427,74 +560,65 @@ internal class IosArContourRenderer {
         listOf(quant(x), quant(y), quant(z)).hashCode()
 
     private fun quant(value: Float): Int = (value / POSITION_QUANT_M).roundToInt()
-}
 
-private data class TileMaterialKey(
-    val tileType: TileType,
-    val textureRotation: TextureRotation,
-    val widthQuant: Int,
-    val heightQuant: Int
-)
-
-private fun eulerDegreesToRadians(degrees: Float): Float = degrees * PI.toFloat() / 180f
-
-@OptIn(ExperimentalForeignApi::class)
-private fun createContourMaterial(
-    red: Double,
-    green: Double,
-    blue: Double,
-    alpha: Double = 1.0
-): SCNMaterial =
-    SCNMaterial().apply {
-        diffuse.contents = UIColor.colorWithRed(red, green, blue, alpha = alpha)
-        lightingModelName = platform.SceneKit.SCNLightingModelConstant
-    }
-
-@OptIn(ExperimentalForeignApi::class)
-private fun createLabelMaterial(): SCNMaterial =
-    SCNMaterial().apply {
-        lightingModelName = platform.SceneKit.SCNLightingModelConstant
-        doubleSided = true
-        readsFromDepthBuffer = true
-        writesToDepthBuffer = false
-    }
-
-@OptIn(ExperimentalForeignApi::class)
-private fun createTileMaterial(
-    resourceName: String,
-    widthMeters: Float,
-    heightMeters: Float,
-    rotationDegrees: Float
-): SCNMaterial {
-    val patternImage = pg_create_tile_section_pattern_image(
-        resourceName = resourceName,
-        widthMeters = widthMeters,
-        heightMeters = heightMeters,
-        rotationDegrees = rotationDegrees
+    private data class TileMaterialKey(
+        val tileType: TileType
     )
-    return SCNMaterial().apply {
-        diffuse.contents = patternImage ?: pg_load_tile_texture_image(resourceName, rotationDegrees)
-        lightingModelName = platform.SceneKit.SCNLightingModelConstant
-        doubleSided = true
-        readsFromDepthBuffer = true
-        writesToDepthBuffer = false
-        diffuse.wrapS = platform.SceneKit.SCNWrapModeClamp
-        diffuse.wrapT = platform.SceneKit.SCNWrapModeClamp
-    }
-}
 
-@OptIn(ExperimentalForeignApi::class)
-private fun createFillMaterial(
-    red: Double,
-    green: Double,
-    blue: Double,
-    alpha: Double
-): SCNMaterial =
-    SCNMaterial().apply {
-        diffuse.contents = UIColor.colorWithRed(red, green, blue, alpha = alpha)
-        lightingModelName = platform.SceneKit.SCNLightingModelConstant
-        doubleSided = true
-        readsFromDepthBuffer = true
-        writesToDepthBuffer = false
-        transparencyMode = platform.SceneKit.SCNTransparencyModeAOne
+    private fun eulerDegreesToRadians(degrees: Float): Float = degrees * PI.toFloat() / 180f
+
+    private fun createContourMaterial(
+        red: Double,
+        green: Double,
+        blue: Double,
+        alpha: Double = 1.0
+    ): SCNMaterial =
+        SCNMaterial().apply {
+            diffuse.contents = UIColor.colorWithRed(red, green, blue, alpha = alpha)
+            lightingModelName = platform.SceneKit.SCNLightingModelConstant
+        }
+
+    private fun createLabelMaterial(): SCNMaterial =
+        SCNMaterial().apply {
+            lightingModelName = platform.SceneKit.SCNLightingModelConstant
+            doubleSided = true
+            readsFromDepthBuffer = true
+            writesToDepthBuffer = false
+        }
+
+    private fun createTileMaterial(
+        resourceName: String
+    ): SCNMaterial {
+        val image = pg_load_tile_texture_image(resourceName, 0f) // Load without rotation
+        return SCNMaterial().apply {
+            diffuse.contents = image
+            lightingModelName = platform.SceneKit.SCNLightingModelConstant
+            doubleSided = true
+            readsFromDepthBuffer = true
+            writesToDepthBuffer = false
+            diffuse.wrapS = SCNWrapModeRepeat
+            diffuse.wrapT = SCNWrapModeRepeat
+            // Scale texture to match real world meters (0.78m x 1.04m)
+            diffuse.contentsTransform = SCNMatrix4MakeScale(
+                (1.0 / TILE_WIDTH_M).toFloat(),
+                (1.0 / TILE_HEIGHT_M).toFloat(),
+                1.0f
+            )
+        }
     }
+
+    private fun createFillMaterial(
+        red: Double,
+        green: Double,
+        blue: Double,
+        alpha: Double
+    ): SCNMaterial =
+        SCNMaterial().apply {
+            diffuse.contents = UIColor.colorWithRed(red, green, blue, alpha = alpha)
+            lightingModelName = platform.SceneKit.SCNLightingModelConstant
+            doubleSided = true
+            readsFromDepthBuffer = true
+            writesToDepthBuffer = false
+            transparencyMode = platform.SceneKit.SCNTransparencyModeAOne
+        }
+}

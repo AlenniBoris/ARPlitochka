@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -14,7 +15,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,6 +44,7 @@ import kotlin.math.roundToInt
 @Composable
 actual fun IosArScreen(onBack: () -> Unit) {
     val model = remember { IosArScreenModel() }
+    var showDebugPanel by remember { mutableStateOf(true) }
     val coordinator = model.coordinator
     val contourState = model.contourState
     val trackingStateName = model.trackingStateName
@@ -88,7 +93,11 @@ actual fun IosArScreen(onBack: () -> Unit) {
         CenterReticle(
             modifier = Modifier.align(Alignment.Center),
             isActive = contourState.hasCenterHit && contourState.showContourActions,
-            state = contourState.toReticleState(placementHint, planeDebugMetrics.placementStatus)
+            state = contourState.toReticleState(
+                placementHint = placementHint,
+                placementStatus = planeDebugMetrics.placementStatus,
+                isPlacementPlaceable = planeDebugMetrics.isPlacementPlaceable
+            )
         )
 
         Column(
@@ -113,7 +122,10 @@ actual fun IosArScreen(onBack: () -> Unit) {
 
             if (contourState.showContourActions) {
                 ArContourActionButtons(
-                    hasCenterHit = contourState.hasCenterHit || contourState.isPolygonClosed,
+                    hasCenterHit = when {
+                        contourState.isPolygonClosed -> true
+                        else -> contourState.hasCenterHit
+                    },
                     isPolygonClosed = contourState.isPolygonClosed,
                     hasPoints = contourState.placedPoints.isNotEmpty(),
                     onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
@@ -201,52 +213,91 @@ actual fun IosArScreen(onBack: () -> Unit) {
         }
 
         if (isDebugBuild()) {
-            DebugPanel(
-                debugLines = mapOf(
-                    "Planes" to contourState.horizontalPlaneCount.toString(),
-                    "Focused" to contourState.focusedLabel,
-                    "AR plane" to "${(contourState.selectedArea * 100).roundToInt() / 100.0} m²",
-                    "Tracking" to trackingStateName,
-                    "Center hit" to if (contourState.hasCenterHit) "Yes" else "No",
-                    "Points" to contourState.placedPoints.size.toString(),
-                    "Closed" to if (contourState.isPolygonClosed) "Yes" else "No",
-                    "Finalized" to if (contourState.isFinalized) "Yes" else "No",
-                    "Tile" to if (contourState.isTileVisible) "On" else "Off",
-                    "Texture rotation" to contourState.textureRotation.degrees.toString(),
-                    "Tile type" to contourState.selectedTileType.resourceName,
-                    "Phase" to planeDebugMetrics.sessionPhase,
-                    "Perf" to planeDebugMetrics.perfDiagnosis,
-                    "Plane renderer" to planeDebugMetrics.rendererMode,
-                    "Delegate Hz" to planeDebugMetrics.sessionDelegateHz.toString(),
-                    "Camera gap" to planeDebugMetrics.cameraFrameGapLabel,
-                    "Delegate gap" to planeDebugMetrics.delegateWallGapLabel,
-                    "Frame work" to "${planeDebugMetrics.frameHandleMs} ms",
-                    "Renderer Hz" to planeDebugMetrics.rendererNodeCallbackHz.toString(),
-                    "Surface overlays" to planeDebugMetrics.overlayCount.toString(),
-                    "AR features" to planeDebugMetrics.sessionFeatures,
-                    "Hit path" to planeDebugMetrics.hitPath,
-                    "Detect gate" to planeDebugMetrics.detectGate,
-                    "Scan patch" to planeDebugMetrics.scanPatch,
-                    "Snap" to if (contourState.snappedPointIndex != null) "yes" else "no",
-                    "Placement" to planeDebugMetrics.placementStatus,
-                    "Hit age" to "${planeDebugMetrics.hitAgeMs} ms",
-                    "Reticle age" to planeDebugMetrics.reticleHitAgeLabel,
-                    "Reticle src" to planeDebugMetrics.reticleSourceLabel,
-                    "Tap frame age" to planeDebugMetrics.tapFrameAgeLabel,
-                    "Tap src" to planeDebugMetrics.tapSourceLabel,
-                    "Tap Δ" to planeDebugMetrics.tapDeltaLabel,
-                    "Track quality" to planeDebugMetrics.trackingQualityLabel,
-                    "Hit Y" to planeDebugMetrics.hitYLabel,
-                    "Largest plane" to "${(planeDebugMetrics.largestPlaneAreaM2 * 100).roundToInt() / 100.0} m²",
-                    "Reloc" to planeDebugMetrics.relocLabel,
-                    "Anchor corr" to planeDebugMetrics.anchorCorrectionLabel,
-                    "Cull" to planeDebugMetrics.cullLabel
-                ),
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(12.dp)
-                    .padding(bottom = 100.dp)
-            )
+                    .padding(bottom = 100.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (showDebugPanel) {
+                    DebugPanel(
+                        debugLines = mapOf(
+                            "Planes" to contourState.horizontalPlaneCount.toString(),
+                            "Focused" to contourState.focusedLabel,
+                            "AR plane" to "${(contourState.selectedArea * 100).roundToInt() / 100.0} m²",
+                            "Tracking" to trackingStateName,
+                            "Center hit" to if (contourState.hasCenterHit) "Yes" else "No",
+                            "Points" to contourState.placedPoints.size.toString(),
+                            "Closed" to if (contourState.isPolygonClosed) "Yes" else "No",
+                            "Finalized" to if (contourState.isFinalized) "Yes" else "No",
+                            "Tile" to if (contourState.isTileVisible) "On" else "Off",
+                            "Texture rotation" to contourState.textureRotation.degrees.toString(),
+                            "Tile type" to contourState.selectedTileType.resourceName,
+                            "Phase" to planeDebugMetrics.sessionPhase,
+                            "Perf" to planeDebugMetrics.perfDiagnosis,
+                            "Plane renderer" to planeDebugMetrics.rendererMode,
+                            "Delegate Hz" to planeDebugMetrics.sessionDelegateHz.toString(),
+                            "Camera gap" to planeDebugMetrics.cameraFrameGapLabel,
+                            "Delegate gap" to planeDebugMetrics.delegateWallGapLabel,
+                            "Frame work" to "${planeDebugMetrics.frameHandleMs} ms",
+                            "Renderer Hz" to planeDebugMetrics.rendererNodeCallbackHz.toString(),
+                            "Surface overlays" to planeDebugMetrics.overlayCount.toString(),
+                            "AR features" to planeDebugMetrics.sessionFeatures,
+                            "Hit path" to planeDebugMetrics.hitPath,
+                            "Detect gate" to planeDebugMetrics.detectGate,
+                            "Scan patch" to planeDebugMetrics.scanPatch,
+                            "Snap" to if (contourState.snappedPointIndex != null) "yes" else "no",
+                            "Placement" to planeDebugMetrics.placementStatus,
+                            "Hit age" to "${planeDebugMetrics.hitAgeMs} ms",
+                            "Reticle age" to planeDebugMetrics.reticleHitAgeLabel,
+                            "Reticle src" to planeDebugMetrics.reticleSourceLabel,
+                            "Tap frame age" to planeDebugMetrics.tapFrameAgeLabel,
+                            "Tap src" to planeDebugMetrics.tapSourceLabel,
+                            "Tap Δ" to planeDebugMetrics.tapDeltaLabel,
+                            "Tap reject" to planeDebugMetrics.tapRejectReason,
+                            "Placement id" to if (planeDebugMetrics.placementSnapshotId >= 0) {
+                                planeDebugMetrics.placementSnapshotId.toString()
+                            } else {
+                                "-"
+                            },
+                            "Placement age" to planeDebugMetrics.placementSnapshotAgeLabel,
+                            "Tap snapshot" to if (planeDebugMetrics.tapSnapshotId >= 0) {
+                                planeDebugMetrics.tapSnapshotId.toString()
+                            } else {
+                                "-"
+                            },
+                            "Placeable" to if (planeDebugMetrics.isPlacementPlaceable) "Yes" else "No",
+                            "Contour ver" to planeDebugMetrics.contourVersion.toString(),
+                            "Contour src" to planeDebugMetrics.contourSyncSource,
+                            "Manual align" to if (planeDebugMetrics.manualAlignEligible) "Yes" else "No",
+                            "Pending corr" to planeDebugMetrics.pendingCorrectionFrames.toString(),
+                            "Track quality" to planeDebugMetrics.trackingQualityLabel,
+                            "Hit Y" to planeDebugMetrics.hitYLabel,
+                            "Largest plane" to "${(planeDebugMetrics.largestPlaneAreaM2 * 100).roundToInt() / 100.0} m²",
+                            "Reloc" to planeDebugMetrics.relocLabel,
+                            "Anchor corr" to planeDebugMetrics.anchorCorrectionLabel,
+                            "Cull" to planeDebugMetrics.cullLabel
+                        )
+                    )
+                }
+                
+                Button(
+                    onClick = { showDebugPanel = !showDebugPanel },
+                    modifier = Modifier.heightIn(min = 32.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Black.copy(alpha = 0.5f),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = if (showDebugPanel) "Hide Debug" else "Show Debug",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
         }
 
         ArTopBar(
