@@ -40,5 +40,15 @@ internal data class IosPlaneDebugMetrics(
     val cullLabel: String = "d:0/e:0",
     val anchorCorrectionLabel: String = "n/a",
     val anchorRootDeltaCm: Float = 0f,
-    val anchorDisplayDeltaCm: Float = 0f
+    val anchorDisplayDeltaCm: Float = 0f,
+    val placementSnapshotId: Long = -1L,
+    val placementSnapshotAgeMs: Int = 0,
+    val placementSnapshotAgeLabel: String = "n/a",
+    val tapSnapshotId: Long = -1L,
+    val tapRejectReason: String = "-",
+    val isPlacementPlaceable: Boolean = false,
+    val contourVersion: Long = 0L,
+    val contourSyncSource: String = "-",
+    val manualAlignEligible: Boolean = false,
+    val pendingCorrectionFrames: Int = 0
 )

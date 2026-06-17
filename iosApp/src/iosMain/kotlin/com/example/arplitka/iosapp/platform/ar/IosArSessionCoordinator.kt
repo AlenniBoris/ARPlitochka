@@ -25,6 +25,9 @@ import com.example.arplitka.shared.ar.domain.logic.AddPointValidation
 import com.example.arplitka.shared.ar.domain.logic.FloorContourReducer
 import com.example.arplitka.shared.ar.domain.logic.FloorGeometry
 import com.example.arplitka.shared.ar.domain.logic.FloorSnapReducer
+import com.example.arplitka.shared.ar.domain.logic.PlacementSnapshotRules
+import com.example.arplitka.shared.ar.domain.geometry.AlignedSectionGeometry
+import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import com.example.arplitka.shared.ar.domain.model.FloorFrameSnapshot
 import com.example.arplitka.shared.ar.domain.model.PlacedContourPoint
@@ -35,6 +38,8 @@ import platform.Foundation.NSUUID
 import platform.SceneKit.SCNNode
 import platform.SceneKit.SCNSceneRendererProtocol
 import platform.darwin.NSObject
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_main_queue
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalForeignApi::class)
@@ -73,6 +78,7 @@ internal class IosArSessionCoordinator(
     private var liveReticlePoint: ArPoint3D? = null
     private var smoothedPlacementPatchPoint: ArPoint3D? = null
     private val placementPatchSmoother = PlacementPatchSmoother()
+    private val anchorOriginSmoother = PlacementPatchSmoother()
     private var liveReticleResolvedSeconds: Double = 0.0
     private var liveReticleSourceLabel: String = "none"
     private var lastTapFrameAgeMs: Int = 0
@@ -95,6 +101,13 @@ internal class IosArSessionCoordinator(
     private var placementAnchorTrackingWasUnstable: Boolean = false
     private var placementAnchorHadInstability: Boolean = false
     private var placementAnchorRecoveryContextUntilSeconds: Double = 0.0
+    private var acceptedPlacementSnapshot: ResolvedPlacementSnapshot? = null
+    private var lastTapRejectReason: TapRejectReason? = null
+    private var lockedAlignedGeometry: AlignedSectionGeometry? = null
+    private var lastTapSnapshotId: Long = -1L
+    private var lastContourSyncSourceLabel: String = "-"
+    private var lastSyncAnchorOrigin: ArPoint3D? = null
+    private var lastSyncAnchorOriginSeconds: Double = 0.0
 
     fun attach(sceneView: ARSCNView) {
         val now = currentTimeSeconds()
@@ -169,11 +182,7 @@ internal class IosArSessionCoordinator(
 
     fun rescanSession() {
         val view = sceneView ?: return
-        if (floorArController.currentState().placedPoints.isNotEmpty()) {
-            dispatchEvent(FloorArEvent.Reset)
-        } else {
-            onPlacementHintChanged(null)
-        }
+        dispatchEvent(FloorArEvent.Reset)
         performScanReset(
             session = view.session,
             request = RelocationResetRequest(reason = "manual"),
@@ -210,7 +219,7 @@ internal class IosArSessionCoordinator(
         )
         clearPlacementAnchorInstabilityIfSettled(frame)
         publishContourRealignAvailability()
-        syncContourRenderer()
+        syncContourRenderer(ContourRenderSyncSource.MANUAL_REALIGN, frame = frame)
     }
 
     fun dispatchEvent(event: FloorArEvent) {
@@ -237,13 +246,17 @@ internal class IosArSessionCoordinator(
                 planeSurfaceRenderer.exitPlacementScanFreeze()
             }
             updateContourModeFromState()
-            syncContourRenderer()
+            syncContourRenderer(ContourRenderSyncSource.DELEGATE, frame = sceneView?.session?.currentFrame)
             publishContourRealignAvailability()
             return
         }
         val effects = floorArController.onEvent(event)
         applyEffects(effects)
         if (event == FloorArEvent.Reset) {
+            val session = sceneView?.session
+            if (session != null) {
+                anchorStore.detachAll(session, session.currentFrame)
+            }
             onPlacementHintChanged(null)
             workingFloorY = null
             workingFloorAreaM2 = 0f
@@ -256,9 +269,28 @@ internal class IosArSessionCoordinator(
             placementFreezeApplied = false
             planeSurfaceRenderer.exitPlacementHitOnlyMode()
             planeSurfaceRenderer.exitPlacementScanFreeze()
+            acceptedPlacementSnapshot = null
+            lockedAlignedGeometry = null
         }
         updateContourModeFromState()
-        syncContourRenderer()
+        
+        // Optimization: UI-only events don't need heavy anchor re-polling
+        val source = when (event) {
+            FloorArEvent.RotateTexture, 
+            FloorArEvent.ChangeTileType, 
+            FloorArEvent.ToggleTileVisibility -> {
+                // CRITICAL: Use cached points and origin for UI events to prevent jumps
+                syncContourRenderer(
+                    source = ContourRenderSyncSource.TAP, 
+                    updatedPoints = floorArController.currentState().placedPoints
+                )
+                publishContourRealignAvailability()
+                return
+            }
+            else -> ContourRenderSyncSource.DELEGATE
+        }
+        
+        syncContourRenderer(source, frame = sceneView?.session?.currentFrame)
         publishContourRealignAvailability()
     }
 
@@ -267,8 +299,21 @@ internal class IosArSessionCoordinator(
         if (state.isPolygonClosed) {
             onPlacementHintChanged(null)
             floorArController.onEvent(FloorArEvent.FinalizeArea)
+            val finalizedState = floorArController.currentState()
+            if (finalizedState.isFinalized) {
+                val points = finalizedState.placedPoints.map { it.position }
+                val sectionY = workingFloorY ?: points.firstOrNull()?.yMeters ?: 0f
+                val coplanarPoints = points.map { FloorGeometry.projectToSectionFloor(it, sectionY) }
+                if (coplanarPoints.size >= 3) {
+                    lockedAlignedGeometry = buildAlignedSectionGeometry(coplanarPoints)
+                }
+            }
             updateContourModeFromState()
-            syncContourRenderer()
+            // CRITICAL: Use the SAME points that were used for lockedAlignedGeometry to prevent initial jump
+            syncContourRenderer(
+                source = ContourRenderSyncSource.TAP, 
+                updatedPoints = finalizedState.placedPoints
+            )
             return
         }
         val view = sceneView
@@ -305,17 +350,13 @@ internal class IosArSessionCoordinator(
         val freshRaw = freshHit.placementFloorPoint(sectionFloorY)
         val raw = freshRaw ?: renderFloorCandidate
         if (raw == null) {
-            onPlacementHintChanged(
-                if (sectionFloorY != null) {
-                    "Повторите тап — позиция под прицелом обновилась"
-                } else {
-                    "Повторите тап — позиция под прицелом обновилась"
-                }
-            )
+            lastTapRejectReason = TapRejectReason.NO_POINT
+            onPlacementHintChanged("Повторите тап — позиция под прицелом обновилась")
             return
         }
         val hit = if (freshRaw != null) freshHit else renderFloorCenterHit(raw)
         lastTapSourceLabel = if (freshRaw != null) "currentFrame" else "renderFloor"
+        lastTapRejectReason = null
         val projected = if (sectionFloorY == null) {
             val dominantFloorY = planeSurfaceRenderer.estimatedFloorWorldY() ?: raw.yMeters
             ArPoint3D(
@@ -335,6 +376,7 @@ internal class IosArSessionCoordinator(
             0f
         }
         if (previewAtTap != null && lastTapDeltaCm > TAP_MAX_PREVIEW_DELTA_CM) {
+            lastTapRejectReason = TapRejectReason.PREVIEW_DELTA
             onPlacementHintChanged("Повторите тап — позиция под прицелом обновилась")
             return
         }
@@ -345,7 +387,10 @@ internal class IosArSessionCoordinator(
             )
         )
         when (val validation = FloorContourReducer.validateTapPlacement(tapState, projected)) {
-            is AddPointValidation.Rejected -> onPlacementHintChanged(validation.reason.toIosHint())
+            is AddPointValidation.Rejected -> {
+                lastTapRejectReason = TapRejectReason.DOMAIN_REJECT
+                onPlacementHintChanged(validation.reason.toIosHint())
+            }
             is AddPointValidation.Accepted -> {
                 onPlacementHintChanged(null)
                 val pointCountBefore = floorArController.currentState().placedPoints.size
@@ -369,7 +414,7 @@ internal class IosArSessionCoordinator(
                     planeSurfaceRenderer.lockSectionFloor(initialReferenceAnchorId, validation.point.yMeters)
                 }
                 placementMutationCooldownFrames = PLACEMENT_MUTATION_COOLDOWN_FRAMES
-                syncContourRenderer()
+                syncContourRenderer(ContourRenderSyncSource.TAP)
                 activatePlacementVisualizationImmediately(
                     view = view,
                     frame = frame,
@@ -414,7 +459,7 @@ internal class IosArSessionCoordinator(
 
         val state = floorArController.currentState()
         val hasPlacedPoints = state.placedPoints.isNotEmpty()
-        val placementScanFrozen = hasPlacedPoints && !state.isFinalized
+        val placementScanFrozen = hasPlacedPoints
         val sectionFloorY = workingFloorY ?: state.placedPoints.firstOrNull()?.position?.yMeters
 
         if (placementScanFrozen) {
@@ -435,7 +480,14 @@ internal class IosArSessionCoordinator(
             planeSurfaceRenderer.requestOverlayTransformDebounce()
         }
         planeSurfaceRenderer.tickOverlayTransformDebounce()
-        val trackingDegraded = isTrackingDegraded(cameraFrameGapMs, relocationController)
+        val snapshotAgeMs = acceptedPlacementSnapshot?.ageMs(frameStartedAt) ?: 0
+        val delegateAgeMs = delegateWallGapMs.coerceAtLeast(0)
+        val trackingDegraded = isTrackingDegraded(
+            cameraFrameGapMs,
+            relocationController,
+            snapshotAgeMs = snapshotAgeMs,
+            delegateAgeMs = delegateAgeMs
+        )
         planeSurfaceRenderer.applyReferenceOverlayDegraded(trackingDegraded)
 
         if (placementMutationCooldownFrames > 0) {
@@ -495,6 +547,19 @@ internal class IosArSessionCoordinator(
         } else {
             0f
         }
+        val focusedLabel = buildFocusedLabel(
+            gridMode = gridMode,
+            focusedAnchorId = focusedAnchorId,
+            overlayCount = planeSurfaceRenderer.overlayCount(),
+            surfaceCount = planeSurfaceRenderer.visibleSurfaceCount(),
+            inGracePeriod = focusedPlaneTracker.isInGracePeriod()
+        )
+        val hitAgeMs = computeHitAgeMs(frameStartedAt, lastCenterHitResolvedSeconds)
+        val livePlacementStatus = placementStatusLabel(centerHit, sectionFloorY, hitAgeMs)
+        val largestPlaneAreaM2 = planeSurfaceRenderer.scanDebugStats().largestPlaneAreaM2
+        val currentHitPoint = centerHit.placementFloorPoint(sectionFloorY)?.let {
+            FloorGeometry.projectToSectionFloor(it, sectionFloorY)
+        }
         val floorDetected = if (hasPlacedPoints) {
             isSessionTracking && (centerHit.confirmed || centerHit.previewWorldFloorPoint() != null)
         } else {
@@ -503,20 +568,6 @@ internal class IosArSessionCoordinator(
                 selectedArea >= MIN_FLOOR_AREA_M2
         }
         val hasCenterHit = centerHit.confirmed
-        val focusedLabel = buildFocusedLabel(
-            gridMode = gridMode,
-            focusedAnchorId = focusedAnchorId,
-            overlayCount = planeSurfaceRenderer.overlayCount(),
-            surfaceCount = planeSurfaceRenderer.visibleSurfaceCount(),
-            inGracePeriod = focusedPlaneTracker.isInGracePeriod()
-        )
-
-        val currentHitPoint = centerHit.placementFloorPoint(sectionFloorY)?.let {
-            FloorGeometry.projectToSectionFloor(it, sectionFloorY)
-        }
-        val hitAgeMs = computeHitAgeMs(frameStartedAt, lastCenterHitResolvedSeconds)
-        val livePlacementStatus = placementStatusLabel(centerHit, sectionFloorY, hitAgeMs)
-        val largestPlaneAreaM2 = planeSurfaceRenderer.scanDebugStats().largestPlaneAreaM2
         val snapshot = FloorFrameSnapshot(
             isTracking = isSessionTracking,
             horizontalPlaneCount = horizontalPlaneCount,
@@ -554,7 +605,9 @@ internal class IosArSessionCoordinator(
         if (!snapActive && canClearTapRejectionHint(livePlacementStatus, frameStartedAt, lastDelegateAtSeconds)) {
             onPlacementHintChanged(null)
         }
-        syncContourRenderer()
+        if (state.placedPoints.isNotEmpty()) {
+            syncContourRenderer(ContourRenderSyncSource.DELEGATE)
+        }
 
         lastFrameHandleMs = ((currentTimeSeconds() - frameStartedAt) * 1000.0)
             .roundToInt()
@@ -749,22 +802,26 @@ internal class IosArSessionCoordinator(
             frame = frame,
             sectionFloorY = effectiveSectionFloorY,
             trackingStable = trackingStable,
-            hadTrackingInstability = placementAnchorHadInstability
+            hadTrackingInstability = placementAnchorHadInstability,
+            isFinalized = state.isFinalized
         )
         val periodicSync = placementUiFrameCounter % PLACEMENT_ANCHORED_POINTS_SYNC_INTERVAL_FRAMES == 0
-        val immediateSync = contourPointsMoved(state.placedPoints, updatedPoints)
+        val immediateSync = contourPointsMoved(state.placedPoints, updatedPoints, epsilonM = 0.0001f)
         if (periodicSync || immediateSync) {
-            val snapshot = FloorFrameSnapshot(
-                isTracking = isSessionTracking,
-                horizontalPlaneCount = 1,
-                selectedArea = selectedArea,
-                hasCenterHit = hasCenterHit,
-                isFloorDetected = isSessionTracking && hasCenterHit,
-                currentHitPoint = liveReticlePoint,
-                focusedLabel = "placement",
-                largestPlaneAreaM2 = selectedArea
+            floorArController.onFrame(
+                FloorFrameSnapshot(
+                    isTracking = isSessionTracking,
+                    horizontalPlaneCount = 1,
+                    selectedArea = selectedArea,
+                    hasCenterHit = hasCenterHit,
+                    isFloorDetected = isSessionTracking && hasCenterHit,
+                    currentHitPoint = liveReticlePoint,
+                    focusedLabel = "placement",
+                    largestPlaneAreaM2 = selectedArea
+                ),
+                updatedPoints
             )
-            floorArController.onFrame(snapshot, updatedPoints)
+            syncContourRenderer(ContourRenderSyncSource.DELEGATE)
         }
 
         clearPlacementAnchorInstabilityIfSettled(frame)
@@ -781,7 +838,7 @@ internal class IosArSessionCoordinator(
                     onPlacementHintChanged(null)
             }
         }
-        syncContourRenderer()
+        syncContourRenderer(ContourRenderSyncSource.DELEGATE, frame = frame, updatedPoints = updatedPoints)
 
         lastFrameHandleMs = ((currentTimeSeconds() - frameStartedAt) * 1000.0)
             .roundToInt()
@@ -830,8 +887,16 @@ internal class IosArSessionCoordinator(
         liveReticlePoint = point
         liveReticleResolvedSeconds = now
         liveReticleSourceLabel = hit.hitPathDebugLabel()
-        floorArController.updateLiveContourPoint(point)
-        syncContourRenderer()
+
+        // Optimization: Only update controller and renderer if point moved significantly
+        val lastPoint = floorArController.currentState().currentHitPoint
+        val movedSignificantly = lastPoint == null || 
+            horizontalArPointDistanceMeters(lastPoint, point) > 0.001f // 1mm
+
+        if (movedSignificantly) {
+            floorArController.updateLiveContourPoint(point)
+            // syncContourRenderer(ContourRenderSyncSource.RENDER_LOOP) // REMOVED: redundant and heavy
+        }
 
         val rootNode = view.scene?.rootNode ?: return
         if (!placementFreezeApplied) {
@@ -851,19 +916,122 @@ internal class IosArSessionCoordinator(
         lastRendererMode = "working-floor+patch"
     }
 
-    /** Keep fill/points/lines visible when delegate frames stall after close/finalize. */
+    /** Finalized contour stays on delegate sync; avoid render-loop currentFrame polling. */
     private fun syncFinalizedContourFromRenderer(renderTimeSeconds: Double) {
         val state = floorArController.currentState()
-        val keepContourVisible = state.placedPoints.isNotEmpty() &&
-            (state.isFinalized || state.isPolygonClosed)
-        if (!keepContourVisible) return
-        if (renderTimeSeconds - lastFinalizedContourRenderSyncSeconds <
-            PLACEMENT_RENDER_RETICLE_MIN_INTERVAL_SECONDS
-        ) {
+        if (state.placedPoints.isEmpty() || !state.isFinalized) return
+
+        if (renderTimeSeconds - lastFinalizedContourRenderSyncSeconds < PLACEMENT_RENDER_RETICLE_MIN_INTERVAL_SECONDS) {
             return
         }
         lastFinalizedContourRenderSyncSeconds = renderTimeSeconds
-        syncContourRenderer()
+        
+        // Dispatch to main thread because syncContourRenderer -> contourRenderer.syncIfChanged 
+        // can trigger UIKit calls (UIImage creation) which MUST be on main thread.
+        dispatch_async(dispatch_get_main_queue()) {
+            syncContourRenderer(ContourRenderSyncSource.RENDER_LOOP, frame = sceneView?.session?.currentFrame)
+        }
+    }
+
+    private fun syncContourRenderer(
+        source: ContourRenderSyncSource = ContourRenderSyncSource.DELEGATE,
+        frame: ARFrame? = null,
+        updatedPoints: List<PlacedContourPoint>? = null
+    ) {
+        val now = currentTimeSeconds()
+        
+        // CRITICAL: Throttle ALL renderer syncs to max 30 FPS to prevent main thread starvation
+        val minInterval = 1.0 / 30.0
+        val lastSync = when (source) {
+            ContourRenderSyncSource.DELEGATE -> lastDelegateAtSeconds
+            else -> lastFinalizedContourRenderSyncSeconds
+        }
+        
+        // For non-finalized, we are even more aggressive with throttling in render loop
+        val state = floorArController.currentState()
+        if (!state.isFinalized && source == ContourRenderSyncSource.RENDER_LOOP) {
+            // During placement, render loop only updates the reticle, not the whole contour
+            return 
+        }
+
+        if (source == ContourRenderSyncSource.RENDER_LOOP && (now - lastSync < minInterval)) {
+            return
+        }
+
+        lastContourSyncSourceLabel = when (source) {
+            ContourRenderSyncSource.DELEGATE -> "delegate"
+            ContourRenderSyncSource.RENDER_LOOP -> "renderLoop"
+            ContourRenderSyncSource.MANUAL_REALIGN -> "manualRealign"
+            ContourRenderSyncSource.TAP -> "tap"
+        }
+        
+        val effectiveFrame = frame ?: sceneView?.session?.currentFrame
+        val sectionFloorY = anchorStore.anchoredFloorY(effectiveFrame)
+            ?: workingFloorY
+            ?: state.placedPoints.firstOrNull()?.position?.yMeters
+        
+        // CRITICAL: Filter anchor origin to remove ARKit noise.
+        // We use One Euro Filter to keep it smooth but responsive.
+        val rawOrigin = anchorStore.rootOrigin(effectiveFrame)
+        val anchorOrigin = if (rawOrigin != null) {
+            val dt = if (lastSyncAnchorOriginSeconds > 0.0) now - lastSyncAnchorOriginSeconds else 0.016
+            lastSyncAnchorOriginSeconds = now
+            
+            // For UI events (updatedPoints != null), we don't want any movement at all
+            if (updatedPoints != null) {
+                lastSyncAnchorOrigin
+            } else {
+                anchorOriginSmoother.filter(rawOrigin, dt).also { lastSyncAnchorOrigin = it }
+            }
+        } else {
+            lastSyncAnchorOrigin
+        }
+
+        val effectiveState = if (state.placedPoints.isNotEmpty()) {
+            // Optimization: Only do heavy anchor correction on delegate frames or if finalized.
+            val useCachedPoints = source == ContourRenderSyncSource.RENDER_LOOP && !state.isFinalized
+            
+            val finalPoints = if (updatedPoints != null) {
+                updatedPoints
+            } else if (useCachedPoints) {
+                state.placedPoints
+            } else {
+                anchorStore.placedPoints(
+                    frame = effectiveFrame,
+                    sectionFloorY = sectionFloorY,
+                    trackingStable = effectiveFrame?.let { isPlacementAnchorTrackingStable(it) } ?: true,
+                    hadTrackingInstability = placementAnchorHadInstability,
+                    isFinalized = state.isFinalized
+                )
+            }
+            
+            // CRITICAL: For finalized state, we MUST use the anchor-relative positions
+            // to keep tiles pinned. For placement, we use the rock-solid world positions.
+            val resultPoints = if (state.isFinalized && updatedPoints == null) {
+                val rootAnchor = anchorStore.findContourRootAnchor(effectiveFrame)
+                if (rootAnchor != null) {
+                    state.placedPoints.mapIndexed { index, p ->
+                        val entry = anchorStore.entriesInternal()[index]
+                        val resolved = anchorStore.resolveEntryWorldPositionInternal(entry, rootAnchor)
+                        p.copy(position = FloorGeometry.projectToSectionFloor(resolved, sectionFloorY ?: p.position.yMeters))
+                    }
+                } else finalPoints
+            } else finalPoints
+
+            if (resultPoints === state.placedPoints) {
+                state
+            } else {
+                state.copy(placedPoints = resultPoints)
+            }
+        } else {
+            state
+        }
+
+        contourRenderer.syncIfChanged(effectiveState, lockedAlignedGeometry, anchorOrigin)
+        
+        if (source != ContourRenderSyncSource.DELEGATE) {
+            lastFinalizedContourRenderSyncSeconds = now
+        }
     }
 
     private fun smoothPlacementPatchPoint(rawPoint: ArPoint3D, renderTimeSeconds: Double): ArPoint3D {
@@ -904,23 +1072,15 @@ internal class IosArSessionCoordinator(
         return next
     }
 
-    private fun updatePlacementReticle(
-        view: ARSCNView,
-        frame: ARFrame,
-        sectionFloorY: Float?,
+    private fun isSnapshotPlaceableNow(
+        snapshot: ResolvedPlacementSnapshot,
         nowSeconds: Double
-    ) {
-        val hit = sectionFloorY?.let {
-            view.resolveWorkingFloorPlacementHit(frame = frame, sectionFloorY = it)
-        } ?: view.resolvePlacementLiveReticleHit(frame, sectionFloorY)
-        val point = hit.placementFloorPoint(sectionFloorY)?.let {
-            FloorGeometry.projectToSectionFloor(it, sectionFloorY)
-        }
-        liveReticleHit = hit
-        liveReticlePoint = point
-        liveReticleResolvedSeconds = nowSeconds
-        liveReticleSourceLabel = hit.hitPathDebugLabel()
-    }
+    ): Boolean = isPlacementSnapshotPlaceable(
+        snapshot = snapshot,
+        nowSeconds = nowSeconds,
+        isRelocalizing = relocationController.isRelocalizing(),
+        lastDelegateAtSeconds = lastDelegateAtSeconds
+    )
 
     private fun syncPlacementExplorePatch(
         view: ARSCNView,
@@ -935,9 +1095,10 @@ internal class IosArSessionCoordinator(
         val showExplorePatch = shouldShowPlacementPatch(placementStatus) && placementPoint != null
         if (showExplorePatch) {
             if (!planeSurfaceRenderer.isPlacementExplorationPatchVisible()) {
+                val visualHit = renderFloorCenterHit(placementPoint!!)
                 planeSurfaceRenderer.syncPlacementExplorationPatch(
                     rootNode = rootNode,
-                    centerHit = centerHit,
+                    centerHit = visualHit,
                     sectionFloorY = sectionFloorY,
                     show = true
                 )
@@ -1122,8 +1283,51 @@ internal class IosArSessionCoordinator(
         }
     }
 
-    private fun syncContourRenderer() {
-        contourRenderer.syncIfChanged(floorArController.currentState())
+    private fun updatePlacementReticle(
+        view: ARSCNView,
+        frame: ARFrame,
+        sectionFloorY: Float?,
+        nowSeconds: Double
+    ) {
+        val hit = sectionFloorY?.let {
+            view.resolveWorkingFloorPlacementHit(frame = frame, sectionFloorY = it)
+        } ?: view.resolvePlacementLiveReticleHit(frame, sectionFloorY)
+        val point = hit.placementFloorPoint(sectionFloorY)?.let {
+            FloorGeometry.projectToSectionFloor(it, sectionFloorY)
+        }
+        liveReticleHit = hit
+        liveReticlePoint = point
+        liveReticleResolvedSeconds = nowSeconds
+        liveReticleSourceLabel = hit.hitPathDebugLabel()
+    }
+
+    private fun publishPlacementSnapshot(
+        nowSeconds: Double,
+        centerHit: CenterPlaneHit,
+        point: ArPoint3D?,
+        sectionFloorY: Float?,
+        source: PlacementSnapshotSource,
+        hitAgeMs: Int = 0
+    ) {
+        val trackingDegraded = isTrackingDegraded(
+            cameraFrameGapMs,
+            relocationController,
+            snapshotAgeMs = 0
+        )
+        acceptedPlacementSnapshot = PlacementSnapshotFactory.create(
+            resolvedAtSeconds = nowSeconds,
+            sectionFloorY = sectionFloorY,
+            point = point,
+            centerHit = centerHit,
+            source = source,
+            trackingDegraded = trackingDegraded,
+            cameraGapMs = cameraFrameGapMs,
+            hitAgeMs = hitAgeMs
+        )
+        liveReticleHit = centerHit
+        liveReticlePoint = point
+        liveReticleResolvedSeconds = nowSeconds
+        liveReticleSourceLabel = source.sourceLabel
     }
 
     private fun isPlacementAnchorTrackingStable(frame: ARFrame): Boolean =
@@ -1266,6 +1470,7 @@ internal class IosArSessionCoordinator(
     }
 
     private fun clearLiveReticleHit() {
+        acceptedPlacementSnapshot = null
         liveReticleHit = CenterPlaneHit()
         liveReticlePoint = null
         smoothedPlacementPatchPoint = null
@@ -1307,6 +1512,11 @@ internal class IosArSessionCoordinator(
         } else {
             0
         }
+        val placementSnapshot = acceptedPlacementSnapshot
+        val placementSnapshotAgeMs = placementSnapshot?.ageMs(nowSeconds) ?: 0
+        val delegateAgeMs = computeDelegateAgeMs(nowSeconds, lastDelegateAtSeconds)
+        val isPlacementPlaceable = liveReticlePoint != null &&
+            placementStatus in PLACEABLE_STATUSES
         val liveTapFrameAgeMs = lastTapFrameAgeMs
         val hitYLabel = when {
             hitY == null -> "-"
@@ -1347,7 +1557,12 @@ internal class IosArSessionCoordinator(
                 tapDeltaCm = lastTapDeltaCm,
                 tapDeltaLabel = formatTapDeltaLabel(lastTapDeltaCm),
                 trackingQualityLabel = formatTrackingQualityLabel(
-                    trackingDegraded = isTrackingDegraded(cameraFrameGapMs, relocationController),
+                    trackingDegraded = isTrackingDegraded(
+                        cameraFrameGapMs,
+                        relocationController,
+                        snapshotAgeMs = placementSnapshotAgeMs,
+                        delegateAgeMs = delegateAgeMs
+                    ),
                     overlayDebouncing = planeSurfaceRenderer.isOverlayTransformDebouncing()
                 ),
                 hitYLabel = hitYLabel,
@@ -1360,7 +1575,17 @@ internal class IosArSessionCoordinator(
                     displayDeltaCm = anchorStore.correctionDebug().displayDeltaCm
                 ),
                 anchorRootDeltaCm = anchorStore.correctionDebug().rootDeltaCm,
-                anchorDisplayDeltaCm = anchorStore.correctionDebug().displayDeltaCm
+                anchorDisplayDeltaCm = anchorStore.correctionDebug().displayDeltaCm,
+                placementSnapshotId = placementSnapshot?.id ?: -1L,
+                placementSnapshotAgeMs = placementSnapshotAgeMs,
+                placementSnapshotAgeLabel = formatReticleHitAgeLabel(placementSnapshotAgeMs),
+                tapSnapshotId = lastTapSnapshotId,
+                tapRejectReason = lastTapRejectReason?.name ?: "-",
+                isPlacementPlaceable = isPlacementPlaceable,
+                contourVersion = contourRenderer.lastStructureKey().toLong(),
+                contourSyncSource = lastContourSyncSourceLabel,
+                manualAlignEligible = anchorStore.correctionDebug().manualAlignEligible,
+                pendingCorrectionFrames = anchorStore.correctionDebug().pendingCorrectionFrames
             )
         )
     }
