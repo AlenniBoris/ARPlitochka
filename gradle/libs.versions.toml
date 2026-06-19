@@ -20,7 +20,8 @@ kaspresso = "1.5.5"
 mockk = "1.13.12"
 turbine = "1.1.0"
 coroutinesTest = "1.9.0"
-kotlinxSerializationJson = "1.9.0"
+    kotlinxSerializationJson = "1.9.0"
+ktor = "3.1.1"
 
 [libraries]
 kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlin" }
@@ -58,6 +59,14 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
     kaspresso = { group = "com.kaspersky.android-components", name = "kaspresso", version.ref = "kaspresso" }
     kaspresso-compose = { group = "com.kaspersky.android-components", name = "kaspresso-compose-support", version.ref = "kaspresso" }
     kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+
+    # Ktor
+    ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
+    ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
+    ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
+    ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
+    ktor-client-darwin = { group = "io.ktor", name = "ktor-client-darwin", version.ref = "ktor" }
+    ktor-client-logging = { group = "io.ktor", name = "ktor-client-logging", version.ref = "ktor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

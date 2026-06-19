@@ -1,7 +1,7 @@
 package com.example.arplitka.shared.tiles.data.remote
 
-import com.example.arplitka.shared.tiles.data.remote.dto.TileCollectionsResponseDto
+import com.example.arplitka.shared.tiles.data.remote.dto.TilesResponseDto
 
 interface TilesApi {
-    suspend fun getTileCollections(): TileCollectionsResponseDto
+    suspend fun getTiles(): TilesResponseDto
 }

@@ -3,72 +3,42 @@ package com.example.arplitka.shared.tiles.data.remote.dto
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class TileCollectionsResponseDto(
-    val items: List<TileCollectionDto>
+data class TilesResponseDto(
+    val items: List<TileDto>
 )
 
 @Serializable
-data class TileCollectionDto(
+data class TileDto(
     val id: Long,
-    val slug: String,
     val name: String,
     val description: String,
+    val manufacturer: String,
     val category: String,
-    val manufacturer: TileManufacturerDto,
-    val previewImageUrl: String,
-    val textures: List<TileTextureDto>,
-    val tileVariants: List<TileVariantDto>,
-    val patterns: List<TilePatternDto>,
-    val tags: List<String>
+    val unit: String,
+    val material: String,
+    val surfaceType: String,
+    val basePrice: Double,
+    val photos: List<String>,
+    val colors: List<TileColorDto>,
+    val variants: List<TileVariantDto>
 )
 
 @Serializable
-data class TileManufacturerDto(
+data class TileColorDto(
     val id: Long,
-    val slug: String,
-    val name: String
-)
-
-@Serializable
-data class TileTextureDto(
-    val id: Long,
-    val code: String,
     val name: String,
     val textureUrl: String,
-    val previewImageUrl: String,
-    val repeatPattern: RepeatPatternDto,
-    val status: String
-)
-
-@Serializable
-data class RepeatPatternDto(
-    val widthMm: Int,
-    val lengthMm: Int
+    val hexCode: String
 )
 
 @Serializable
 data class TileVariantDto(
     val id: Long,
-    val code: String,
-    val name: String,
+    val colorId: Long,
     val widthMm: Int,
-    val lengthMm: Int,
+    val heightMm: Int,
     val thicknessMm: Int,
-    val stockStatus: String,
-    val price: TilePriceDto
-)
-
-@Serializable
-data class TilePriceDto(
-    val amount: Double,
-    val unit: String
-)
-
-@Serializable
-data class TilePatternDto(
-    val id: Long,
-    val code: String,
-    val name: String,
-    val variantIds: List<Long>,
-    val previewImageUrl: String
+    val price: Double,
+    val stockCount: Int,
+    val tilesPerBox: Int? = null
 )

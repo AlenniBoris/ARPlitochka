@@ -32,7 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.arplitka.shared.app.catalog.SampleTileCatalog
 import com.example.arplitka.shared.app.navigation.SharedRoute
-import com.example.arplitka.shared.tiles.domain.model.TileCollection
+import com.example.arplitka.shared.tiles.domain.model.Tile
 import kotlinx.coroutines.delay
 
 @Composable
@@ -62,8 +62,8 @@ fun ArPlitkaSharedApp(
                 color = if (currentRoute == SharedRoute.Ar) Color.Black else Color.White
             ) {
                 when (currentRoute) {
-                    SharedRoute.Catalog -> SharedCatalogScreen(
-                        collections = SampleTileCatalog.collections,
+                    SharedRoute.Catalog ->                     SharedCatalogScreen(
+                        tiles = SampleTileCatalog.tiles,
                         onOpenAr = { currentRoute = SharedRoute.Ar }
                     )
                     SharedRoute.Ar -> arContent {
@@ -147,7 +147,7 @@ private fun SharedTransitionScreen(onComplete: () -> Unit) {
 
 @Composable
 private fun SharedCatalogScreen(
-    collections: List<TileCollection>,
+    tiles: List<Tile>,
     onOpenAr: () -> Unit
 ) {
     Column(
@@ -173,15 +173,15 @@ private fun SharedCatalogScreen(
             contentPadding = PaddingValues(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(collections) { collection ->
-                TileCollectionCard(collection = collection)
+            items(tiles) { tile ->
+                TileCard(tile = tile)
             }
         }
     }
 }
 
 @Composable
-private fun TileCollectionCard(collection: TileCollection) {
+private fun TileCard(tile: Tile) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -192,26 +192,28 @@ private fun TileCollectionCard(collection: TileCollection) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = collection.name,
+                text = tile.name,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = collection.description,
+                text = tile.description,
                 style = MaterialTheme.typography.bodyMedium
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Текстуры: ${collection.textures.size}")
-                Text("Размеры: ${collection.tileVariants.size}")
-                Text("Узоры: ${collection.patterns.size}")
+                Text("Цветов: ${tile.colors.size}")
+                Text("Вариантов: ${tile.variants.size}")
+                Text("Цена от: ${tile.basePrice}")
             }
-            Text(
-                text = collection.previewImageUrl,
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray
-            )
+            if (tile.photos.isNotEmpty()) {
+                Text(
+                    text = tile.photos.first(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
+            }
         }
     }
 }
