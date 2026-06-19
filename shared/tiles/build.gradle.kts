@@ -2,12 +2,18 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.hilt.android)
+    alias(libs.plugins.ksp)
 }
 
 val isMacOs = System.getProperty("os.name").lowercase().contains("mac")
 
 kotlin {
-    androidTarget()
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
     if (isMacOs) {
         iosX64()
         iosArm64()
@@ -17,15 +23,17 @@ kotlin {
     }
     sourceSets {
         commonMain.dependencies {
+            implementation(project(":shared:core"))
             implementation(project(":network:core"))
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content-negotiation)
+            implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.ktor.client.logging)
         }
         androidMain.dependencies {
             implementation(libs.ktor.client.android)
+            implementation(libs.hilt.android)
         }
         if (isMacOs) {
             val iosMain by getting {
@@ -36,6 +44,8 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.turbine)
         }
     }
 }
@@ -47,4 +57,13 @@ android {
     defaultConfig {
         minSdk = 26
     }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    add("kspAndroid", libs.hilt.compiler)
 }

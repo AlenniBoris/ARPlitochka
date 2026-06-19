@@ -71,6 +71,6 @@ dependencies {
     implementation(libs.sceneview.ar)
 
     debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(project(":mock:core"))
-    debugImplementation(project(":mock:tiles"))
+    implementation(project(":mock:core"))
+    implementation(project(":mock:tiles"))
 }
