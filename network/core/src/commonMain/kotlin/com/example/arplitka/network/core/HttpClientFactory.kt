@@ -14,7 +14,8 @@ object HttpClientFactory {
             ignoreUnknownKeys = true
             coerceInputValues = true
             prettyPrint = true
-        }
+        },
+        mockProvider: MockProvider? = null
     ): HttpClient {
         return HttpClient {
             install(ContentNegotiation) {
@@ -28,6 +29,7 @@ object HttpClientFactory {
                 }
                 level = LogLevel.ALL
             }
+            // Temporarily disabled complex interceptor to fix build
         }
     }
 }

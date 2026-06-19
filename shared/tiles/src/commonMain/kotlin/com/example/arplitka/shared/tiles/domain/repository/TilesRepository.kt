@@ -1,8 +1,9 @@
 package com.example.arplitka.shared.tiles.domain.repository
 
-import com.example.arplitka.network.core.ApiResult
+import com.example.arplitka.shared.core.domain.model.CustomResultModelDomain
+import com.example.arplitka.shared.core.domain.model.CommonException
 import com.example.arplitka.shared.tiles.domain.model.Tile
 
 interface TilesRepository {
-    suspend fun getTiles(): ApiResult<List<Tile>>
+    suspend fun getTiles(): CustomResultModelDomain<List<Tile>, CommonException>
 }

@@ -1,14 +1,14 @@
 package com.example.arplitka.mock.tiles
 
-import com.example.arplitka.mock.core.MockRoute
-import com.example.arplitka.mock.core.dsl.GetRoutes
+import com.example.arplitka.mock.core.JsonAsset
+import com.example.arplitka.mock.core.MockRouteRegistry
 
-val GetRoutes.tiles: TileGetRoutes
-    get() = TileGetRoutes
+fun initTilesMocks() {
+    MockRouteRegistry {
+        "/tiles" reply JsonAsset("mock/tiles/catalog/all.json")
+    }
+}
 
-object TileGetRoutes {
-    val all = MockRoute(
-        method = "GET",
-        path = "/api/v1/tile-collections"
-    )
+object TileRoutes {
+    const val GET_TILES = "/tiles"
 }

@@ -22,6 +22,7 @@
 
 ### 3. Shared Модули (`:shared:*`)
 Переиспользуемый код, разбитый на микро-модули.
+- **`:shared:core`** — Фундамент приложения. Содержит `AppConfig`, `CustomResultModelDomain`, `CommonException` и базовые UseCase-ы.
 - `:shared:ui:core` — базовые UI-сущности, темы.
 - `:shared:ui:navigation` — компоненты навигации (BottomBar).
 - `:shared:ui:kit` — набор общих UI-компонентов (Reticle, Panels).
@@ -32,13 +33,13 @@
 
 ### 4. Network Модули (`:network:*`)
 Технический сетевой фундамент.
-- `:network:core` — KMP-ready common primitives (`ApiResult`, `NetworkError`, `NetworkConfig`) и будущая Ktor/Ktorfit инфраструктура.
+- `:network:core` — KMP-ready инфраструктура Ktor, `HttpClientFactory`, `MockProvider` интерфейс.
 - Network-модули не содержат бизнес endpoint'ов.
 - Бизнес API живут в feature-модулях или shared business modules.
 
 ### 5. Mock Модули (`:mock:*`)
 Моки для debug-разработки и UI-тестов.
-- `:mock:core` — общий mock DSL, `JsonAsset`, routes registry.
+- `:mock:core` — общий mock DSL, `AssetReader`, `JsonAsset`, routes registry.
 - `:mock:tiles` — mock routes и assets плитки.
 - Feature-модули не зависят от mock-модулей напрямую.
 
