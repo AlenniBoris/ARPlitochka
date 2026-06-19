@@ -9,11 +9,8 @@ import javax.inject.Inject
 
 /**
  * Use case for processing an AR frame to detect the floor.
+ * Uses the proxy pattern (delegation) as it has no own logic.
  */
 class ProcessArFrameUseCase @Inject constructor(
-    private val repository: IFloorDetectorRepository
-) {
-    operator fun invoke(session: Session, frame: Frame, viewportSize: IntSize): ArFrameResult {
-        return repository.processFrame(session, frame, viewportSize)
-    }
-}
+    repository: IFloorDetectorRepository
+) : (Session, Frame, IntSize) -> ArFrameResult by repository::processFrame
