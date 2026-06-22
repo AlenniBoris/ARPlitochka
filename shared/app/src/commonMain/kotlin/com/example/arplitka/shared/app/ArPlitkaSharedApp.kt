@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -29,6 +28,7 @@ import com.example.arplitka.shared.ui.navigation.AppBottomBar
 import com.example.arplitka.shared.ui.navigation.BottomBarValues
 import com.example.arplitka.shared.ui.navigation.CATALOG_ROUTE
 import com.example.arplitka.shared.ui.navigation.toModelUi
+import com.example.arplitka.shared.ui.kit.screens.AppProgressScreen
 import kotlinx.coroutines.delay
 
 @Composable
@@ -88,18 +88,11 @@ fun ArPlitkaSharedApp(
 @Composable
 private fun SharedTransitionScreen(onComplete: () -> Unit) {
     LaunchedEffect(Unit) {
-        delay(400)
+        delay(100)
         onComplete()
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White),
-        contentAlignment = Alignment.Center
-    ) {
-        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-    }
+    AppProgressScreen()
 }
 
 @Composable
