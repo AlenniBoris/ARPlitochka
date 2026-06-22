@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.example.arplitka.features.catalog.presentation.viewmodel.CatalogViewModel
 import com.example.arplitka.features.catalog.presentation.viewmodel.CatalogUiState
 import com.example.arplitka.shared.ui.core.mapper.toUiString
+import com.example.arplitka.shared.ui.kit.AppProgressScreen
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -32,10 +33,7 @@ fun CatalogScreen(
     ) {
         when (val currentState = state) {
             is CatalogUiState.Loading -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                AppProgressScreen()
             }
             is CatalogUiState.Error -> {
                 ErrorState(
