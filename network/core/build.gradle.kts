@@ -6,9 +6,9 @@ plugins {
 val isMacOs = System.getProperty("os.name").lowercase().contains("mac")
 
 kotlin {
+    applyDefaultHierarchyTemplate()
     androidTarget()
     if (isMacOs) {
-        iosX64()
         iosArm64()
         iosSimulatorArm64()
     } else {
@@ -17,15 +17,17 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":shared:core"))
-            implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.serialization.kotlinx.json)
-            implementation(libs.ktor.client.logging)
-            implementation(libs.ktor.client.mock)
+            implementation(libs.koin.core)
+            api(libs.ktor.client.core)
+            api(libs.ktor.client.content.negotiation)
+            api(libs.ktor.serialization.kotlinx.json)
+            api(libs.ktor.client.logging)
+            api(libs.ktor.client.mock)
         }
         androidMain.dependencies {
             implementation(libs.ktor.client.android)
         }
+        
         if (isMacOs) {
             val iosMain by getting {
                 dependencies {
@@ -33,6 +35,7 @@ kotlin {
                 }
             }
         }
+
         commonTest.dependencies {
             implementation(kotlin("test"))
         }

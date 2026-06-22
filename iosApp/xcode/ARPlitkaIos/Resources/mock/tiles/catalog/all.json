@@ -2,67 +2,81 @@
   "items": [
     {
       "id": 1,
-      "slug": "paving-stone-classic",
       "name": "Classic Paving Stone",
       "description": "Классическая тротуарная плитка для двора, террасы и дорожек.",
+      "manufacturer": "Plitka Pro",
       "category": "paving_stones",
-      "manufacturer": {
-        "id": 1,
-        "slug": "plitka-pro",
-        "name": "Plitka Pro"
-      },
-      "previewImageUrl": "mock://mock/tiles/previews/paving_stones_v1_preview.png",
-      "textures": [
+      "unit": "m2",
+      "material": "Concrete",
+      "surfaceType": "Rough",
+      "basePrice": 95.0,
+      "photos": [
+        "file:///android_asset/mock/tiles/previews/paving_stones_v1_preview.png"
+      ],
+      "colors": [
         {
           "id": 1,
-          "code": "gray",
           "name": "Серый",
-          "textureUrl": "mock://mock/tiles/textures/paving_stones_v1.png",
-          "previewImageUrl": "mock://mock/tiles/previews/paving_stones_v1_preview.png",
-          "repeatPattern": {
-            "widthMm": 780,
-            "lengthMm": 1040
-          },
-          "status": "active"
-        },
-        {
-          "id": 2,
-          "code": "sand",
-          "name": "Песочный",
-          "textureUrl": "mock://mock/tiles/textures/paving_stones_v2.png",
-          "previewImageUrl": "mock://mock/tiles/previews/paving_stones_v2_preview.png",
-          "repeatPattern": {
-            "widthMm": 780,
-            "lengthMm": 1040
-          },
-          "status": "active"
+          "textureUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v1.png",
+          "hexCode": "#808080"
         }
       ],
-      "tileVariants": [
+      "variants": [
         {
           "id": 101,
-          "code": "small_60",
-          "name": "Малая 60 мм",
+          "colorId": 1,
           "widthMm": 260,
-          "lengthMm": 260,
+          "heightMm": 260,
           "thicknessMm": 60,
-          "stockStatus": "in_stock",
-          "price": {
-            "amount": 95.0,
-            "unit": "m2"
-          }
+          "price": 95.0,
+          "stockCount": 150,
+          "tilesPerBox": 10
+        },
+        {
+          "id": 102,
+          "colorId": 1,
+          "widthMm": 520,
+          "heightMm": 260,
+          "thicknessMm": 60,
+          "price": 110.0,
+          "stockCount": 80,
+          "tilesPerBox": 5
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Modern Paving Stone",
+      "description": "Современная тротуарная плитка с улучшенными характеристиками.",
+      "manufacturer": "Plitka Pro",
+      "category": "paving_stones_v2",
+      "unit": "m2",
+      "material": "Concrete",
+      "surfaceType": "Smooth",
+      "basePrice": 145.0,
+      "photos": [
+        "file:///android_asset/mock/tiles/previews/paving_stones_v2_preview.png"
+      ],
+      "colors": [
+        {
+          "id": 2,
+          "name": "Песочный",
+          "textureUrl": "file:///android_asset/mock/textures/paving_stones_v2.png",
+          "hexCode": "#C2B280"
         }
       ],
-      "patterns": [
+      "variants": [
         {
           "id": 201,
-          "code": "single_small",
-          "name": "Малый формат",
-          "variantIds": [101],
-          "previewImageUrl": "mock://mock/tiles/previews/paving_stones_v1_preview.png"
+          "colorId": 2,
+          "widthMm": 780,
+          "heightMm": 1040,
+          "thicknessMm": 80,
+          "price": 145.0,
+          "stockCount": 50,
+          "tilesPerBox": 1
         }
-      ],
-      "tags": ["outdoor", "frost_resistant", "anti_slip"]
+      ]
     }
   ]
 }

@@ -16,10 +16,15 @@ Feature-модуль для отображения каталога плитки
 ```text
 features/catalog/
 ├── build.gradle.kts
-└── src/main/java/com/example/arplitka/features/catalog/
-    └── presentation/
-        └── screen/
-            └── CatalogScreen.kt
+└── src/commonMain/kotlin/com/example/arplitka/features/catalog/
+    ├── presentation/
+    │   ├── screen/
+    │   │   └── CatalogScreen.kt
+    │   └── viewmodel/
+    │       ├── CatalogViewModel.kt
+    │       └── CatalogUiState.kt
+    └── domain/
+        └── usecase/
 ```
 
 ## Навигация

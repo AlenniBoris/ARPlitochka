@@ -17,13 +17,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import com.example.arplitka.features.catalog.presentation.screen.CatalogScreen
+import com.example.arplitka.features.catalog.presentation.viewmodel.CatalogViewModel
 import com.example.arplitka.features.floordetection.presentation.screen.FloorArScreen
 import com.example.arplitka.shared.app.ArPlitkaSharedApp
 import com.example.arplitka.shared.ui.kit.BlockingMessage
+import org.koin.compose.viewmodel.koinViewModel
 import com.google.ar.core.ArCoreApk
-import dagger.hilt.android.AndroidEntryPoint
 
-@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +39,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun ArPlitkaApp() {
     ArPlitkaSharedApp(
+        catalogContent = { onOpenAr ->
+            CatalogScreen(
+                onOpenAr = onOpenAr
+            )
+        },
         arContent = { onBack ->
             CameraPermissionGate {
                 ArCoreAvailabilityGate {

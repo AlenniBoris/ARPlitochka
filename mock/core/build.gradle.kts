@@ -6,19 +6,32 @@ plugins {
 val isMacOs = System.getProperty("os.name").lowercase().contains("mac")
 
 kotlin {
+    applyDefaultHierarchyTemplate()
     androidTarget()
     if (isMacOs) {
-        iosX64()
-        iosArm64()
-        iosSimulatorArm64()
+        listOf(
+            iosArm64(),
+            iosSimulatorArm64()
+        ).forEach { iosTarget ->
+            iosTarget.compilerOptions {
+                freeCompilerArgs.add("-opt-in=kotlinx.cinterop.ExperimentalForeignApi")
+            }
+        }
     } else {
         jvm("metadataHost")
     }
     sourceSets {
-        commonMain.dependencies {
-            implementation(project(":shared:core"))
-            implementation(project(":network:core"))
-            implementation(libs.kotlinx.coroutines.core)
+        val commonMain by getting {
+            dependencies {
+                implementation(project(":shared:core"))
+                implementation(project(":network:core"))
+                implementation(libs.koin.core)
+                implementation(libs.kotlinx.coroutines.core)
+            }
+        }
+        if (isMacOs) {
+            val iosMain by getting {
+            }
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

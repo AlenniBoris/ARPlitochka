@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
+val isMacOs = System.getProperty("os.name").lowercase().contains("mac")
+
 kotlin {
     androidTarget {
         compilerOptions {
@@ -12,19 +14,23 @@ kotlin {
         }
     }
     
-    listOf(
-        iosX64(),
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach {
-        it.binaries.framework {
-            baseName = "shared-ui-core"
-            isStatic = true
+    if (isMacOs) {
+        listOf(
+            iosArm64(),
+            iosSimulatorArm64()
+        ).forEach {
+            it.binaries.framework {
+                baseName = "shared-ui-core"
+                isStatic = true
+            }
         }
+    } else {
+        jvm("metadataHost")
     }
 
     sourceSets {
         commonMain.dependencies {
+            implementation(project(":shared:core"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

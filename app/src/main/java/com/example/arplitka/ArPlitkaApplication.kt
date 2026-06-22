@@ -5,12 +5,26 @@ import com.example.arplitka.mock.core.AssetReader
 import com.example.arplitka.shared.core.config.AppConfigManager
 import com.example.arplitka.shared.core.config.createAndroidDataStore
 import com.example.arplitka.mock.tiles.initTilesMocks
-import dagger.hilt.android.HiltAndroidApp
+import com.example.arplitka.BuildConfig
+import com.example.arplitka.mock.core.di.mockModule
+import com.example.arplitka.features.floordetection.di.floorDetectionModule
+import com.example.arplitka.shared.app.di.initKoin
+import org.koin.android.ext.koin.androidContext
 
-@HiltAndroidApp
 class ArPlitkaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        
+        // Инициализация Koin
+        initKoin(
+            additionalModules = if (BuildConfig.DEBUG) {
+                listOf(mockModule, floorDetectionModule)
+            } else {
+                listOf(floorDetectionModule)
+            }
+        ) {
+            androidContext(this@ArPlitkaApplication)
+        }
         
         // Инициализация конфигурации через DataStore
         val dataStore = createAndroidDataStore(this)
