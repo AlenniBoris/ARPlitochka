@@ -1,4 +1,4 @@
-package com.example.arplitka.shared.ui.kit
+package com.example.arplitka.shared.ui.kit.screens
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode

@@ -21,7 +21,7 @@ import com.example.arplitka.features.catalog.presentation.screen.CatalogScreen
 import com.example.arplitka.features.catalog.presentation.viewmodel.CatalogViewModel
 import com.example.arplitka.features.floordetection.presentation.screen.FloorArScreen
 import com.example.arplitka.shared.app.ArPlitkaSharedApp
-import com.example.arplitka.shared.ui.kit.BlockingMessage
+import com.example.arplitka.shared.ui.kit.ar.BlockingMessage
 import org.koin.compose.viewmodel.koinViewModel
 import com.google.ar.core.ArCoreApk
 

@@ -29,12 +29,12 @@ import com.example.arplitka.features.floordetection.presentation.utils.decodePav
 import com.example.arplitka.features.floordetection.presentation.viewmodel.FloorArViewModel
 import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
 import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
-import com.example.arplitka.shared.ui.kit.BlockingMessage
-import com.example.arplitka.shared.ui.kit.CenterReticle
-import com.example.arplitka.shared.ui.kit.DebugPanel
-import com.example.arplitka.shared.ui.kit.isDebugBuild
+import com.example.arplitka.shared.ui.kit.ar.BlockingMessage
+import com.example.arplitka.shared.ui.kit.ar.CenterReticle
+import com.example.arplitka.shared.ui.kit.ar.DebugPanel
+import com.example.arplitka.shared.ui.kit.utils.isDebugBuild
 import androidx.compose.foundation.layout.padding
-import com.example.arplitka.shared.ui.kit.ArTopBar
+import com.example.arplitka.shared.ui.kit.ar.ArTopBar
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

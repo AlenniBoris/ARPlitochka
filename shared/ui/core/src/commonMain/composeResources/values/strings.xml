@@ -1,0 +1,8 @@
+<resources>
+    <string name="exception_connection">Нет интернет-соединения или превышено время ожидания</string>
+    <string name="exception_server">Ошибка сервера. Попробуйте позже</string>
+    <string name="exception_client">Ошибка запроса. Проверьте данные</string>
+    <string name="exception_serialization">Ошибка обработки данных</string>
+    <string name="exception_unknown">Произошла неизвестная ошибка</string>
+    <string name="try_again_string">Повторить</string>
+</resources>

@@ -5,7 +5,7 @@ import com.example.arplitka.shared.ar.contracts.model.ArInstruction
 import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.shared.ar.domain.logic.AddPointRejectReason
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
-import com.example.arplitka.shared.ui.kit.CenterReticleState
+import com.example.arplitka.shared.ui.kit.ar.CenterReticleState
 import kotlin.math.roundToInt
 
 internal fun ArTrackingStatus.toIosText(): String = when (this) {
