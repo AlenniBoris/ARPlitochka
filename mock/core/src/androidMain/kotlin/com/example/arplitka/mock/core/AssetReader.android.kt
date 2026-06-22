@@ -13,4 +13,8 @@ actual object AssetReader {
         val context = applicationContext ?: throw IllegalStateException("AssetReader not initialized with Context")
         return context.assets.open(path).bufferedReader().use { it.readText() }
     }
+
+    actual fun resolveAssetPath(path: String): String? {
+        return "file:///android_asset/$path"
+    }
 }

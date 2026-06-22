@@ -1,9 +1,74 @@
 plugins {
+    alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.hilt.android)
-    alias(libs.plugins.ksp)
+}
+
+val isMacOs = System.getProperty("os.name").lowercase().contains("mac")
+
+kotlin {
+    applyDefaultHierarchyTemplate()
+    androidTarget()
+    if (isMacOs) {
+        listOf(
+            iosArm64(),
+            iosSimulatorArm64()
+        ).forEach { iosTarget ->
+            iosTarget.compilerOptions {
+                freeCompilerArgs.add("-opt-in=kotlinx.cinterop.ExperimentalForeignApi")
+            }
+        }
+    } else {
+        jvm("metadataHost")
+    }
+    sourceSets {
+        commonMain.dependencies {
+            implementation(project(":shared:core"))
+            implementation(project(":shared:ui:core"))
+            implementation(project(":shared:ui:kit"))
+            implementation(project(":shared:tiles"))
+            implementation(project(":mock:core"))
+            implementation(libs.koin.core)
+            implementation(libs.koin.compose)
+            implementation(libs.koin.compose.viewmodel)
+            implementation(libs.jetbrains.lifecycle.viewmodel)
+            implementation(libs.jetbrains.lifecycle.viewmodel.compose)
+            implementation(libs.jetbrains.lifecycle.viewmodel.savedstate)
+            implementation(libs.jetbrains.savedstate)
+            
+            implementation(compose.runtime)
+            implementation(compose.foundation)
+            implementation(compose.material3)
+            implementation(compose.ui)
+            implementation(compose.components.resources)
+            implementation(compose.components.uiToolingPreview)
+
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.ktor)
+        }
+        
+        if (isMacOs) {
+            val iosMain by getting {
+                dependencies {
+                    // JetBrains AndroidX ports for KMP
+                    implementation(libs.jetbrains.savedstate)
+                    implementation(libs.jetbrains.lifecycle.viewmodel)
+                    implementation(libs.jetbrains.lifecycle.viewmodel.savedstate)
+                    implementation(libs.jetbrains.lifecycle.viewmodel.compose)
+                    implementation(libs.jetbrains.lifecycle.runtime)
+                    implementation(libs.jetbrains.lifecycle.runtime.compose)
+                    implementation(libs.androidx.annotation)
+                    implementation(libs.jetbrains.core.bundle)
+                    implementation(libs.androidx.collection)
+                }
+            }
+        }
+        
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+    }
 }
 
 android {
@@ -12,48 +77,10 @@ android {
 
     defaultConfig {
         minSdk = 26
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
-
-    buildFeatures {
-        compose = true
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 }
 
-dependencies {
-    implementation(project(":shared:ui:core"))
-    implementation(project(":shared:tiles"))
-
-    implementation(libs.androidx.core.ktx)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.material3)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.runtime.compose)
-    
-    implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)
-    implementation(libs.androidx.hilt.navigation.compose)
-    implementation(libs.androidx.navigation.compose)
-
-    // Testing
-    testImplementation(libs.junit)
-    testImplementation(libs.mockk)
-    testImplementation(libs.turbine)
-    testImplementation(libs.kotlinx.coroutines.test)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(libs.kaspresso)
-    androidTestImplementation(libs.kaspresso.compose)
-    androidTestImplementation(libs.mockk.android)
+compose.resources {
+    publicResClass = true
+    packageOfResClass = "com.example.arplitka.features.catalog"
 }

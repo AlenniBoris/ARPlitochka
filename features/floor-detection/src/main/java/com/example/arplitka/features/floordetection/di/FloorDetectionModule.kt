@@ -2,19 +2,13 @@ package com.example.arplitka.features.floordetection.di
 
 import com.example.arplitka.features.floordetection.data.repository.FloorDetectorRepositoryImpl
 import com.example.arplitka.features.floordetection.domain.repository.IFloorDetectorRepository
-import dagger.Binds
-import dagger.Module
-import dagger.hilt.InstallIn
-import dagger.hilt.android.components.ViewModelComponent
-import dagger.hilt.android.scopes.ViewModelScoped
+import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFrameUseCase
+import com.example.arplitka.features.floordetection.presentation.viewmodel.FloorArViewModel
+import org.koin.core.module.dsl.viewModel
+import org.koin.dsl.module
 
-@Module
-@InstallIn(ViewModelComponent::class)
-abstract class FloorDetectionModule {
-    
-    @Binds
-    @ViewModelScoped
-    abstract fun bindFloorDetectorRepository(
-        impl: FloorDetectorRepositoryImpl
-    ): IFloorDetectorRepository
+val floorDetectionModule = module {
+    single<IFloorDetectorRepository> { FloorDetectorRepositoryImpl() }
+    factory { ProcessArFrameUseCase(repository = get()) }
+    viewModel { FloorArViewModel(processArFrameUseCase = get()) }
 }

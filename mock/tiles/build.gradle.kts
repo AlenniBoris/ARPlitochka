@@ -8,7 +8,6 @@ val isMacOs = System.getProperty("os.name").lowercase().contains("mac")
 kotlin {
     androidTarget()
     if (isMacOs) {
-        iosX64()
         iosArm64()
         iosSimulatorArm64()
     } else {

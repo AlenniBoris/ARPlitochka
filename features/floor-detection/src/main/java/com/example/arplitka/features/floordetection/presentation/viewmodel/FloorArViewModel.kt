@@ -14,16 +14,13 @@ import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFram
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-@HiltViewModel
-class FloorArViewModel @Inject constructor(
+class FloorArViewModel(
     private val processArFrameUseCase: ProcessArFrameUseCase
 ) : ViewModel() {
     

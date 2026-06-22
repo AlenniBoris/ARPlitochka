@@ -1,14 +1,34 @@
 package com.example.arplitka.iosapp
 
 import androidx.compose.runtime.Composable
-import com.example.arplitka.shared.app.ArPlitkaSharedApp
+import coil3.ImageLoader
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.network.ktor3.KtorNetworkFetcherFactory
+import com.example.arplitka.features.catalog.presentation.screen.CatalogScreen
 import com.example.arplitka.iosapp.presentation.screen.IosArScreen
+import com.example.arplitka.shared.app.ArPlitkaSharedApp
+import org.koin.compose.KoinContext
 
 @Composable
 fun IosApp() {
-    ArPlitkaSharedApp(
-        arContent = { onBack ->
-            IosArScreen(onBack = onBack)
-        }
-    )
+    setSingletonImageLoaderFactory { context ->
+        ImageLoader.Builder(context)
+            .components {
+                add(KtorNetworkFetcherFactory())
+            }
+            .build()
+    }
+    
+    KoinContext {
+        ArPlitkaSharedApp(
+            catalogContent = { onOpenAr ->
+                CatalogScreen(
+                    onOpenAr = onOpenAr
+                )
+            },
+            arContent = { onBack ->
+                IosArScreen(onBack = onBack)
+            }
+        )
+    }
 }

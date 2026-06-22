@@ -10,10 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -28,15 +25,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.arplitka.shared.app.catalog.SampleTileCatalog
 import com.example.arplitka.shared.app.navigation.SharedRoute
-import com.example.arplitka.shared.tiles.domain.model.Tile
 import kotlinx.coroutines.delay
 
 @Composable
 fun ArPlitkaSharedApp(
+    catalogContent: @Composable (onOpenAr: () -> Unit) -> Unit,
     arContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
         SharedArPlaceholderScreen(onBack = onBack)
     }
@@ -62,10 +57,9 @@ fun ArPlitkaSharedApp(
                 color = if (currentRoute == SharedRoute.Ar) Color.Black else Color.White
             ) {
                 when (currentRoute) {
-                    SharedRoute.Catalog ->                     SharedCatalogScreen(
-                        tiles = SampleTileCatalog.tiles,
-                        onOpenAr = { currentRoute = SharedRoute.Ar }
-                    )
+                    SharedRoute.Catalog -> catalogContent {
+                        currentRoute = SharedRoute.Ar
+                    }
                     SharedRoute.Ar -> arContent {
                         currentRoute = SharedRoute.Transition
                     }
@@ -142,79 +136,6 @@ private fun SharedTransitionScreen(onComplete: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-    }
-}
-
-@Composable
-private fun SharedCatalogScreen(
-    tiles: List<Tile>,
-    onOpenAr: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "AR Plitka",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "Каталог плитки",
-            style = MaterialTheme.typography.titleMedium
-        )
-        Button(onClick = onOpenAr) {
-            Text("Открыть AR")
-        }
-        LazyColumn(
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(tiles) { tile ->
-                TileCard(tile = tile)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TileCard(tile: Tile) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { }
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = tile.name,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = tile.description,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Цветов: ${tile.colors.size}")
-                Text("Вариантов: ${tile.variants.size}")
-                Text("Цена от: ${tile.basePrice}")
-            }
-            if (tile.photos.isNotEmpty()) {
-                Text(
-                    text = tile.photos.first(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray
-                )
-            }
-        }
     }
 }
 

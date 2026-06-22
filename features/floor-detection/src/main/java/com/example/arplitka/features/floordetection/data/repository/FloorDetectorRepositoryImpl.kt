@@ -11,9 +11,8 @@ import com.google.ar.core.Frame
 import com.google.ar.core.Plane
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
-import javax.inject.Inject
 
-class FloorDetectorRepositoryImpl @Inject constructor() : IFloorDetectorRepository {
+class FloorDetectorRepositoryImpl : IFloorDetectorRepository {
 
     override fun processFrame(session: Session, frame: Frame, viewportSize: IntSize): ArFrameResult {
         val trackingState = frame.camera.trackingState

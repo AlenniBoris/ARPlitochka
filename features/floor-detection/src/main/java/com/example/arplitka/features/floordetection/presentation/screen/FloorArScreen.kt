@@ -18,7 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import org.koin.compose.viewmodel.koinViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.arplitka.features.floordetection.R
 import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
@@ -41,7 +41,7 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun FloorArScreen(
-    viewModel: FloorArViewModel = hiltViewModel(),
+    viewModel: FloorArViewModel = koinViewModel(),
     onBack: () -> Unit = {}
 ) {
     BackHandler {
