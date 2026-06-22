@@ -40,7 +40,6 @@ kotlin {
             implementation(project(":shared:app"))
             implementation(project(":shared:ar:contracts"))
             implementation(project(":shared:ar:domain"))
-            implementation(project(":shared:ui:kit"))
             implementation(project(":mock:core"))
             implementation(project(":mock:tiles"))
             implementation(libs.koin.core)

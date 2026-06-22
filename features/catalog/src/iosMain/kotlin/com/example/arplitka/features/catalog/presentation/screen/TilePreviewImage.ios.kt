@@ -43,6 +43,9 @@ internal actual fun TilePreviewImage(
     }
 
     val filePath = imageUrl.removePrefix("file://")
+    if (filePath.contains("android_asset")) {
+        println("IMAGE ERROR: Path still contains android_asset: $filePath. Asset resolution failed.")
+    }
     UIKitView(
         factory = {
             UIImageView().apply {

@@ -29,8 +29,9 @@ kotlin {
             implementation(project(":shared:ar:contracts"))
             implementation(project(":shared:tiles"))
             implementation(project(":shared:ui:navigation"))
-            implementation(project(":shared:ui:kit"))
-            implementation(project(":features:catalog"))
+            api(project(":shared:ui:kit"))
+            api(project(":shared:ui:core"))
+            api(project(":features:catalog"))
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
@@ -43,6 +44,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.ui)
+            implementation(compose.components.resources)
         }
         
         if (isMacOs) {

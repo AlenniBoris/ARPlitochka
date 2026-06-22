@@ -155,6 +155,7 @@
 				D0E3A0C02FC842F80053FD30 /* Frameworks */,
 				D0E3A0C12FC842F80053FD30 /* Resources */,
 				D0E3A0F82FC849DD0053FD30 /* Embed Frameworks */,
+				D0E3A1502FC871000053FD30 /* Copy Compose Resources */,
 			);
 			buildRules = (
 			);
@@ -285,6 +286,25 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		D0E3A1502FC871000053FD30 /* Copy Compose Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(PROJECT_DIR)/ComposeBundleResources/composeResources",
+			);
+			name = "Copy Compose Resources";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/compose-resources/composeResources",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "COMPOSE_SRC=\"${PROJECT_DIR}/ComposeBundleResources/composeResources\"\nCOMPOSE_DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/compose-resources/composeResources\"\nif [ -d \"${COMPOSE_SRC}\" ]; then\n  mkdir -p \"${COMPOSE_DEST}\"\n  cp -R \"${COMPOSE_SRC}/.\" \"${COMPOSE_DEST}/\"\n  echo \"Copied Compose resources to ${COMPOSE_DEST}\"\nfi\n\nMOCK_SRC=\"${PROJECT_DIR}/Resources/mock\"\nMOCK_DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/mock\"\nif [ -d \"${MOCK_SRC}\" ]; then\n  mkdir -p \"${MOCK_DEST}\"\n  cp -R \"${MOCK_SRC}/.\" \"${MOCK_DEST}/\"\n  echo \"Copied Mock assets to ${MOCK_DEST}\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		D0E3A0BF2FC842F80053FD30 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -361,7 +381,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -424,7 +444,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
