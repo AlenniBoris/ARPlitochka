@@ -18,12 +18,7 @@ kotlin {
         listOf(
             iosArm64(),
             iosSimulatorArm64()
-        ).forEach {
-            it.binaries.framework {
-                baseName = "shared-ui-kit"
-                isStatic = true
-            }
-        }
+        )
     } else {
         jvm("metadataHost")
     }
@@ -57,4 +52,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+compose.resources {
+    publicResClass = true
 }

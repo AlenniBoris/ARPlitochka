@@ -19,10 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import org.jetbrains.compose.resources.painterResource
-import org.jetbrains.compose.resources.stringResource
 import arplitka.shared.ui.kit.generated.resources.Res
 import arplitka.shared.ui.kit.generated.resources.ic_loading_tile
-import arplitka.shared.ui.kit.generated.resources.progress_bar_description
 
 @Composable
 fun AppProgressScreen(
@@ -48,7 +46,7 @@ fun AppProgressScreen(
             modifier = Modifier
                 .graphicsLayer(rotationZ = rotationAngle),
             painter = painterResource(Res.drawable.ic_loading_tile),
-            contentDescription = stringResource(Res.string.progress_bar_description),
+            contentDescription = "Loading",
             tint = iconTint
         )
     }

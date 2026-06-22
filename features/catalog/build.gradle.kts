@@ -82,5 +82,4 @@ android {
 
 compose.resources {
     publicResClass = true
-    packageOfResClass = "com.example.arplitka.features.catalog"
 }

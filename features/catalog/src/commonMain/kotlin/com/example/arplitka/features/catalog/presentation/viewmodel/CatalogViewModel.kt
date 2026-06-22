@@ -39,7 +39,7 @@ open class CatalogViewModel(
     }
 
     private suspend fun fetchTiles() {
-        delay(3_000L)
+        delay(100L)
         when (val result = getTilesUseCase()) {
             is CustomResultModelDomain.Success -> {
                 _state.update { CatalogUiState.Content(tiles = result.result) }
