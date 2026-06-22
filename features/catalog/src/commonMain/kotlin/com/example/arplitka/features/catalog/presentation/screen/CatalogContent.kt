@@ -19,7 +19,7 @@ internal fun CatalogContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(horizontal = 20.dp),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
     ) {
         Text(

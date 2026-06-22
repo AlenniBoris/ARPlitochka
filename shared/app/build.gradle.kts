@@ -28,6 +28,7 @@ kotlin {
             implementation(project(":network:core"))
             implementation(project(":shared:ar:contracts"))
             implementation(project(":shared:tiles"))
+            implementation(project(":shared:ui:navigation"))
             implementation(project(":features:catalog"))
             implementation(libs.koin.core)
             implementation(libs.koin.compose)

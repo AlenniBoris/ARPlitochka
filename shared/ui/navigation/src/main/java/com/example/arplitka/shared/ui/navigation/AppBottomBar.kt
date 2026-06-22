@@ -31,9 +31,9 @@ fun AppBottomBar(
 ) {
     Row(
         modifier = modifier
+            .navigationBarsPadding()
             .fillMaxWidth()
             .background(Color.White)
-            .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceAround
