@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.arplitka.mock.core.AssetReader
 import com.example.arplitka.shared.tiles.domain.model.Tile
+import com.example.arplitka.shared.tiles.domain.validation.atomic.url.isRemoteImageUrl
 
 @Composable
 internal expect fun TilePreviewImage(
@@ -112,7 +113,7 @@ private fun TileCard(tile: Tile) {
 
 internal fun resolveTilePreviewUrl(rawUrl: String): String {
     if (rawUrl.isBlank()) return rawUrl
-    if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) return rawUrl
+    if (isRemoteImageUrl(rawUrl)) return rawUrl
 
     val cleanPath = rawUrl.removePrefix("file:///android_asset/").removePrefix("/")
     return AssetReader.resolveAssetPath(cleanPath) ?: rawUrl
