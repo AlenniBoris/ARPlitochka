@@ -1,4 +1,4 @@
-package com.example.arplitka.shared.ui.kit
+package com.example.arplitka.shared.ui.kit.ar
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.arplitka.shared.core.domain.model.CustomResultModelDomain
 import com.example.arplitka.shared.tiles.domain.usecase.GetTilesUseCase
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,12 +18,15 @@ open class CatalogViewModel(
     private val _state = MutableStateFlow<CatalogUiState>(CatalogUiState.Loading)
     val state: StateFlow<CatalogUiState> = _state.asStateFlow()
 
+    private var _loadingJob: Job? = null
+
     init {
         loadTiles()
     }
 
     fun loadTiles() {
-        viewModelScope.launch {
+        _loadingJob?.cancel()
+        _loadingJob = viewModelScope.launch {
             _state.update { CatalogUiState.Loading }
             
             when (val result = getTilesUseCase()) {

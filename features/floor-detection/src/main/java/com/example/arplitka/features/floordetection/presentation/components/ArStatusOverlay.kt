@@ -8,7 +8,7 @@ import androidx.compose.ui.unit.dp
 import com.example.arplitka.shared.ar.contracts.model.ArInstruction
 import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.features.floordetection.presentation.utils.mappers.toText
-import com.example.arplitka.shared.ui.kit.StatusPanel
+import com.example.arplitka.shared.ui.kit.ar.StatusPanel
 
 @Composable
 fun ArStatusOverlay(
