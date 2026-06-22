@@ -22,6 +22,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":shared:core"))
+            implementation(project(":shared:validation"))
             implementation(project(":network:core"))
             implementation(libs.koin.core)
             implementation(libs.kotlinx.serialization.json)
