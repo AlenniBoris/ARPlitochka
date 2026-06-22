@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.arplitka.features.catalog.presentation.viewmodel.CatalogViewModel
+import com.example.arplitka.features.catalog.presentation.viewmodel.CatalogUiState
 import com.example.arplitka.shared.ui.core.mapper.toUiString
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -22,30 +23,30 @@ fun CatalogScreen(
     onOpenAr: () -> Unit,
     viewModel: CatalogViewModel = koinViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val state by viewModel.state.collectAsState()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
     ) {
-        when {
-            uiState.isLoading -> {
+        when (val currentState = state) {
+            is CatalogUiState.Loading -> {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center),
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            uiState.error != null -> {
+            is CatalogUiState.Error -> {
                 ErrorState(
-                    message = uiState.error!!.toUiString(),
+                    message = currentState.exception.toUiString(),
                     onRetry = { viewModel.loadTiles() },
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
-            else -> {
+            is CatalogUiState.Content -> {
                 CatalogContent(
-                    tiles = uiState.tiles,
+                    tiles = currentState.tiles,
                     onOpenAr = onOpenAr
                 )
             }

@@ -14,8 +14,8 @@ open class CatalogViewModel(
     private val getTilesUseCase: GetTilesUseCase
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(CatalogUiState())
-    val uiState: StateFlow<CatalogUiState> = _uiState.asStateFlow()
+    private val _state = MutableStateFlow<CatalogUiState>(CatalogUiState.Loading)
+    val state: StateFlow<CatalogUiState> = _state.asStateFlow()
 
     init {
         loadTiles()
@@ -23,20 +23,14 @@ open class CatalogViewModel(
 
     fun loadTiles() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _state.update { CatalogUiState.Loading }
             
             when (val result = getTilesUseCase()) {
                 is CustomResultModelDomain.Success -> {
-                    _uiState.update { it.copy(
-                        isLoading = false,
-                        tiles = result.result
-                    ) }
+                    _state.update { CatalogUiState.Content(tiles = result.result) }
                 }
                 is CustomResultModelDomain.Error -> {
-                    _uiState.update { it.copy(
-                        isLoading = false,
-                        error = result.exception
-                    ) }
+                    _state.update { CatalogUiState.Error(exception = result.exception) }
                 }
             }
         }
