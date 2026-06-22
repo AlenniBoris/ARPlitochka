@@ -6,8 +6,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,13 +39,13 @@ fun AppProgressScreen(
         )
     )
 
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         Icon(
             modifier = Modifier
-                .align(Alignment.Center)
                 .graphicsLayer(rotationZ = rotationAngle),
             painter = painterResource(Res.drawable.ic_loading_tile),
             contentDescription = stringResource(Res.string.progress_bar_description),

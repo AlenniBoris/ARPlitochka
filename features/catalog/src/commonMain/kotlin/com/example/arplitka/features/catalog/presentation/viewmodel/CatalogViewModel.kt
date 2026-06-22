@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.arplitka.shared.core.domain.model.CustomResultModelDomain
 import com.example.arplitka.shared.tiles.domain.usecase.GetTilesUseCase
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,13 +30,22 @@ open class CatalogViewModel(
         _loadingJob = viewModelScope.launch {
             _state.update { CatalogUiState.Loading }
             
-            when (val result = getTilesUseCase()) {
-                is CustomResultModelDomain.Success -> {
-                    _state.update { CatalogUiState.Content(tiles = result.result) }
-                }
-                is CustomResultModelDomain.Error -> {
-                    _state.update { CatalogUiState.Error(exception = result.exception) }
-                }
+            fetchTiles()
+        }
+    }
+
+    fun refreshTiles() {
+        loadTiles()
+    }
+
+    private suspend fun fetchTiles() {
+        delay(3_000L)
+        when (val result = getTilesUseCase()) {
+            is CustomResultModelDomain.Success -> {
+                _state.update { CatalogUiState.Content(tiles = result.result) }
+            }
+            is CustomResultModelDomain.Error -> {
+                _state.update { CatalogUiState.Error(exception = result.exception) }
             }
         }
     }
