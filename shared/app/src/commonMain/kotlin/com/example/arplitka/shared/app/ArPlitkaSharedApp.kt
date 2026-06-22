@@ -1,14 +1,11 @@
 package com.example.arplitka.shared.app
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,6 +24,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.arplitka.shared.app.navigation.SharedRoute
+import com.example.arplitka.shared.ui.navigation.AR_ROUTE
+import com.example.arplitka.shared.ui.navigation.AppBottomBar
+import com.example.arplitka.shared.ui.navigation.BottomBarValues
+import com.example.arplitka.shared.ui.navigation.CATALOG_ROUTE
+import com.example.arplitka.shared.ui.navigation.toModelUi
 import kotlinx.coroutines.delay
 
 @Composable
@@ -42,10 +44,19 @@ fun ArPlitkaSharedApp(
         Scaffold(
             bottomBar = {
                 if (currentRoute == SharedRoute.Catalog) {
-                    SharedBottomBar(
-                        currentRoute = currentRoute,
-                        onCatalogClick = { currentRoute = SharedRoute.Catalog },
-                        onArClick = { currentRoute = SharedRoute.Ar }
+                    val items = remember {
+                        listOf(
+                            BottomBarValues.Catalog.toModelUi(onClick = { currentRoute = SharedRoute.Catalog }),
+                            BottomBarValues.AR.toModelUi(onClick = { currentRoute = SharedRoute.Ar })
+                        )
+                    }
+                    AppBottomBar(
+                        items = items,
+                        currentRoute = when (currentRoute) {
+                            SharedRoute.Catalog -> CATALOG_ROUTE
+                            SharedRoute.Ar -> AR_ROUTE
+                            else -> null
+                        }
                     )
                 }
             }
@@ -71,54 +82,6 @@ fun ArPlitkaSharedApp(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SharedBottomBar(
-    currentRoute: SharedRoute,
-    onCatalogClick: () -> Unit,
-    onArClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        SharedBottomBarItem(
-            text = "Каталог",
-            isSelected = currentRoute == SharedRoute.Catalog,
-            onClick = onCatalogClick
-        )
-        SharedBottomBarItem(
-            text = "AR",
-            isSelected = currentRoute == SharedRoute.Ar,
-            onClick = onArClick
-        )
-    }
-}
-
-@Composable
-private fun SharedBottomBarItem(
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .background(if (isSelected) Color(0xFFE8F5E9) else Color.Transparent)
-            .padding(horizontal = 24.dp, vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = text,
-            color = if (isSelected) Color(0xFF2E7D32) else Color.Gray,
-            style = MaterialTheme.typography.labelLarge
-        )
     }
 }
 

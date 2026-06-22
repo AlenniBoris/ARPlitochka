@@ -5,4 +5,8 @@
     <string name="exception_serialization">Ошибка обработки данных</string>
     <string name="exception_unknown">Произошла неизвестная ошибка</string>
     <string name="try_again_string">Повторить</string>
+    <string name="price_format">От %1$s/%2$s</string>
+    <string name="unit_m2">м²</string>
+    <string name="unit_piece">ед.</string>
+    <string name="unit_box">уп.</string>
 </resources>
