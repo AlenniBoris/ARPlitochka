@@ -32,6 +32,24 @@
 5. **Импорты**: Избегайте использования полных путей (fully qualified names) в коде тестов. Используйте импорты для упрощения читаемости.
 6. **Обязательность**: Любая новая логика в `domain` или `presentation` (ViewModel) должна сопровождаться Unit-тестами. Новые экраны должны иметь хотя бы один базовый UI-тест.
 
+### Shared AR domain (`:shared:ar:domain`)
+
+KMP unit-тесты в `shared/ar/domain/src/commonTest` — общий контракт для iOS и будущей миграции Android:
+
+| Тест | Что проверяет |
+|------|----------------|
+| `FloorArControllerTileTest` | `ToggleTileVisibility`, `RotateTexture`, `ChangeTileType`, reset tile fields |
+| `FloorContourUiStateTileVisibilityTest` | `showContourPoints` / `showContourLines` / `showSectionFill` в tile mode |
+| `FloorContourUiPublishTest` | UI publish snapshot при смене tile-полей |
+
+Запуск (Windows / CI):
+
+```bat
+.\gradlew.bat :shared:ar:domain:testDebugUnitTest
+```
+
+Документация по плитке на iOS: [ios-tile-placement.md](./ios-tile-placement.md).
+
 ## Примеры
 
 ### Unit-тест ViewModel

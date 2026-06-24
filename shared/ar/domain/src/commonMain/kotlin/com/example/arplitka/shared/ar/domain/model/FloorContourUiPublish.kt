@@ -18,6 +18,9 @@ internal data class FloorContourUiPublishSnapshot(
     val placedPointCount: Int,
     val isPolygonClosed: Boolean,
     val isFinalized: Boolean,
+    val isTileVisible: Boolean,
+    val selectedTileType: TileType,
+    val textureRotation: TextureRotation,
     val snappedPointIndex: Int?
 )
 
@@ -33,5 +36,8 @@ internal fun FloorContourUiState.toUiPublishSnapshot(): FloorContourUiPublishSna
         placedPointCount = placedPoints.size,
         isPolygonClosed = isPolygonClosed,
         isFinalized = isFinalized,
+        isTileVisible = isTileVisible,
+        selectedTileType = selectedTileType,
+        textureRotation = textureRotation,
         snappedPointIndex = snappedPointIndex
     )

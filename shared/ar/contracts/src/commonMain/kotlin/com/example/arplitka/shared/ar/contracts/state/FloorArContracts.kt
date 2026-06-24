@@ -21,6 +21,8 @@ sealed interface FloorArEvent {
     data object UndoPoint : FloorArEvent
     data object Reset : FloorArEvent
     data object FinalizeArea : FloorArEvent
+    data object ToggleTileVisibility : FloorArEvent
+    data object ChangeTileType : FloorArEvent
     data object RotateTexture : FloorArEvent
     data class PlatformPointUpdated(val point: ArPoint3D?) : FloorArEvent
 }

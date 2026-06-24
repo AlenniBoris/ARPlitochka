@@ -30,4 +30,15 @@ class FloorContourUiPublishTest {
             detected.toUiPublishSnapshot()
         )
     }
+
+    @Test
+    fun publishSnapshot_changesWhenTileFieldsChange() {
+        val base = FloorContourUiState(
+            isFinalized = true,
+            isPolygonClosed = true,
+            isTileVisible = false
+        )
+        val tiled = base.copy(isTileVisible = true, textureRotation = TextureRotation.DEGREES_90)
+        assertNotEquals(base.toUiPublishSnapshot(), tiled.toUiPublishSnapshot())
+    }
 }

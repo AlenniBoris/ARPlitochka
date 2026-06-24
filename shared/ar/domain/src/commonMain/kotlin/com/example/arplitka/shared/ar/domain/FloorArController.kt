@@ -12,6 +12,8 @@ import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
 import com.example.arplitka.shared.ar.domain.model.FloorFrameSnapshot
 import com.example.arplitka.shared.ar.domain.model.PlacedContourPoint
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiPublishSnapshot
+import com.example.arplitka.shared.ar.domain.model.TextureRotation
+import com.example.arplitka.shared.ar.domain.model.TileType
 import com.example.arplitka.shared.ar.domain.model.toUiPublishSnapshot
 
 class FloorArController(
@@ -21,6 +23,11 @@ class FloorArController(
     private var lastUiPublishSnapshot: FloorContourUiPublishSnapshot? = null
 
     fun currentState(): FloorContourUiState = state
+
+    internal fun setStateForTesting(state: FloorContourUiState) {
+        this.state = state
+        publish()
+    }
 
     fun onFrame(
         snapshot: FloorFrameSnapshot,
@@ -41,7 +48,9 @@ class FloorArController(
             FloorArEvent.UndoPoint -> effects += handleUndoPoint()
             FloorArEvent.Reset -> effects += handleReset()
             FloorArEvent.FinalizeArea -> handleFinalize()
-            FloorArEvent.RotateTexture -> Unit
+            FloorArEvent.ToggleTileVisibility -> handleToggleTileVisibility()
+            FloorArEvent.ChangeTileType -> handleChangeTileType()
+            FloorArEvent.RotateTexture -> handleRotateTexture()
             is FloorArEvent.PlatformPointUpdated -> Unit
         }
         publish()
@@ -140,10 +149,28 @@ class FloorArController(
         if (state.isPolygonClosed) {
             state = state.copy(
                 isFinalized = true,
+                isTileVisible = false,
                 trackingStatus = ArTrackingStatus.FINALIZED,
                 instruction = ArInstruction.EMPTY
             )
         }
+    }
+
+    private fun handleToggleTileVisibility() {
+        if (!state.isFinalized || !state.isPolygonClosed) return
+        state = state.copy(isTileVisible = !state.isTileVisible)
+    }
+
+    private fun handleChangeTileType() {
+        if (!state.isTileVisible) return
+        val nextOrdinal = (state.selectedTileType.ordinal + 1) % TileType.entries.size
+        state = state.copy(selectedTileType = TileType.entries[nextOrdinal])
+    }
+
+    private fun handleRotateTexture() {
+        if (!state.isTileVisible) return
+        val nextOrdinal = (state.textureRotation.ordinal + 1) % TextureRotation.entries.size
+        state = state.copy(textureRotation = TextureRotation.entries[nextOrdinal])
     }
 
     private fun publish() {
