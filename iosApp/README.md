@@ -1,43 +1,47 @@
 # iosApp
 
-iOS application shell for AR Plitka.
+Оболочка iOS-приложения для AR Plitka.
 
-The Kotlin module builds a static framework named `ARPlitkaIos` on macOS and exposes:
+Kotlin-модуль собирает статический фреймворк с именем `ARPlitkaIos` на macOS и предоставляет:
 
 ```kotlin
 fun MainViewController(): UIViewController
 ```
 
-The Swift files in `iosApp/iosApp` show the expected SwiftUI entry point that hosts the Compose Multiplatform root.
+Swift-файлы в `iosApp/iosApp` представляют собой точку входа SwiftUI, которая хостит корень Compose Multiplatform.
 
-On Windows this module uses a JVM metadata host target so Gradle can configure and validate common code without requiring Xcode.
+На Windows этот модуль использует целевой хост метаданных JVM, чтобы Gradle мог настраивать и проверять общий код без необходимости использования Xcode.
 
-## iOS AR documentation
+## Документация по iOS AR
 
-- [Point stability & anchor corrections](../docs/ios-ar-point-stability.md)
-- [Placement mode](../docs/IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md)
-- [Surface strategy](../docs/IOS_AR_SURFACE_STRATEGY.md)
+- [Стабильность точек и коррекция анкоров](../docs/ios-ar-point-stability.md)
+- [Режим размещения](../docs/IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md)
+- [Стратегия поверхностей](../docs/IOS_AR_SURFACE_STRATEGY.md)
 
-## Mac verification
+## Процесс разработки на Mac
 
-Run on macOS with Xcode installed:
+### Предварительные требования
+- macOS с установленным Xcode.
+- Установленная Android Studio (предоставляет необходимый JDK).
 
-```shell
-./gradlew :iosApp:linkDebugFrameworkIosArm64
-```
+### Сборка и запуск
+Мы используем официальную интеграцию Compose Multiplatform. Вам не нужно собирать фреймворк вручную из терминала.
 
-For the iOS Simulator:
+1. Откройте `iosApp/xcode/ARPlitkaIos/ARPlitkaIos.xcodeproj` в Xcode.
+2. Убедитесь, что путь к JDK указан правильно в фазе сборки **Compile Kotlin Framework** (по умолчанию используется JBR из Android Studio).
+3. Выберите цель (симулятор или устройство).
+4. Нажмите **Run** (Cmd + R).
 
-```shell
-./gradlew :iosApp:linkDebugFrameworkIosSimulatorArm64
-```
+Xcode автоматически:
+- Запустит Gradle для сборки фреймворка через `:iosApp:embedAndSignAppleFrameworkForXcode`.
+- Упакует ресурсы Compose Multiplatform (файлы `.cvr`, изображения) в бандл приложения.
+- Подпишет и запустит приложение.
 
-Then open `iosApp/xcode/ARPlitkaIos/ARPlitkaIos.xcodeproj` in Xcode and Run.
+### Решение проблем
+- **Отсутствующие ресурсы или старый код**: Выполните **Product -> Clean Build Folder** (Cmd + Shift + K) в Xcode и запустите снова.
+- **Ошибки Java**: Проверьте путь `JAVA_HOME` в фазе сборки Xcode "Compile Kotlin Framework". Он должен указывать на валидный JDK (например, `/Applications/Android Studio.app/Contents/jbr/Contents/Home`).
 
-The Xcode target embeds the framework from `iosApp/build/bin/iosArm64/debugFramework/` and copies Compose Multiplatform resources from `ComposeBundleResources/` into the app bundle (`compose-resources/composeResources/...`). This fixes missing assets such as `ic_loading_tile.png` from `:shared:ui:kit` without running Gradle inside Xcode.
-
-Additional checks:
-
+### Ручные проверки (опционально)
 ```shell
 ./gradlew :shared:app:iosSimulatorArm64Test
 ./gradlew :shared:ar:contracts:iosSimulatorArm64Test

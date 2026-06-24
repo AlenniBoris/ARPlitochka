@@ -30,6 +30,13 @@ import com.example.arplitka.mock.core.AssetReader
 import com.example.arplitka.shared.tiles.domain.model.Tile
 import com.example.arplitka.shared.tiles.domain.model.TileUnit
 import com.example.arplitka.shared.tiles.domain.validation.atomic.url.isRemoteImageUrl
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
+import arplitka.shared.ui.core.generated.resources.Res as SharedRes
+import arplitka.shared.ui.core.generated.resources.price_format
+import arplitka.shared.ui.core.generated.resources.unit_m2
+import arplitka.shared.ui.core.generated.resources.unit_piece
+import arplitka.shared.ui.core.generated.resources.unit_box
 
 @Composable
 internal expect fun TilePreviewImage(
@@ -98,7 +105,11 @@ private fun TileCard(
         )
 
         Text(
-            text = "From ${formatPrice(tile.basePrice)}/${tile.unit.toDisplayString()}",
+            text = stringResource(
+                SharedRes.string.price_format,
+                formatPrice(tile.basePrice),
+                stringResource(tile.unit.toStringResource())
+            ),
             modifier = Modifier.padding(top = 20.dp),
             style = MaterialTheme.typography.bodyMedium.copy(
                 fontWeight = FontWeight.Bold,
@@ -117,10 +128,10 @@ private fun formatPrice(price: Double): String {
     }
 }
 
-private fun TileUnit.toDisplayString(): String = when (this) {
-    TileUnit.M2 -> "m²"
-    TileUnit.PIECE -> "pc."
-    TileUnit.BOX -> "box"
+private fun TileUnit.toStringResource(): StringResource = when (this) {
+    TileUnit.M2 -> SharedRes.string.unit_m2
+    TileUnit.PIECE -> SharedRes.string.unit_piece
+    TileUnit.BOX -> SharedRes.string.unit_box
 }
 
 internal fun resolveTilePreviewUrl(rawUrl: String): String {

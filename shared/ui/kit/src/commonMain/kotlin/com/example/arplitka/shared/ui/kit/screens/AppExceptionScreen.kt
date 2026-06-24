@@ -16,6 +16,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.arplitka.shared.ui.core.model.ExceptionModelUi
+import org.jetbrains.compose.resources.stringResource
+import arplitka.shared.ui.core.generated.resources.Res
+import arplitka.shared.ui.core.generated.resources.try_again_string
 
 @Composable
 fun AppExceptionScreen(
@@ -32,7 +35,7 @@ fun AppExceptionScreen(
             modifier = Modifier
                 .padding(16.dp)
                 .clickable { onTryAgain() },
-            text = exception.message,
+            text = stringResource(exception.exceptionStringResource),
             style = MaterialTheme.typography.bodyLarge.copy(
                 color = Color.Black,
                 textAlign = TextAlign.Center
@@ -43,7 +46,7 @@ fun AppExceptionScreen(
             modifier = Modifier
                 .padding(16.dp)
                 .clickable { onTryAgain() },
-            text = "Try again",
+            text = stringResource(Res.string.try_again_string),
             style = MaterialTheme.typography.bodyMedium.copy(
                 color = Color.Gray,
                 textAlign = TextAlign.Center
