@@ -151,6 +151,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = D0E3A0E72FC842FA0053FD30 /* Build configuration list for PBXNativeTarget "ARPlitkaIos" */;
 			buildPhases = (
+				D0E3A1602FC872000053FD30 /* Compile Kotlin Framework */,
 				D0E3A0BF2FC842F80053FD30 /* Sources */,
 				D0E3A0C02FC842F80053FD30 /* Frameworks */,
 				D0E3A0C12FC842F80053FD30 /* Resources */,
@@ -287,6 +288,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		D0E3A1602FC872000053FD30 /* Compile Kotlin Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#!/bin/sh\nset -e\n\nexport JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\"\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\n\nif [ ! -x \"$JAVA_HOME/bin/java\" ]; then\n  echo \"error: Java not found at $JAVA_HOME\"\n  echo \"Update JAVA_HOME in the Xcode Compile Kotlin Framework build phase.\"\n  exit 1\nfi\n\necho \"JAVA_HOME=$JAVA_HOME\"\n\"$JAVA_HOME/bin/java\" -version\n\ncd \"$SRCROOT/../../..\"\n./gradlew :iosApp:embedAndSignAppleFrameworkForXcode\n";
+		};
 		D0E3A1502FC871000053FD30 /* Copy Compose Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
