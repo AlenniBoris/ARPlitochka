@@ -29,11 +29,13 @@
 
 ## Слой Domain
 - Содержит бизнес-логику, не зависящую от платформы.
-- Модели данных (Data Classes) и интерфейсы репозиториев.
+- Модели данных (Data Classes) и интерфейсы репозиториев. Подробнее в [docs/tiles/DATA_MODELS.md](tiles/DATA_MODELS.md).
+- Валидация данных (атомарная и агрегатная). Подробнее в [docs/VALIDATION_GUIDE.md](VALIDATION_GUIDE.md).
 
 ## Слой Data
 - Реализация интерфейсов из Domain.
 - Работа с ARCore, файловой системой или сетью.
+- Сетевой слой и маппинг DTO. Подробнее в [docs/tiles/CLEAN_ARCHITECTURE_GUIDE.md](tiles/CLEAN_ARCHITECTURE_GUIDE.md).
 
 ## Тестирование
 - Каждая новая функциональность должна покрываться Unit-тестами.

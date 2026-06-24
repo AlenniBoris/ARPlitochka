@@ -1,10 +1,10 @@
 # :mock:tiles
 
-KMP-ready mock module for tile catalog responses and assets.
+Общий модуль моков для ответов каталога плитки и ассетов, совместимый с KMP.
 
-Responsibilities:
-- Tile mock routes, for example `get.tiles.all`.
-- Tile mock JSON assets.
-- Tile local image assets used by mock responses.
+## Обязанности:
+- Маршруты моков плитки, например `get.tiles.all`.
+- JSON-ассеты моков плитки.
+- Локальные изображения плитки, используемые в ответах моков.
 
-Note: Kotlin extension properties cannot have backing fields, so extension-style access such as `JsonAsset.tiles` is implemented with `get() = TileAssets`.
+Примечание: Свойства расширения Kotlin не могут иметь полей хранения (backing fields), поэтому доступ в стиле расширений, такой как `JsonAsset.tiles`, реализован через `get() = TileAssets`.

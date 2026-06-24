@@ -1,10 +1,10 @@
 # :shared:ar:contracts
 
-KMP-ready contracts for the AR floor selection scenario.
+Общие контракты для сценария выбора пола в AR, совместимые с KMP.
 
-This module contains shared state, events, commands and geometry normalization used by Android ARCore, iOS ARKit and future MR implementations.
+Этот модуль содержит общее состояние, события, команды и логику нормализации геометрии, которые используются в Android (ARCore), iOS (ARKit) и будущих реализациях MR.
 
-Rules:
-- No ARCore, ARKit or platform rendering dependencies in `commonMain`.
-- Platform modules implement detection, anchors and rendering.
-- Shared contracts describe behavior and data flow, not engine-specific APIs.
+## Правила:
+- В `commonMain` отсутствуют зависимости от ARCore, ARKit или платформенного рендеринга.
+- Платформенные модули реализуют обнаружение, якоря (anchors) и рендеринг.
+- Общие контракты описывают поведение и поток данных, а не специфичные для движка API.

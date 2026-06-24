@@ -1,10 +1,10 @@
 # :network:core
 
-KMP-ready technical network foundation.
+Общий технический сетевой фундамент, совместимый с KMP.
 
-This module contains only common network primitives: result wrappers, errors, configuration and future Ktor/Ktorfit factories.
+Этот модуль содержит только общие сетевые примитивы: обертки результатов, ошибки, конфигурацию и будущие фабрики Ktor/Ktorfit.
 
-Rules:
-- No business endpoints.
-- No Android-only dependencies in `commonMain`.
-- Domain-specific APIs live in feature modules or shared business modules such as `:shared:tiles`.
+## Правила:
+- Никаких бизнес-эндпоинтов.
+- Никаких специфичных для Android зависимостей в `commonMain`.
+- Специфичные для домена API располагаются в модулях фич или общих бизнес-модулях, таких как `:shared:tiles`.

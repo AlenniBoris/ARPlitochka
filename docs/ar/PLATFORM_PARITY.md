@@ -1,52 +1,52 @@
-# Паритет AR-Платформ
+# Паритет AR-платформ
 
 Этот документ описывает, как сравнивать и выравнивать AR-поведение Android и iOS.
 
-## Референсная Политика
+## Референсная политика
 
-Android сейчас является продуктовым референсом для полного AR-flow:
+Android сейчас является продуктовым референсом для полного AR-процесса (flow):
 
 - Поиск поверхностей.
 - Постановка точек.
 - Замыкание контура.
 - Подтверждение / финализация.
 - Заливка зоны.
-- Toggle плитки.
+- Переключение (toggle) плитки.
 - Смена типа плитки.
 - Поворот текстуры.
-- Reset / rescan.
+- Сброс (reset) / повторное сканирование (rescan).
 
 iOS должен совпадать с Android по пользовательскому поведению, если нет платформенного ограничения или явного продуктового решения о расхождении.
 
-## Shared И Platform-Specific
+## Общий и платформенный код (Shared и Platform-Specific)
 
-Shared KMP code должен владеть:
+Общий KMP-код должен владеть:
 
-- AR UI state contracts.
-- Events и reducers/controllers.
-- Tile state.
+- Контрактами состояния AR UI (AR UI state contracts).
+- Событиями (events) и редьюсерами/контроллерами (reducers/controllers).
+- Состоянием плитки (tile state).
 - Чистой геометрической математикой там, где это возможно.
 - Правилами видимости фаз.
 
-Platform-specific code должен владеть:
+Платформенный код должен владеть:
 
-- Конфигурацией ARCore/ARKit session.
-- Native hit testing / raycasting.
-- Anchors и world transforms.
-- Rendering primitives и native bridge code.
+- Конфигурацией сессий ARCore/ARKit.
+- Нативным тестированием попаданий (hit testing / raycasting).
+- Якорями (anchors) и мировыми трансформациями (world transforms).
+- Примитивами рендеринга и кодом нативного моста (native bridge code).
 - Политикой производительности платформы.
 
-## Текущие Различия
+## Текущие различия
 
 | Область | Android | iOS |
 |---------|---------|-----|
-| Surface visualization | Нативный SceneView/ARCore `planeRenderer` | Кастомные SceneKit polygon grid overlays |
-| Placement hit | ARCore `Frame.hitTest` + `Plane.isPoseInPolygon` | ARKit raycast / hit-test bridge |
+| Визуализация поверхности | Нативный SceneView/ARCore `planeRenderer` | Кастомные SceneKit polygon grid overlays |
+| Попадание при размещении | ARCore `Frame.hitTest` + `Plane.isPoseInPolygon` | ARKit raycast / hit-test bridge |
 | Стабильность контура | ARCore anchors / Android state | Root-anchor store + correction policy |
 | Заливка плиткой | Shared AlignedSectionGeometry + Unlit | Shared AlignedSectionGeometry + Unlit |
-| UI shell | Android Compose | Compose Multiplatform + UIKitView |
+| UI оболочка | Android Compose | Compose Multiplatform + UIKitView |
 
-## Правила Принятия Решений
+## Правила принятия решений
 
 Когда поведение отличается:
 
@@ -54,21 +54,21 @@ Platform-specific code должен владеть:
 2. Если да, iOS должен соответствовать Android.
 3. Если Android-поведение явно неверное, нужно обновить продуктово-инженерное решение и исправить обе платформы.
 4. Не патчить одну платформу визуальными константами "чтобы было похоже", если такое правило не задокументировано.
-5. Для геометрии и state transitions предпочитать shared pure math.
+5. Для геометрии и переходов состояний (state transitions) предпочитать общую чистую математику (shared pure math).
 
-## Обязательные Данные Для AR-Изменений
+## Обязательные данные для AR-изменений
 
-Для любого нетривиального AR parity change нужно документировать:
+Для любого нетривиального изменения паритета AR нужно документировать:
 
 - Затронутые платформы.
 - Референсное поведение.
 - Скриншоты или наблюдения с устройства.
-- Релевантные debug fields.
-- Code paths.
+- Релевантные поля отладки (debug fields).
+- Пути к коду (code paths).
 - Команды сборки/тестов.
-- Оставшийся device QA.
+- Оставшийся контроль качества на устройствах (device QA).
 
-## Связанные Документы
+## Связанные документы
 
 - [PLATFORM_SURFACE_DETECTION.md](./PLATFORM_SURFACE_DETECTION.md)
 - [PLATFORM_CONTOUR_STABILITY.md](./PLATFORM_CONTOUR_STABILITY.md)

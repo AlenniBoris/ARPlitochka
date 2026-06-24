@@ -6,15 +6,15 @@
 Проект построен на принципах **Clean Architecture** с использованием многомодульной структуры. Подробности см. в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Модули
-- `:app` — основной модуль приложения.
-- `:iosApp` — iOS entry point и Compose Multiplatform host.
+- `:app` — основной модуль Android-приложения.
+- `:iosApp` — точка входа iOS и хост для Compose Multiplatform.
 - `:features:floor-detection` — логика обнаружения пола и рендеринга плитки.
 - `:features:catalog` — каталог доступной плитки.
-- `:network:core` — KMP-ready сетевой фундамент.
-- `:mock:*` — KMP-ready mock-инфраструктура и mock assets для debug/UI-тестов.
-- `:shared:app` — общий Compose Multiplatform app shell.
-- `:shared:ar:contracts` — общие AR state/event/geometry contracts.
-- `:shared:tiles` — общий KMP-ready модуль плитки.
+- `:network:core` — общий сетевой фундамент, совместимый с KMP.
+- `:mock:*` — инфраструктура моков и ассеты для разработки и UI-тестов.
+- `:shared:app` — общая оболочка приложения на Compose Multiplatform.
+- `:shared:ar:contracts` — общие контракты состояния, событий и геометрии AR.
+- `:shared:tiles` — общий бизнес-модуль плитки.
 - `:shared:ui:*` — общие UI-компоненты и навигация.
 - `:shared:ar:core` — базовые утилиты AR.
 
@@ -22,11 +22,11 @@
 
 ## Технологии
 - Kotlin, Coroutines, Flow
-- Kotlin Multiplatform foundation для shared/domain/network/mock слоев
-- Compose Multiplatform для общего app shell
+- Kotlin Multiplatform для общих слоев (domain/data/network/mock)
+- Compose Multiplatform для общей оболочки приложения
 - Jetpack Compose
-- ARCore, SceneView, ARKit interop для iOS
-- Hilt (Dependency Injection)
+- ARCore, SceneView, ARKit (через native interop для iOS)
+- Koin (Dependency Injection)
 - Navigation Compose
 
 ## Документация
@@ -35,9 +35,11 @@
 - [Навигация](docs/NAVIGATION.md)
 - [Тестирование](docs/TESTING.md)
 - [Backend и моки](docs/BACKEND_MOCKING_PLAN.md)
+- [Валидация данных](docs/VALIDATION_GUIDE.md)
 
-### iOS AR
-- [Surface strategy](docs/IOS_AR_SURFACE_STRATEGY.md) — поиск и отображение поверхностей
-- [Surface detection](docs/SURFACE_DETECTION.md) — константы, debug panel, чеклисты
-- [Placement mode](docs/IOS_AR_CONTINUOUS_FLOOR_PLACEMENT_PLAN.md) — continuous floor + explore patch
-- [Point stability](docs/ios-ar-point-stability.md) — anchor-коррекции, кнопка «Выровнять»
+### Дополненная реальность (AR)
+- [Поиск поверхностей](docs/ar/PLATFORM_SURFACE_DETECTION.md) — стратегии обнаружения пола.
+- [Стабильность контура](docs/ar/PLATFORM_CONTOUR_STABILITY.md) — якоря, коррекции и выравнивание.
+- [Заливка плиткой](docs/ar/PLATFORM_TILE_FILLING.md) — алгоритмы наложения текстур.
+- [Паритет платформ](docs/ar/PLATFORM_PARITY.md) — сравнение Android и iOS реализаций.
+- [Ограничения](docs/ar/LIMITATIONS_LARGE_ZONES.md) — особенности работы на больших площадях.

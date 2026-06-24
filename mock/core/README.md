@@ -1,11 +1,11 @@
 # :mock:core
 
-KMP-ready mock foundation for debug development and UI tests.
+Общий фундамент системы моков для разработки и UI-тестов, совместимый с KMP.
 
-Responsibilities:
-- Root `JsonAsset` marker.
-- Mock route and response models.
+## Обязанности:
+- Корневой маркер `JsonAsset`.
+- Модели маршрутов и ответов моков.
 - `MockResponseRegistry`.
-- Core DSL for registering mock responses.
+- Базовый DSL для регистрации ответов моков.
 
-Domain-specific mock routes and assets must live in modules such as `:mock:tiles`.
+Специфичные для домена маршруты и ассеты моков должны располагаться в соответствующих модулях, таких как `:mock:tiles`.

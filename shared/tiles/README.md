@@ -1,14 +1,14 @@
 # :shared:tiles
 
-KMP-ready shared business module for tile catalog data.
+Общий бизнес-модуль для данных каталога плитки, совместимый с KMP.
 
-Responsibilities:
-- Tile domain models.
-- Tile DTO contracts.
+## Обязанности:
+- Доменные модели плитки.
+- Контракты DTO для плитки.
 - `TilesApi`, `TilesRepository`, `GetTilesUseCase`.
-- DTO-to-domain mapping.
+- Маппинг DTO в доменные модели.
 
-Rules:
-- Keep reusable tile logic here only when it is shared between multiple features.
-- Feature-specific tile APIs should stay inside the owning feature module.
-- Common code must not depend on Android-only APIs.
+## Правила:
+- Храните здесь переиспользуемую логику плитки только в том случае, если она используется в нескольких фичах.
+- Специфичные для фичи API плитки должны оставаться внутри соответствующего модуля фичи.
+- Общий код не должен зависеть от специфичных для Android API.

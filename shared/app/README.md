@@ -1,14 +1,14 @@
 # :shared:app
 
-Compose Multiplatform app layer shared by Android and iOS.
+Общий слой приложения на Compose Multiplatform, используемый в Android и iOS.
 
-Responsibilities:
-- Common root composable.
-- Common catalog UI shell.
-- Navigation between catalog, transition screen and platform AR slot.
-- Integration with `:shared:ui:navigation` for a unified Bottom Bar.
-- Common UI state that does not depend on Android-only APIs.
+## Обязанности:
+- Общий корневой Composable-компонент.
+- Общая оболочка UI каталога.
+- Навигация между каталогом, экраном перехода и платформенным AR-слотом.
+- Интеграция с `:shared:ui:navigation` для унифицированного Bottom Bar.
+- Общее состояние UI, не зависящее от специфичных для Android API.
 
-Platform AR implementations and Catalog feature are injected into the shared app through `arContent` and `catalogContent` slots.
+Платформенные реализации AR и функционал каталога внедряются в общее приложение через слоты `arContent` и `catalogContent`.
 
-Android and iOS entry points must both start from `ArPlitkaSharedApp`. Platform modules provide specific feature implementations (using Hilt on Android or manual DI on iOS), permissions, ARCore/ARKit checks, but they must not define a separate product navigation flow.
+Точки входа для Android и iOS должны начинаться с `ArPlitkaSharedApp`. Платформенные модули предоставляют конкретные реализации функций (используя Koin), управляют разрешениями и проверками ARCore/ARKit, но они не должны определять отдельный навигационный поток продукта.

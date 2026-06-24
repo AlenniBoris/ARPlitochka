@@ -5,7 +5,7 @@
 ## Типы модулей
 
 ### 1. App Модуль (`:app`)
-Точка входа в приложение. Содержит `MainActivity`, настройку навигации и внедрение зависимостей (Hilt).
+Точка входа в приложение. Содержит `MainActivity`, настройку навигации и инициализацию Koin через `ArPlitkaApplication`.
 
 ### 1.1 iOS App Модуль (`:iosApp`)
 Точка входа для iOS. Собирает framework `ARPlitkaIos`, экспортирует `MainViewController()` для SwiftUI/Xcode и подключает общий Compose Multiplatform root.

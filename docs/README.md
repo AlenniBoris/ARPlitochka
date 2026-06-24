@@ -20,6 +20,10 @@
 | Паритет AR-платформ | [ar/PLATFORM_PARITY.md](./ar/PLATFORM_PARITY.md) |
 | Архитектурные решения | [decisions/](./decisions/) |
 | Backend и mock-слой | [BACKEND_MOCKING_PLAN.md](./BACKEND_MOCKING_PLAN.md) |
+| Чистая архитектура | [tiles/CLEAN_ARCHITECTURE_GUIDE.md](./tiles/CLEAN_ARCHITECTURE_GUIDE.md) |
+| Модели данных | [tiles/DATA_MODELS.md](./tiles/DATA_MODELS.md) |
+| Система мокирования | [tiles/MOCKING_STRATEGY.md](./tiles/MOCKING_STRATEGY.md) |
+| Валидация данных | [VALIDATION_GUIDE.md](./VALIDATION_GUIDE.md) |
 
 ## Исторические Документы И Расследования
 

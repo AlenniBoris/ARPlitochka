@@ -1,4 +1,4 @@
-# Module `:features:catalog`
+# Модуль `:features:catalog`
 
 Feature-модуль для отображения каталога плитки и выбора материалов для AR-примерки.
 

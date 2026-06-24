@@ -6,8 +6,9 @@
 # Filament (used by SceneView)
 -keep class com.google.android.filament.** { *; }
 
-# Hilt/Dagger
--keep class dagger.hilt.android.internal.managers.** { *; }
+# DI (Koin)
+-keep class org.koin.** { *; }
+-dontwarn org.koin.**
 -keep class * extends androidx.lifecycle.ViewModel { *; }
 
 # Keep domain models
