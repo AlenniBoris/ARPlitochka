@@ -1,0 +1,34 @@
+{
+  "id": 4,
+  "name": "Красная елочка",
+  "description": "Классическая укладка елочкой в насыщенном красном цвете.",
+  "manufacturer": "LSR",
+  "category": "paving_stones",
+  "unit": "m2",
+  "material": "Concrete",
+  "surfaceType": "Rough",
+  "basePrice": 110.0,
+  "photos": [
+    "file:///android_asset/mock/tiles/previews/red_herringbone_preview.png"
+  ],
+  "colors": [
+    {
+      "id": 4,
+      "name": "Красный",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/red_herringbone.png",
+      "hexCode": "#B22222"
+    }
+  ],
+  "variants": [
+    {
+      "id": 401,
+      "colorId": 4,
+      "widthMm": 260,
+      "heightMm": 260,
+      "thicknessMm": 60,
+      "price": 110.0,
+      "stockCount": 300,
+      "tilesPerBox": 10
+    }
+  ]
+}

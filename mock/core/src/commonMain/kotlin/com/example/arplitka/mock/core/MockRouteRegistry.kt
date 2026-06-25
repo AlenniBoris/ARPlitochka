@@ -8,9 +8,16 @@ object MockRouteRegistry {
     }
 
     fun findAsset(path: String): JsonAsset? {
-        // Simple exact match for now, can be improved with regex/wildcards
-        return routes[path] ?: routes.entries.find { (route, _) -> 
-            path.endsWith(route) || route.endsWith(path) 
+        val exactMatch = routes[path]
+        if (exactMatch != null) return exactMatch
+
+        return routes.entries.find { (route, _) ->
+            if (route.contains("{id}")) {
+                val regexPattern = route.replace("{id}", "\\d+").replace("/", "\\/")
+                path.matches(Regex(regexPattern))
+            } else {
+                path.endsWith(route) || route.endsWith(path)
+            }
         }?.value
     }
 

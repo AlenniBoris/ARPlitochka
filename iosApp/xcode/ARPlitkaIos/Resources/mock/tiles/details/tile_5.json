@@ -1,0 +1,34 @@
+{
+  "id": 5,
+  "name": "Серая Елка",
+  "description": "Стильная серая плитка для современных городских пространств.",
+  "manufacturer": "LSR",
+  "category": "paving_stones",
+  "unit": "m2",
+  "material": "Concrete",
+  "surfaceType": "Rough",
+  "basePrice": 105.0,
+  "photos": [
+    "file:///android_asset/mock/tiles/previews/grey_herringbone_preview.png"
+  ],
+  "colors": [
+    {
+      "id": 5,
+      "name": "Серый",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/grey_herringbone.png",
+      "hexCode": "#696969"
+    }
+  ],
+  "variants": [
+    {
+      "id": 501,
+      "colorId": 5,
+      "widthMm": 260,
+      "heightMm": 260,
+      "thicknessMm": 60,
+      "price": 105.0,
+      "stockCount": 400,
+      "tilesPerBox": 10
+    }
+  ]
+}

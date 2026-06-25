@@ -44,9 +44,11 @@ import platform.ARKit.ARSCNView
 import platform.CoreGraphics.CGRectMake
 import kotlin.math.roundToInt
 
+import com.example.arplitka.shared.ui.navigation.AppNavigator
+
 @OptIn(ExperimentalForeignApi::class)
 @Composable
-actual fun IosArScreen(onBack: () -> Unit) {
+actual fun IosArScreen(navigator: AppNavigator) {
     val model = remember { IosArScreenModel() }
     var showDebugPanel by remember { mutableStateOf(true) }
     val coordinator = model.coordinator
@@ -290,7 +292,7 @@ actual fun IosArScreen(onBack: () -> Unit) {
         }
 
         ArTopBar(
-            onBack = onBack,
+            onBack = { navigator.back() },
             modifier = Modifier.align(Alignment.TopStart)
         )
     }

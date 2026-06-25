@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.network.ktor3.KtorNetworkFetcherFactory
-import com.example.arplitka.features.catalog.presentation.screen.CatalogScreen
 import com.example.arplitka.iosapp.presentation.screen.IosArScreen
 import com.example.arplitka.shared.app.ArPlitkaSharedApp
 import org.koin.compose.KoinContext
@@ -21,13 +20,8 @@ fun IosApp() {
     
     KoinContext {
         ArPlitkaSharedApp(
-            catalogContent = { onOpenAr ->
-                CatalogScreen(
-                    onOpenAr = onOpenAr
-                )
-            },
-            arContent = { onBack ->
-                IosArScreen(onBack = onBack)
+            arContent = { navigator ->
+                IosArScreen(navigator = navigator)
             }
         )
     }

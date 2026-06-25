@@ -2,15 +2,18 @@ package com.example.arplitka.features.floordetection.presentation.viewmodel
 
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.ViewModel
-import com.example.arplitka.shared.ar.contracts.model.ArInstruction
-import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
+import androidx.lifecycle.viewModelScope
 import com.example.arplitka.features.floordetection.domain.model.ArPoint
 import com.example.arplitka.features.floordetection.domain.model.FloorDetectionState
 import com.example.arplitka.features.floordetection.domain.model.FloorUiState
-import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.features.floordetection.domain.model.TextureRotation
 import com.example.arplitka.features.floordetection.domain.model.TileType
 import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFrameUseCase
+import com.example.arplitka.features.floordetection.presentation.FloorArEvent
+import com.example.arplitka.shared.ar.contracts.model.ArInstruction
+import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
+import com.example.arplitka.shared.core.domain.presentation.SingleFlowEvent
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
@@ -26,6 +29,9 @@ class FloorArViewModel(
     
     private val _uiState = MutableStateFlow(FloorUiState())
     val uiState = _uiState.asStateFlow()
+
+    private val _event = SingleFlowEvent<FloorArEvent>(viewModelScope)
+    val event = _event.flow
     
     fun onSessionUpdated(session: Session, frame: Frame, viewportSize: IntSize) {
         val result = processArFrameUseCase(session, frame, viewportSize)
@@ -285,6 +291,11 @@ class FloorArViewModel(
             state.points.forEach { point -> point.anchor.detach() }
             FloorUiState()
         }
+    }
+
+    fun onBack() {
+        reset()
+        _event.emit(FloorArEvent.NavigateBack)
     }
 
     override fun onCleared() {

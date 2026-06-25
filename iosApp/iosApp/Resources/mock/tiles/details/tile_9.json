@@ -1,0 +1,34 @@
+{
+  "id": 9,
+  "name": "Новый город",
+  "description": "Современное решение для благоустройства городских тротуаров.",
+  "manufacturer": "LSR",
+  "category": "paving_stones",
+  "unit": "m2",
+  "material": "Concrete",
+  "surfaceType": "Smooth",
+  "basePrice": 130.0,
+  "photos": [
+    "file:///android_asset/mock/tiles/previews/new_city_preview.png"
+  ],
+  "colors": [
+    {
+      "id": 9,
+      "name": "Новый город",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/new_city.png",
+      "hexCode": "#A9A9A9"
+    }
+  ],
+  "variants": [
+    {
+      "id": 901,
+      "colorId": 9,
+      "widthMm": 260,
+      "heightMm": 260,
+      "thicknessMm": 60,
+      "price": 130.0,
+      "stockCount": 250,
+      "tilesPerBox": 10
+    }
+  ]
+}

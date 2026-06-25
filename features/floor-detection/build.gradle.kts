@@ -32,8 +32,10 @@ dependencies {
     implementation(project(":shared:ar:core"))
     implementation(project(":shared:ar:contracts"))
     implementation(project(":shared:ar:domain"))
+    implementation(project(":shared:core"))
     implementation(project(":shared:ui:kit"))
     implementation(project(":shared:ui:core"))
+    implementation(project(":shared:ui:navigation"))
 
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))

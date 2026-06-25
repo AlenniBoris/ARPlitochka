@@ -17,12 +17,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import com.example.arplitka.features.catalog.presentation.screen.CatalogScreen
-import com.example.arplitka.features.catalog.presentation.viewmodel.CatalogViewModel
 import com.example.arplitka.features.floordetection.presentation.screen.FloorArScreen
 import com.example.arplitka.shared.app.ArPlitkaSharedApp
 import com.example.arplitka.shared.ui.kit.ar.BlockingMessage
-import org.koin.compose.viewmodel.koinViewModel
+import com.example.arplitka.shared.ui.navigation.AppNavigator
 import com.google.ar.core.ArCoreApk
 
 class MainActivity : ComponentActivity() {
@@ -39,15 +37,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun ArPlitkaApp() {
     ArPlitkaSharedApp(
-        catalogContent = { onOpenAr ->
-            CatalogScreen(
-                onOpenAr = onOpenAr
-            )
-        },
-        arContent = { onBack ->
+        arContent = { navigator ->
             CameraPermissionGate {
                 ArCoreAvailabilityGate {
-                    FloorArScreen(onBack = onBack)
+                    FloorArScreen(navigator = navigator)
                 }
             }
         }

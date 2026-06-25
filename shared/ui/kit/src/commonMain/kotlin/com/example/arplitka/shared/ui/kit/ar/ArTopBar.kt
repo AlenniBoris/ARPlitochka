@@ -3,6 +3,7 @@ package com.example.arplitka.shared.ui.kit.ar
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -22,7 +23,8 @@ fun ArTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 36.dp, start = 8.dp, end = 8.dp),
+            .statusBarsPadding()
+            .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(

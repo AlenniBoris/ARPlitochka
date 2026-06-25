@@ -22,4 +22,13 @@ class TilesRepositoryImpl(
             CustomResultModelDomain.Error(e.toCommonException())
         }
     }
+
+    override suspend fun getTileById(id: Long): CustomResultModelDomain<Tile, CommonException> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getTileById(id)
+            CustomResultModelDomain.Success(response.toDomain())
+        } catch (e: Throwable) {
+            CustomResultModelDomain.Error(e.toCommonException())
+        }
+    }
 }

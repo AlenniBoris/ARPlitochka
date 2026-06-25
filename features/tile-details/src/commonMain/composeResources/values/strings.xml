@@ -1,0 +1,21 @@
+<resources>
+    <string name="try_in_ar">Примерить в AR</string>
+    <string name="characteristics">Характеристики</string>
+    <string name="material">Материал</string>
+    <string name="surface_type">Тип поверхности</string>
+    <string name="category">Категория</string>
+    <string name="size">Размер</string>
+    <string name="thickness">Толщина</string>
+    <string name="tiles_per_box">В упаковке</string>
+    <string name="in_stock">В наличии</string>
+    <string name="colors">Цвета</string>
+    <string name="price_unit_suffix">/ %1$s</string>
+    <string name="size_format">%1$dx%2$d мм</string>
+    <string name="thickness_format">%1$d мм</string>
+    <string name="tiles_per_box_format">%1$d шт</string>
+    <string name="in_stock_format">%1$d %2$s</string>
+    <string name="category_paving_stones">Тротуарная плитка</string>
+    <string name="category_paving_stones_v2">Тротуарная плитка (тип 2)</string>
+    <string name="category_clinker">Клинкерная плитка</string>
+    <string name="category_facade">Фасадная плитка</string>
+</resources>

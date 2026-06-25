@@ -1,0 +1,34 @@
+{
+  "id": 10,
+  "name": "Лайнстоун",
+  "description": "Плитка с имитацией натурального камня и уникальной текстурой.",
+  "manufacturer": "LSR",
+  "category": "paving_stones",
+  "unit": "m2",
+  "material": "Concrete",
+  "surfaceType": "Rough",
+  "basePrice": 170.0,
+  "photos": [
+    "file:///android_asset/mock/tiles/previews/linestone_preview.png"
+  ],
+  "colors": [
+    {
+      "id": 10,
+      "name": "Лайнстоун",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/linestone.png",
+      "hexCode": "#DCDCDC"
+    }
+  ],
+  "variants": [
+    {
+      "id": 1001,
+      "colorId": 10,
+      "widthMm": 260,
+      "heightMm": 260,
+      "thicknessMm": 60,
+      "price": 170.0,
+      "stockCount": 90,
+      "tilesPerBox": 10
+    }
+  ]
+}

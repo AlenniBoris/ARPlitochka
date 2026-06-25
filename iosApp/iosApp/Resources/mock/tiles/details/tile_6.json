@@ -1,0 +1,34 @@
+{
+  "id": 6,
+  "name": "Мюнхен",
+  "description": "Плитка в баварском стиле, сочетающая надежность и эстетику.",
+  "manufacturer": "LSR",
+  "category": "paving_stones",
+  "unit": "m2",
+  "material": "Concrete",
+  "surfaceType": "Smooth",
+  "basePrice": 150.0,
+  "photos": [
+    "file:///android_asset/mock/tiles/previews/munich_preview.png"
+  ],
+  "colors": [
+    {
+      "id": 6,
+      "name": "Мюнхен",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/munich.png",
+      "hexCode": "#A0522D"
+    }
+  ],
+  "variants": [
+    {
+      "id": 601,
+      "colorId": 6,
+      "widthMm": 260,
+      "heightMm": 260,
+      "thicknessMm": 60,
+      "price": 150.0,
+      "stockCount": 100,
+      "tilesPerBox": 10
+    }
+  ]
+}

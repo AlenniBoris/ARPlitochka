@@ -1,0 +1,34 @@
+{
+  "id": 7,
+  "name": "ЛаЛиния",
+  "description": "Элегантная плитка with четкими линиями и благородным оттенком.",
+  "manufacturer": "LSR",
+  "category": "paving_stones",
+  "unit": "m2",
+  "material": "Concrete",
+  "surfaceType": "Smooth",
+  "basePrice": 160.0,
+  "photos": [
+    "file:///android_asset/mock/tiles/previews/la_linea_preview.png"
+  ],
+  "colors": [
+    {
+      "id": 7,
+      "name": "ЛаЛиния",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/la_linea.png",
+      "hexCode": "#D2B48C"
+    }
+  ],
+  "variants": [
+    {
+      "id": 701,
+      "colorId": 7,
+      "widthMm": 260,
+      "heightMm": 260,
+      "thicknessMm": 60,
+      "price": 160.0,
+      "stockCount": 120,
+      "tilesPerBox": 10
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 package com.example.arplitka.shared.app.di
 
 import com.example.arplitka.features.catalog.di.catalogModule
+import com.example.arplitka.features.tiledetails.di.tileDetailsModule
 import com.example.arplitka.network.core.di.networkModule
 import com.example.arplitka.shared.core.di.coreModule
 import com.example.arplitka.shared.tiles.di.tilesModule
@@ -17,7 +18,8 @@ fun initKoin(
         coreModule,
         networkModule,
         tilesModule,
-        catalogModule
+        catalogModule,
+        tileDetailsModule
     )
     modules(additionalModules)
 }

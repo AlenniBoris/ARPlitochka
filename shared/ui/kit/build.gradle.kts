@@ -26,15 +26,19 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":shared:ui:core"))
+            implementation(project(":shared:tiles"))
+            implementation(project(":mock:core"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.materialIconsExtended)
             implementation(compose.ui)
             implementation(compose.components.resources)
+            implementation(libs.coil.compose)
         }
         androidMain.dependencies {
             implementation(libs.androidx.core.ktx)
+            implementation(libs.androidx.activity.compose)
         }
     }
 }

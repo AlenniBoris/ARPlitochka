@@ -19,6 +19,7 @@ rootProject.name = "ArPlitka"
 include(":app")
 include(":features:floor-detection")
 include(":features:catalog")
+include(":features:tile-details")
 include(":network:core")
 include(":mock:core")
 include(":mock:tiles")

@@ -2,7 +2,9 @@ package com.example.arplitka.features.catalog.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.arplitka.features.catalog.presentation.CatalogEvent
 import com.example.arplitka.shared.core.domain.model.CustomResultModelDomain
+import com.example.arplitka.shared.core.domain.presentation.SingleFlowEvent
 import com.example.arplitka.shared.tiles.domain.usecase.GetTilesUseCase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -18,6 +20,9 @@ open class CatalogViewModel(
 
     private val _state = MutableStateFlow<CatalogUiState>(CatalogUiState.Loading)
     val state: StateFlow<CatalogUiState> = _state.asStateFlow()
+
+    private val _event = SingleFlowEvent<CatalogEvent>(viewModelScope)
+    val event = _event.flow
 
     private var _loadingJob: Job? = null
 
@@ -36,6 +41,10 @@ open class CatalogViewModel(
 
     fun refreshTiles() {
         loadTiles()
+    }
+
+    fun openTile(id: Long) {
+        _event.emit(CatalogEvent.OpenTile(id))
     }
 
     private suspend fun fetchTiles() {

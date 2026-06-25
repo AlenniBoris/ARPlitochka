@@ -6,4 +6,5 @@ import com.example.arplitka.shared.tiles.domain.model.Tile
 
 interface TilesRepository {
     suspend fun getTiles(): CustomResultModelDomain<List<Tile>, CommonException>
+    suspend fun getTileById(id: Long): CustomResultModelDomain<Tile, CommonException>
 }

@@ -12,9 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.example.arplitka.shared.ui.navigation.AppNavigator
 
 @Composable
-actual fun IosArScreen(onBack: () -> Unit) {
+actual fun IosArScreen(navigator: AppNavigator) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -27,7 +28,7 @@ actual fun IosArScreen(onBack: () -> Unit) {
             text = "iOS ARKit screen is available on macOS/iOS targets",
             color = Color.White
         )
-        Button(onClick = onBack) {
+        Button(onClick = { navigator.back() }) {
             Text("Back")
         }
     }

@@ -3,14 +3,17 @@ package com.example.arplitka.features.floordetection.presentation.screen
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -18,59 +21,99 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import org.koin.compose.viewmodel.koinViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import com.example.arplitka.features.floordetection.R
-import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
+import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
+import com.example.arplitka.features.floordetection.presentation.FloorArEvent
 import com.example.arplitka.features.floordetection.presentation.components.ArActionButtons
 import com.example.arplitka.features.floordetection.presentation.components.ArSceneLayer
 import com.example.arplitka.features.floordetection.presentation.components.ArStatusOverlay
-import com.example.arplitka.features.floordetection.presentation.utils.decodePavingBitmap
 import com.example.arplitka.features.floordetection.presentation.viewmodel.FloorArViewModel
-import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
+import com.example.arplitka.features.floordetection.presentation.utils.decodePavingBitmap
 import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
+import com.example.arplitka.shared.ui.kit.ar.ArTopBar
 import com.example.arplitka.shared.ui.kit.ar.BlockingMessage
 import com.example.arplitka.shared.ui.kit.ar.CenterReticle
 import com.example.arplitka.shared.ui.kit.ar.DebugPanel
 import com.example.arplitka.shared.ui.kit.utils.isDebugBuild
-import androidx.compose.foundation.layout.padding
-import com.example.arplitka.shared.ui.kit.ar.ArTopBar
-import kotlin.math.roundToInt
+import com.example.arplitka.shared.ui.navigation.AppNavigator
+import com.google.ar.core.Frame
+import com.google.ar.core.Session
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.koin.compose.viewmodel.koinViewModel
+import kotlin.math.roundToInt
 
 @Composable
 fun FloorArScreen(
-    viewModel: FloorArViewModel = koinViewModel(),
-    onBack: () -> Unit = {}
+    navigator: AppNavigator,
+    viewModel: FloorArViewModel = koinViewModel()
 ) {
-    BackHandler {
-        viewModel.reset()
-        onBack()
+    val uiState by viewModel.uiState.collectAsState()
+    val event by remember { mutableStateOf(viewModel.event) }
+
+    LaunchedEffect(event) {
+        launch {
+            event.filterIsInstance<FloorArEvent.NavigateBack>()
+                .collect { navigator.back() }
+        }
     }
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     DisposableEffect(Unit) {
         onDispose {
             viewModel.reset()
         }
     }
+
+    BackHandler {
+        viewModel.onBack()
+    }
+
+    FloorArContent(
+        uiState = uiState,
+        onBack = viewModel::onBack,
+        onSessionUpdated = viewModel::onSessionUpdated,
+        onAddPoint = viewModel::addPoint,
+        onUndoPoint = viewModel::undoPoint,
+        onConfirmContour = viewModel::confirmContour,
+        onToggleTileVisibility = viewModel::toggleTileVisibility,
+        onClearSection = viewModel::clearSection,
+        onRotateTexture = viewModel::rotateTexture,
+        onChangeTileType = viewModel::changeTileType
+    )
+}
+
+@Composable
+private fun FloorArContent(
+    uiState: com.example.arplitka.features.floordetection.domain.model.FloorUiState,
+    onBack: () -> Unit,
+    onSessionUpdated: (Session, Frame, IntSize) -> Unit,
+    onAddPoint: () -> Unit,
+    onUndoPoint: () -> Unit,
+    onConfirmContour: () -> Unit,
+    onToggleTileVisibility: () -> Unit,
+    onClearSection: () -> Unit,
+    onRotateTexture: () -> Unit,
+    onChangeTileType: () -> Unit
+) {
+    val context = LocalContext.current
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var sessionErrorMessage by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
+    var pavingBitmap by remember(uiState.selectedTileType) { mutableStateOf<Bitmap?>(null) }
 
-    var pavingBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(context, uiState.stage, uiState.selectedTileType) {
+    LaunchedEffect(uiState.selectedTileType, uiState.stage) {
         if (uiState.stage != FloorWorkflowStage.TILE_LAYOUT) {
             pavingBitmap = null
             return@LaunchedEffect
         }
-        runCatching {
-            pavingBitmap = withContext(Dispatchers.IO) {
-                context.assets.open(uiState.selectedTileType.assetPath).use(::decodePavingBitmap)
+        pavingBitmap = withContext(Dispatchers.IO) {
+            try {
+                context.assets.open(uiState.selectedTileType.assetPath).use { decodePavingBitmap(it) }
+            } catch (e: Exception) {
+                null
             }
-        }.onFailure {
-            android.util.Log.e("FloorArScreen", "Async texture load failed", it)
         }
     }
 
@@ -82,24 +125,15 @@ fun FloorArScreen(
         ArSceneLayer(
             uiState = uiState,
             pavingBitmap = pavingBitmap,
-            onSessionUpdated = { session, frame ->
-                viewModel.onSessionUpdated(session, frame, viewportSize)
+            onSessionUpdated = { session, frame -> 
+                onSessionUpdated(session, frame, viewportSize)
             },
             onSessionFailed = { exception ->
                 sessionErrorMessage = exception.localizedMessage ?: "AR session failed"
             },
-            onSizeChanged = { viewportSize = it }
+            onSizeChanged = { viewportSize = it },
+            modifier = Modifier.fillMaxSize()
         )
-
-        CenterReticle(
-            modifier = Modifier.align(Alignment.Center),
-            isActive = uiState.hasCenterHit && uiState.stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
-        )
-
-        ArTopBar(onBack = {
-            viewModel.reset()
-            onBack()
-        })
 
         ArStatusOverlay(
             status = uiState.status,
@@ -107,15 +141,27 @@ fun FloorArScreen(
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
+        if (!uiState.isContourConfirmed) {
+            CenterReticle(
+                modifier = Modifier.align(Alignment.Center),
+                isActive = uiState.hasCenterHit && uiState.stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
+            )
+        }
+
+        ArTopBar(
+            onBack = onBack,
+            modifier = Modifier.align(Alignment.TopStart)
+        )
+
         ArActionButtons(
             uiState = uiState,
-            onAddPoint = { viewModel.addPoint() },
-            onUndoPoint = { viewModel.undoPoint() },
-            onConfirmContour = { viewModel.confirmContour() },
-            onToggleTileVisibility = { viewModel.toggleTileVisibility() },
-            onChangeTileType = { viewModel.changeTileType() },
-            onRotateTexture = { viewModel.rotateTexture() },
-            onClearSection = { viewModel.clearSection() },
+            onAddPoint = onAddPoint,
+            onUndoPoint = onUndoPoint,
+            onConfirmContour = onConfirmContour,
+            onToggleTileVisibility = onToggleTileVisibility,
+            onChangeTileType = onChangeTileType,
+            onRotateTexture = onRotateTexture,
+            onClearSection = onClearSection,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 

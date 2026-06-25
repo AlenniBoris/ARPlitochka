@@ -16,7 +16,7 @@ hilt = "2.57.2"
 hiltNavigationCompose = "1.3.0"
 ksp = "2.2.20-2.0.4"
 composeDestinations = "1.10.2"
-navigationCompose = "2.8.8"
+navigationCompose = "2.9.2"
 kaspresso = "1.5.5"
 mockk = "1.13.12"
 turbine = "1.1.0"
@@ -30,7 +30,7 @@ ktor = "3.1.1"
     koin = "4.0.0"
     jetbrainsSavedstate = "1.2.2"
     jetbrainsLifecycle = "2.8.4"
-    jetbrainsCoreBundle = "1.0.0"
+    jetbrainsCoreBundle = "1.0.1"
 
 [libraries]
 jetbrains-savedstate = { group = "org.jetbrains.androidx.savedstate", name = "savedstate", version.ref = "jetbrainsSavedstate" }
@@ -72,6 +72,7 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
     hilt-android-testing = { group = "com.google.dagger", name = "hilt-android-testing", version.ref = "hilt" }
     androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
     androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+    jetbrains-navigation-compose = { group = "org.jetbrains.androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
     compose-destinations-core = { group = "io.github.raamcosta.compose-destinations", name = "core", version.ref = "composeDestinations" }
     compose-destinations-ksp = { group = "io.github.raamcosta.compose-destinations", name = "ksp", version.ref = "composeDestinations" }
 

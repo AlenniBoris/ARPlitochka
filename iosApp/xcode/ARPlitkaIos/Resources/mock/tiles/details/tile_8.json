@@ -1,0 +1,34 @@
+{
+  "id": 8,
+  "name": "Бавария",
+  "description": "Традиционная немецкая плитка с эффектом состаренного камня.",
+  "manufacturer": "LSR",
+  "category": "paving_stones",
+  "unit": "m2",
+  "material": "Concrete",
+  "surfaceType": "Rough",
+  "basePrice": 140.0,
+  "photos": [
+    "file:///android_asset/mock/tiles/previews/bavaria_preview.png"
+  ],
+  "colors": [
+    {
+      "id": 8,
+      "name": "Бавария",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/bavaria.png",
+      "hexCode": "#CD853F"
+    }
+  ],
+  "variants": [
+    {
+      "id": 801,
+      "colorId": 8,
+      "widthMm": 260,
+      "heightMm": 260,
+      "thicknessMm": 60,
+      "price": 140.0,
+      "stockCount": 180,
+      "tilesPerBox": 10
+    }
+  ]
+}

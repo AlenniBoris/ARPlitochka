@@ -20,20 +20,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.arplitka.features.catalog.presentation.viewmodel.CatalogViewModel
 import com.example.arplitka.features.catalog.presentation.viewmodel.CatalogUiState
+import com.example.arplitka.features.catalog.presentation.CatalogEvent
 import com.example.arplitka.shared.ui.core.model.toUiModel
 import com.example.arplitka.shared.ui.kit.components.AppRefreshIndicator
 import com.example.arplitka.shared.ui.kit.screens.AppProgressScreen
 import com.example.arplitka.shared.ui.kit.screens.AppExceptionScreen
+import com.example.arplitka.shared.ui.navigation.AppNavigator
 import org.koin.compose.viewmodel.koinViewModel
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CatalogScreen(
-    onOpenAr: () -> Unit,
+    navigator: AppNavigator,
     viewModel: CatalogViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
     val refreshState = rememberPullToRefreshState()
+    val event by remember { mutableStateOf(viewModel.event) }
+
+    LaunchedEffect(event) {
+        launch {
+            event.filterIsInstance<CatalogEvent.OpenTile>()
+                .collect { coming -> navigator.openTile(coming.id) }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -74,6 +89,7 @@ fun CatalogScreen(
                 is CatalogUiState.Content -> {
                     CatalogList(
                         tiles = currentState.tiles,
+                        onTileClick = viewModel::openTile,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

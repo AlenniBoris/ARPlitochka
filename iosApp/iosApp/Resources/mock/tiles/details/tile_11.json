@@ -1,0 +1,34 @@
+{
+  "id": 11,
+  "name": "Оранж",
+  "description": "Яркая и солнечная плитка для создания позитивного настроения.",
+  "manufacturer": "LSR",
+  "category": "paving_stones",
+  "unit": "m2",
+  "material": "Concrete",
+  "surfaceType": "Rough",
+  "basePrice": 115.0,
+  "photos": [
+    "file:///android_asset/mock/tiles/previews/orange_preview.png"
+  ],
+  "colors": [
+    {
+      "id": 11,
+      "name": "Оранж",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/orange.png",
+      "hexCode": "#FF8C00"
+    }
+  ],
+  "variants": [
+    {
+      "id": 1101,
+      "colorId": 11,
+      "widthMm": 260,
+      "heightMm": 260,
+      "thicknessMm": 60,
+      "price": 115.0,
+      "stockCount": 220,
+      "tilesPerBox": 10
+    }
+  ]
+}

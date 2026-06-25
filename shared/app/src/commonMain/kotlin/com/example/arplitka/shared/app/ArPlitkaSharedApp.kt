@@ -1,5 +1,8 @@
 package com.example.arplitka.shared.app
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,70 +18,147 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.example.arplitka.shared.app.navigation.SharedRoute
-import com.example.arplitka.shared.ui.navigation.AR_ROUTE
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import com.example.arplitka.features.catalog.presentation.screen.CatalogScreen
+import com.example.arplitka.features.tiledetails.presentation.screen.TileDetailsScreen
 import com.example.arplitka.shared.ui.navigation.AppBottomBar
+import com.example.arplitka.shared.ui.navigation.AppNavigator
+import com.example.arplitka.shared.ui.navigation.ArRoute
 import com.example.arplitka.shared.ui.navigation.BottomBarValues
 import com.example.arplitka.shared.ui.navigation.CATALOG_ROUTE
+import com.example.arplitka.shared.ui.navigation.CatalogRoute
+import com.example.arplitka.shared.ui.navigation.TileDetailsRoute
+import com.example.arplitka.shared.ui.navigation.TransitionToArRoute
+import com.example.arplitka.shared.ui.navigation.TransitionToCatalogRoute
 import com.example.arplitka.shared.ui.navigation.toModelUi
-import com.example.arplitka.shared.ui.kit.screens.AppProgressScreen
 import kotlinx.coroutines.delay
 
 @Composable
 fun ArPlitkaSharedApp(
-    catalogContent: @Composable (onOpenAr: () -> Unit) -> Unit,
-    arContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
-        SharedArPlaceholderScreen(onBack = onBack)
+    arContent: @Composable (navigator: AppNavigator) -> Unit = { navigator ->
+        SharedArPlaceholderScreen(onBack = { navigator.back() })
     }
 ) {
-    var currentRoute by remember { mutableStateOf<SharedRoute>(SharedRoute.Catalog) }
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+    val isCatalogScreen = currentDestination?.hasRoute<CatalogRoute>() == true
+    val isArScreen = currentDestination?.hasRoute<ArRoute>() == true
+
+    val navigator = remember(navController) {
+        object : AppNavigator {
+            override fun openCatalog() {
+                if (navController.currentBackStackEntry?.destination?.hasRoute<CatalogRoute>() == true) return
+                navController.navigate(CatalogRoute) {
+                    popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+
+            override fun openTile(id: Long) {
+                val currentEntry = navController.currentBackStackEntry
+                if (currentEntry?.destination?.hasRoute<TileDetailsRoute>() == true) {
+                    val currentTileId = currentEntry.toRoute<TileDetailsRoute>().tileId
+                    if (currentTileId == id) return
+                }
+                navController.navigate(TileDetailsRoute(tileId = id)) {
+                    launchSingleTop = true
+                }
+            }
+
+            override fun openAr() {
+                if (navController.currentBackStackEntry?.destination?.hasRoute<ArRoute>() == true) return
+                navController.navigate(TransitionToArRoute)
+            }
+
+            override fun back() {
+                if (navController.currentBackStackEntry?.destination?.hasRoute<ArRoute>() == true) {
+                    navController.navigate(TransitionToCatalogRoute) {
+                        popUpTo<ArRoute> { inclusive = true }
+                    }
+                } else {
+                    navController.popBackStack()
+                }
+            }
+        }
+    }
 
     MaterialTheme {
         Scaffold(
             bottomBar = {
-                if (currentRoute == SharedRoute.Catalog) {
+                if (isCatalogScreen) {
                     val items = remember {
                         listOf(
-                            BottomBarValues.Catalog.toModelUi(onClick = { currentRoute = SharedRoute.Catalog }),
-                            BottomBarValues.AR.toModelUi(onClick = { currentRoute = SharedRoute.Ar })
+                            BottomBarValues.Catalog.toModelUi(onClick = { navigator.openCatalog() }),
+                            BottomBarValues.AR.toModelUi(onClick = { navigator.openAr() })
                         )
                     }
                     AppBottomBar(
                         items = items,
-                        currentRoute = when (currentRoute) {
-                            SharedRoute.Catalog -> CATALOG_ROUTE
-                            SharedRoute.Ar -> AR_ROUTE
-                            else -> null
-                        }
+                        currentRoute = CATALOG_ROUTE
                     )
                 }
             }
         ) { paddingValues ->
             Surface(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(if (currentRoute == SharedRoute.Catalog) paddingValues else PaddingValues()),
-                color = if (currentRoute == SharedRoute.Ar) Color.Black else Color.White
+                modifier = Modifier.fillMaxSize(),
+                color = if (isArScreen) Color.Black else Color.White
             ) {
-                when (currentRoute) {
-                    SharedRoute.Catalog -> catalogContent {
-                        currentRoute = SharedRoute.Ar
+                NavHost(
+                    navController = navController,
+                    startDestination = CatalogRoute,
+                    modifier = Modifier.padding(
+                        if (isCatalogScreen) paddingValues else PaddingValues()
+                    ),
+                    enterTransition = { fadeIn(animationSpec = tween(200)) },
+                    exitTransition = { fadeOut(animationSpec = tween(200)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(200)) },
+                    popExitTransition = { fadeOut(animationSpec = tween(200)) }
+                ) {
+                    composable<CatalogRoute> {
+                        CatalogScreen(navigator = navigator)
                     }
-                    SharedRoute.Ar -> arContent {
-                        currentRoute = SharedRoute.Transition
+
+                    composable<TransitionToCatalogRoute> {
+                        SharedTransitionScreen(
+                            onComplete = {
+                                navController.navigate(CatalogRoute) {
+                                    popUpTo(navController.graph.id) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        )
                     }
-                    SharedRoute.Transition -> SharedTransitionScreen(
-                        onComplete = {
-                            currentRoute = SharedRoute.Catalog
-                        }
-                    )
+
+                    composable<TransitionToArRoute> {
+                        SharedTransitionScreen(
+                            onComplete = {
+                                navController.navigate(ArRoute) {
+                                    popUpTo<TransitionToArRoute> { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        )
+                    }
+
+                    composable<TileDetailsRoute> { backStackEntry ->
+                        val route = backStackEntry.toRoute<TileDetailsRoute>()
+                        TileDetailsScreen(tileId = route.tileId, navigator = navigator)
+                    }
+
+                    composable<ArRoute> {
+                        arContent(navigator)
+                    }
                 }
             }
         }
@@ -91,8 +171,7 @@ private fun SharedTransitionScreen(onComplete: () -> Unit) {
         delay(100)
         onComplete()
     }
-
-    AppProgressScreen()
+    Box(modifier = Modifier.fillMaxSize().background(Color.White))
 }
 
 @Composable
