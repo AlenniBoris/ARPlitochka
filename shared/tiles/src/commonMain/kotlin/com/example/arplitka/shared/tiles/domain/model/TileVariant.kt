@@ -8,5 +8,8 @@ data class TileVariant(
     val thicknessMm: Int,
     val price: Double,
     val stockCount: Int,
-    val tilesPerBox: Int? = null
+    val tilesPerBox: Int? = null,
+    val elementSizes: List<TileElementSize> = emptyList(),
+    val weightKgPerM2: Double? = null,
+    val m2PerPallet: Double? = null
 )

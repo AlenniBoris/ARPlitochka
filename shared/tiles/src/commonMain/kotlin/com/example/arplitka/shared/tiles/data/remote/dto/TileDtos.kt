@@ -20,7 +20,14 @@ data class TileDto(
     val basePrice: Double,
     val photos: List<String>,
     val colors: List<TileColorDto>,
-    val variants: List<TileVariantDto>
+    val variants: List<TileVariantDto>,
+    val websiteUrl: String? = null,
+    val usageWays: List<String> = emptyList(),
+    val features: List<String> = emptyList(),
+    val concreteClass: String? = null,
+    val frostResistance: String? = null,
+    val waterAbsorptionPercent: String? = null,
+    val abrasionClass: String? = null
 )
 
 @Serializable
@@ -28,7 +35,9 @@ data class TileColorDto(
     val id: Long,
     val name: String,
     val textureUrl: String,
-    val hexCode: String
+    val hexCode: String,
+    val swatchUrl: String? = null,
+    val displayOrder: Int = 0
 )
 
 @Serializable
@@ -40,5 +49,20 @@ data class TileVariantDto(
     val thicknessMm: Int,
     val price: Double,
     val stockCount: Int,
-    val tilesPerBox: Int? = null
+    val tilesPerBox: Int? = null,
+    val elementSizes: List<TileElementSizeDto> = emptyList(),
+    val concreteClass: String? = null,
+    val frostResistance: String? = null,
+    val waterAbsorptionPercent: String? = null,
+    val abrasionClass: String? = null,
+    val weightKgPerM2: Double? = null,
+    val m2PerPallet: Double? = null
+)
+
+@Serializable
+data class TileElementSizeDto(
+    val widthMm: Int,
+    val heightMm: Int,
+    val label: String? = null,
+    val quantityInPattern: Int? = null
 )

@@ -21,20 +21,20 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun TileDetailsPriceRow(
-    basePrice: Double,
+    price: Double,
     unit: TileUnit,
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.padding(top = 8.dp),
+        modifier = modifier,
         verticalAlignment = Alignment.Bottom
     ) {
         Text(
             text = stringResource(
                 SharedRes.string.price_amount,
-                formatPrice(basePrice)
+                formatPrice(price)
             ),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             color = Color(0xFFC53030)
         )
@@ -45,7 +45,7 @@ internal fun TileDetailsPriceRow(
             ),
             style = MaterialTheme.typography.bodyLarge,
             color = Color.Gray,
-            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
         )
     }
 }

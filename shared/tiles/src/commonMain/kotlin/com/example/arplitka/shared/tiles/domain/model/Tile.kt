@@ -12,5 +12,12 @@ data class Tile(
     val basePrice: Double,
     val photos: List<String>,
     val colors: List<TileColor>,
-    val variants: List<TileVariant>
+    val variants: List<TileVariant>,
+    val websiteUrl: String? = null,
+    val usageWays: List<TileUsageWay> = emptyList(),
+    val features: List<TileFeature> = emptyList(),
+    val concreteClass: String? = null,
+    val frostResistance: String? = null,
+    val waterAbsorptionPercent: String? = null,
+    val abrasionClass: String? = null
 )

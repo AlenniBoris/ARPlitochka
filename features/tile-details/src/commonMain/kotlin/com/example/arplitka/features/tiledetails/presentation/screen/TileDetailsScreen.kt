@@ -49,6 +49,10 @@ fun TileDetailsScreen(
         state = state,
         onBack = viewModel::onBack,
         onTryInAr = viewModel::onTryInAr,
+        onOpenWebsite = viewModel::openWebsite,
+        onColorSelected = viewModel::selectColor,
+        onThicknessSelected = viewModel::selectThickness,
+        onToggleDescriptionExpanded = viewModel::toggleDescriptionExpanded,
         onRefresh = viewModel::loadTile,
         refreshState = refreshState
     )

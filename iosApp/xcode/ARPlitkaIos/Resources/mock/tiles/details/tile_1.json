@@ -1,34 +1,122 @@
 {
   "id": 1,
-  "name": "Серая",
-  "description": "Классическая тротуарная плитка для двора, террасы и дорожек.",
+  "name": "Квадро",
+  "description": "Классическая тротуарная плитка для двора, террасы и дорожек. Подходит для пешеходных зон и придомовых территорий.",
   "manufacturer": "Plitka Pro",
   "category": "paving_stones",
   "unit": "m2",
-  "material": "Concrete",
-  "surfaceType": "Rough",
-  "basePrice": 95.0,
+  "material": "Бетон",
+  "surfaceType": "Фактурная",
+  "basePrice": 690.0,
+  "websiteUrl": "https://example.com/tiles/quadro",
+  "usageWays": ["HOME_AND_GARDEN", "PUBLIC_SPACE"],
+  "features": ["MICRO_BEVEL", "FROST_RESISTANT"],
+  "concreteClass": "B30",
+  "frostResistance": "F200",
+  "waterAbsorptionPercent": "≤ 6%",
+  "abrasionClass": "3 (H)",
   "photos": [
-    "file:///android_asset/mock/tiles/previews/paving_stones_v1_preview.png"
+    "file:///android_asset/mock/tiles/previews/paving_stones_v1_preview.png",
+    "file:///android_asset/mock/tiles/previews/paving_stones_v2_preview.png"
   ],
   "colors": [
     {
       "id": 1,
       "name": "Серый",
       "textureUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v1.png",
-      "hexCode": "#808080"
+      "hexCode": "#808080",
+      "swatchUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v1.png",
+      "displayOrder": 0
+    },
+    {
+      "id": 2,
+      "name": "Белый",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v2.png",
+      "hexCode": "#F5F5F5",
+      "swatchUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v2.png",
+      "displayOrder": 1
+    },
+    {
+      "id": 3,
+      "name": "Чёрный",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/grey_herringbone.png",
+      "hexCode": "#2D2D2D",
+      "swatchUrl": "file:///android_asset/mock/tiles/textures/grey_herringbone.png",
+      "displayOrder": 2
     }
   ],
   "variants": [
     {
       "id": 101,
       "colorId": 1,
-      "widthMm": 260,
-      "heightMm": 260,
+      "widthMm": 278,
+      "heightMm": 158,
       "thicknessMm": 60,
-      "price": 95.0,
+      "price": 690.0,
       "stockCount": 150,
-      "tilesPerBox": 10
+      "tilesPerBox": 10,
+      "elementSizes": [
+        { "widthMm": 278, "heightMm": 158 },
+        { "widthMm": 265, "heightMm": 158 },
+        { "widthMm": 228, "heightMm": 158 },
+        { "widthMm": 178, "heightMm": 158 }
+      ],
+      "weightKgPerM2": 144.0,
+      "m2PerPallet": 10.70
+    },
+    {
+      "id": 102,
+      "colorId": 1,
+      "widthMm": 278,
+      "heightMm": 158,
+      "thicknessMm": 45,
+      "price": 618.0,
+      "stockCount": 120,
+      "tilesPerBox": 12,
+      "elementSizes": [
+        { "widthMm": 278, "heightMm": 158 },
+        { "widthMm": 265, "heightMm": 158 },
+        { "widthMm": 228, "heightMm": 158 },
+        { "widthMm": 178, "heightMm": 158 }
+      ],
+      "weightKgPerM2": 108.4,
+      "m2PerPallet": 12.84
+    },
+    {
+      "id": 103,
+      "colorId": 2,
+      "widthMm": 278,
+      "heightMm": 158,
+      "thicknessMm": 60,
+      "price": 720.0,
+      "stockCount": 80,
+      "tilesPerBox": 10,
+      "elementSizes": [
+        { "widthMm": 278, "heightMm": 158 },
+        { "widthMm": 265, "heightMm": 158 },
+        { "widthMm": 228, "heightMm": 158 },
+        { "widthMm": 178, "heightMm": 158 }
+      ],
+      "weightKgPerM2": 144.0,
+      "m2PerPallet": 10.70
+    },
+    {
+      "id": 104,
+      "colorId": 3,
+      "widthMm": 278,
+      "heightMm": 158,
+      "thicknessMm": 60,
+      "price": 750.0,
+      "stockCount": 60,
+      "tilesPerBox": 10,
+      "elementSizes": [
+        { "widthMm": 278, "heightMm": 158 },
+        { "widthMm": 265, "heightMm": 158 },
+        { "widthMm": 228, "heightMm": 158 },
+        { "widthMm": 178, "heightMm": 158 }
+      ],
+      "weightKgPerM2": 144.0,
+      "m2PerPallet": 10.70
     }
   ]
 }

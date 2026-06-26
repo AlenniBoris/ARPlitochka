@@ -1,6 +1,5 @@
 package com.example.arplitka.features.tiledetails.presentation.screen.components
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,19 +20,22 @@ internal fun CharacteristicRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(top = 12.dp)
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray
+            color = Color.Gray,
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp)
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            color = Color(0xFF2D3142)
+            color = Color(0xFF2D3142),
+            modifier = Modifier.weight(1f)
         )
     }
 }
