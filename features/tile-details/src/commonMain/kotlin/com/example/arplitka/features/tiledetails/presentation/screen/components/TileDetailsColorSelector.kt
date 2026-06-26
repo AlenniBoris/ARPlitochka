@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +27,7 @@ import arplitka.features.tile_details.generated.resources.colors
 import com.example.arplitka.features.tiledetails.presentation.model.TileColorOptionUi
 import com.example.arplitka.shared.ui.core.format.atomic.parseHexColor
 import com.example.arplitka.shared.ui.kit.components.TileImage
+import com.example.arplitka.shared.ui.kit.utils.resolveTileImageUrl
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -65,36 +67,50 @@ private fun ColorSwatchItem(
     modifier: Modifier = Modifier
 ) {
     val borderColor = if (option.isSelected) Color(0xFFC53030) else Color.Transparent
+    val resolvedSwatchUrl = remember(option.id, option.swatchUrl) {
+        resolveTileImageUrl(option.swatchUrl)
+    }
+    val useTextureImage = resolvedSwatchUrl.isNotBlank()
 
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onClick)
-                .border(2.dp, borderColor, CircleShape)
-                .padding(2.dp),
+            modifier = Modifier.size(48.dp),
             contentAlignment = Alignment.Center
         ) {
-            if (option.swatchUrl.isNotBlank()) {
-                TileImage(
-                    imageUrl = option.swatchUrl,
-                    contentDescription = option.name,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(parseHexColor(option.hexCode))
-                )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, borderColor, CircleShape)
+                    .padding(2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (useTextureImage) {
+                    TileImage(
+                        imageUrl = resolvedSwatchUrl,
+                        contentDescription = option.name,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(parseHexColor(option.hexCode))
+                    )
+                }
             }
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onClick)
+            )
         }
 
         Text(
