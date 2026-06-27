@@ -16,33 +16,207 @@
   "waterAbsorptionPercent": "≤ 6%",
   "abrasionClass": "3 (H)",
   "photos": [
-    "file:///android_asset/mock/tiles/previews/paving_stones_v1_preview.png",
-    "file:///android_asset/mock/tiles/previews/paving_stones_v2_preview.png"
+    "file:///android_asset/mock/tiles/previews/kvadro_gray_mix_preview.png",
+    "file:///android_asset/mock/tiles/previews/kvadro_light_mix_preview.png"
   ],
   "colors": [
     {
       "id": 1,
-      "name": "Серый",
-      "textureUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v1.png",
+      "name": "Серо-коричневый микс",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
       "hexCode": "#808080",
-      "swatchUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v1.png",
+      "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
       "displayOrder": 0
     },
     {
       "id": 2,
-      "name": "Белый",
-      "textureUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v2.png",
-      "hexCode": "#F5F5F5",
-      "swatchUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v2.png",
+      "name": "Светлый микс",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/kvadro_light_mix.png",
+      "hexCode": "#D4C4B0",
+      "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_light_mix.png",
       "displayOrder": 1
     },
     {
       "id": 3,
-      "name": "Чёрный",
-      "textureUrl": "file:///android_asset/mock/tiles/textures/grey_herringbone.png",
+      "name": "Тёмный микс",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/kvadro_dark_mix.png",
       "hexCode": "#2D2D2D",
-      "swatchUrl": "file:///android_asset/mock/tiles/textures/grey_herringbone.png",
+      "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_dark_mix.png",
       "displayOrder": 2
+    }
+  ],
+  "layouts": [
+    {
+      "id": "default_mix",
+      "name": "Микс",
+      "previewUrl": "file:///android_asset/mock/tiles/previews/kvadro_gray_mix_preview.png",
+      "defaultTextureUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
+      "repeatWidthMm": 949,
+      "repeatHeightMm": 632,
+      "elements": [
+        {
+          "elementTypeId": "kvadro_278x158",
+          "name": "Квадро 278x158",
+          "widthMm": 278,
+          "heightMm": 158,
+          "countInRepeat": 4,
+          "colorSlotId": "large",
+          "colorOptions": [
+            {
+              "colorId": 1,
+              "name": "Серо-коричневый",
+              "hexCode": "#808080",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
+              "sku": "kvadro_278x158_gray_brown"
+            },
+            {
+              "colorId": 2,
+              "name": "Светлый",
+              "hexCode": "#D4C4B0",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_light_mix.png",
+              "sku": "kvadro_278x158_light"
+            },
+            {
+              "colorId": 3,
+              "name": "Тёмный",
+              "hexCode": "#2D2D2D",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_dark_mix.png",
+              "sku": "kvadro_278x158_dark"
+            }
+          ]
+        },
+        {
+          "elementTypeId": "kvadro_265x158",
+          "name": "Квадро 265x158",
+          "widthMm": 265,
+          "heightMm": 158,
+          "countInRepeat": 4,
+          "colorSlotId": "medium",
+          "colorOptions": [
+            {
+              "colorId": 1,
+              "name": "Серо-коричневый",
+              "hexCode": "#808080",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
+              "sku": "kvadro_265x158_gray_brown"
+            },
+            {
+              "colorId": 2,
+              "name": "Светлый",
+              "hexCode": "#D4C4B0",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_light_mix.png",
+              "sku": "kvadro_265x158_light"
+            },
+            {
+              "colorId": 3,
+              "name": "Тёмный",
+              "hexCode": "#2D2D2D",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_dark_mix.png",
+              "sku": "kvadro_265x158_dark"
+            }
+          ]
+        },
+        {
+          "elementTypeId": "kvadro_228x158",
+          "name": "Квадро 228x158",
+          "widthMm": 228,
+          "heightMm": 158,
+          "countInRepeat": 4,
+          "colorSlotId": "small",
+          "colorOptions": [
+            {
+              "colorId": 1,
+              "name": "Серо-коричневый",
+              "hexCode": "#808080",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
+              "sku": "kvadro_228x158_gray_brown"
+            },
+            {
+              "colorId": 2,
+              "name": "Светлый",
+              "hexCode": "#D4C4B0",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_light_mix.png",
+              "sku": "kvadro_228x158_light"
+            },
+            {
+              "colorId": 3,
+              "name": "Тёмный",
+              "hexCode": "#2D2D2D",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_dark_mix.png",
+              "sku": "kvadro_228x158_dark"
+            }
+          ]
+        },
+        {
+          "elementTypeId": "kvadro_178x158",
+          "name": "Квадро 178x158",
+          "widthMm": 178,
+          "heightMm": 158,
+          "countInRepeat": 4,
+          "colorSlotId": "mini",
+          "colorOptions": [
+            {
+              "colorId": 1,
+              "name": "Серо-коричневый",
+              "hexCode": "#808080",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
+              "sku": "kvadro_178x158_gray_brown"
+            },
+            {
+              "colorId": 2,
+              "name": "Светлый",
+              "hexCode": "#D4C4B0",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_light_mix.png",
+              "sku": "kvadro_178x158_light"
+            },
+            {
+              "colorId": 3,
+              "name": "Тёмный",
+              "hexCode": "#2D2D2D",
+              "swatchUrl": "file:///android_asset/mock/tiles/textures/kvadro_dark_mix.png",
+              "sku": "kvadro_178x158_dark"
+            }
+          ]
+        }
+      ],
+      "palettes": [
+        {
+          "id": "gray_brown_mix",
+          "name": "Серо-коричневый микс",
+          "textureUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
+          "previewUrl": "file:///android_asset/mock/tiles/previews/kvadro_gray_mix_preview.png",
+          "selectedColorsBySlot": {
+            "large": 1,
+            "medium": 1,
+            "small": 1,
+            "mini": 1
+          }
+        },
+        {
+          "id": "light_mix",
+          "name": "Светлый микс",
+          "textureUrl": "file:///android_asset/mock/tiles/textures/kvadro_light_mix.png",
+          "previewUrl": "file:///android_asset/mock/tiles/previews/kvadro_light_mix_preview.png",
+          "selectedColorsBySlot": {
+            "large": 2,
+            "medium": 2,
+            "small": 2,
+            "mini": 2
+          }
+        },
+        {
+          "id": "dark_mix",
+          "name": "Тёмный микс",
+          "textureUrl": "file:///android_asset/mock/tiles/textures/kvadro_dark_mix.png",
+          "previewUrl": "file:///android_asset/mock/tiles/previews/kvadro_dark_mix_preview.png",
+          "selectedColorsBySlot": {
+            "large": 3,
+            "medium": 3,
+            "small": 3,
+            "mini": 3
+          }
+        }
+      ]
     }
   ],
   "variants": [

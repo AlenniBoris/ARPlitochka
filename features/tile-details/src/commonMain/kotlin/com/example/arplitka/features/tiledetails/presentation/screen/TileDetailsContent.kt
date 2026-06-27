@@ -17,7 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.arplitka.features.tiledetails.presentation.screen.components.TileDetailsBottomBar
-import com.example.arplitka.features.tiledetails.presentation.model.TileColorOptionUi
+import com.example.arplitka.features.tiledetails.presentation.model.TileLayoutOptionUi
+import com.example.arplitka.features.tiledetails.presentation.model.TilePaletteOptionUi
 import com.example.arplitka.features.tiledetails.presentation.model.TileThicknessOptionUi
 import com.example.arplitka.features.tiledetails.presentation.viewmodel.TileDetailsUiState
 import com.example.arplitka.shared.ui.core.model.toUiModel
@@ -33,7 +34,8 @@ internal fun TileDetailsContent(
     onBack: () -> Unit,
     onTryInAr: () -> Unit,
     onOpenWebsite: () -> Unit,
-    onColorSelected: (TileColorOptionUi) -> Unit,
+    onLayoutSelected: (TileLayoutOptionUi) -> Unit,
+    onPaletteSelected: (TilePaletteOptionUi) -> Unit,
     onThicknessSelected: (TileThicknessOptionUi) -> Unit,
     onToggleDescriptionExpanded: () -> Unit,
     onRefresh: () -> Unit,
@@ -79,7 +81,8 @@ internal fun TileDetailsContent(
                 TileDetailsStateContent(
                     state = state,
                     onRefresh = onRefresh,
-                    onColorSelected = onColorSelected,
+                    onLayoutSelected = onLayoutSelected,
+                    onPaletteSelected = onPaletteSelected,
                     onThicknessSelected = onThicknessSelected,
                     onToggleDescriptionExpanded = onToggleDescriptionExpanded,
                     modifier = Modifier.fillMaxSize()
@@ -93,7 +96,8 @@ internal fun TileDetailsContent(
 private fun TileDetailsStateContent(
     state: TileDetailsUiState,
     onRefresh: () -> Unit,
-    onColorSelected: (TileColorOptionUi) -> Unit,
+    onLayoutSelected: (TileLayoutOptionUi) -> Unit,
+    onPaletteSelected: (TilePaletteOptionUi) -> Unit,
     onThicknessSelected: (TileThicknessOptionUi) -> Unit,
     onToggleDescriptionExpanded: () -> Unit,
     modifier: Modifier = Modifier
@@ -107,7 +111,8 @@ private fun TileDetailsStateContent(
             )
             is TileDetailsUiState.Content -> TileDetailsInfo(
                 state = state,
-                onColorSelected = onColorSelected,
+                onLayoutSelected = onLayoutSelected,
+                onPaletteSelected = onPaletteSelected,
                 onThicknessSelected = onThicknessSelected,
                 onToggleDescriptionExpanded = onToggleDescriptionExpanded,
                 modifier = Modifier.fillMaxSize()

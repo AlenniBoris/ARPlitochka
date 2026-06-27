@@ -13,6 +13,7 @@ data class Tile(
     val photos: List<String>,
     val colors: List<TileColor>,
     val variants: List<TileVariant>,
+    val layouts: List<TileLayout> = emptyList(),
     val websiteUrl: String? = null,
     val usageWays: List<TileUsageWay> = emptyList(),
     val features: List<TileFeature> = emptyList(),

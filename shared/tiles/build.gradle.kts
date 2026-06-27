@@ -23,6 +23,7 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":shared:core"))
             implementation(project(":shared:validation"))
+            implementation(project(":shared:ar:contracts"))
             implementation(project(":network:core"))
             implementation(libs.koin.core)
             implementation(libs.kotlinx.serialization.json)

@@ -16,6 +16,7 @@
 *   `photos`: Список URL-адресов фотографий.
 *   `colors`: Список доступных цветовых решений (`TileColor`).
 *   `variants`: Список физических размеров и характеристик (`TileVariant`).
+*   `layouts`: Список раскладок (`TileLayout`). Для старых mock без `layouts` mapper строит fallback-раскладку `default` из `colors`/`variants`.
 *   `websiteUrl`: Ссылка на товар на сайте (опционально).
 *   `usageWays`: Список назначений (`TileUsageWay`).
 *   `features`: Список особенностей (`TileFeature`).
@@ -65,6 +66,63 @@
 *   `COLOR_MIX` — Смешанный цвет
 *   `TEXTURED_SURFACE` — Фактурная поверхность
 
+### `TileLayout`
+Раскладка / правило повторения раппорта.
+*   `id`, `name`: Идентификатор и название раскладки.
+*   `previewUrl`, `defaultTextureUrl`: Превью и базовая texture для AR fallback.
+*   `repeatWidthMm`, `repeatHeightMm`: Физический размер повторяемого раппорта в мм.
+*   `elements`: Элементы внутри одного раппорта (`TileLayoutElement`).
+*   `palettes`: Готовые палитры/миксы (`TilePalette`).
+
+### `TileLayoutElement`
+Элемент раппорта.
+*   `elementTypeId`, `name`: Тип и название элемента.
+*   `widthMm`, `heightMm`, `countInRepeat`: Размер и количество в одном раппорте.
+*   `colorSlotId`: Цветовой слот (роль в раскладке, например `large`, `medium`).
+*   `colorOptions`: Доступные цвета/SKU для слота (`TileElementColorOption`).
+
+### `TileElementColorOption`
+Цветовой вариант элемента.
+*   `colorId`, `name`, `hexCode`: Цвет и отображение.
+*   `textureUrl`, `swatchUrl`: Texture/swatch (опционально).
+*   `sku`: SKU для расчёта заказа.
+
+### `TilePalette`
+Готовая палитра раскладки.
+*   `id`, `name`: Идентификатор и название (например, «Серо-коричневый микс»).
+*   `textureUrl`: **Готовая texture для AR** — быстрый render artifact повторяющегося раппорта.
+*   `previewUrl`: Превью для UI.
+*   `selectedColorsBySlot`: Карта `colorSlotId → colorId` для расчёта и будущего редактирования слотов.
+
+### `TileSelection`
+Выбор пользователя на экране деталей / payload для AR.
+*   `tileId`, `layoutId`, `paletteId`
+*   `selectedColorsBySlot`: Актуальные цвета по слотам.
+*   `variantId`, `thicknessMm`: Связь с физическим вариантом (толщина, цена).
+
+### `TileEstimateLine`
+Строка локального приблизительного расчёта.
+*   `sku`, `name`, `elementTypeId`, `colorId`
+*   `estimatedCount`, `widthMm`, `heightMm`
+
+---
+
+## Раскладки vs texture preview
+
+| Назначение | Источник | Использование |
+|------------|----------|---------------|
+| Быстрый AR preview | `TilePalette.textureUrl` | `BuildArTileTextureUseCase` → `ArTileTexture` |
+| Расчёт заказа | `TileLayout.elements` + `countInRepeat` | `CalculateTileEstimateUseCase` |
+| UI выбора микса | `TileLayout.palettes` | Экран деталей (palette selector) |
+
+Формула локального estimate (первый этап, без упаковок и поддонов):
+
+```text
+repeatAreaM2 = repeatWidthMm * repeatHeightMm / 1_000_000
+repeatCount = selectedAreaM2 / repeatAreaM2
+quantity = ceil(repeatCount * countInRepeat)
+```
+
 ---
 
 ## Пример JSON (`tile_1.json`)
@@ -85,11 +143,40 @@
   "colors": [
     {
       "id": 1,
-      "name": "Серый",
-      "textureUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v1.png",
+      "name": "Серо-коричневый микс",
+      "textureUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
       "hexCode": "#808080",
-      "swatchUrl": "file:///android_asset/mock/tiles/textures/paving_stones_v1.png",
       "displayOrder": 0
+    }
+  ],
+  "layouts": [
+    {
+      "id": "default_mix",
+      "name": "Микс",
+      "defaultTextureUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
+      "repeatWidthMm": 949,
+      "repeatHeightMm": 632,
+      "elements": [
+        {
+          "elementTypeId": "kvadro_278x158",
+          "name": "Квадро 278x158",
+          "widthMm": 278,
+          "heightMm": 158,
+          "countInRepeat": 4,
+          "colorSlotId": "large",
+          "colorOptions": [
+            { "colorId": 1, "name": "Серо-коричневый", "hexCode": "#808080", "sku": "kvadro_278x158_gray_brown" }
+          ]
+        }
+      ],
+      "palettes": [
+        {
+          "id": "gray_brown_mix",
+          "name": "Серо-коричневый микс",
+          "textureUrl": "file:///android_asset/mock/tiles/textures/kvadro_gray_mix.png",
+          "selectedColorsBySlot": { "large": 1, "medium": 1, "small": 1, "mini": 1 }
+        }
+      ]
     }
   ],
   "variants": [
@@ -123,7 +210,13 @@
 
 ## Экран деталей
 
-На экране деталей пользователь выбирает цвет и толщину. `selectedVariant` определяется парой `colorId + thicknessMm`. По умолчанию выбираются первый цвет и первая доступная толщина для этого цвета.
+На экране деталей пользователь выбирает раскладку (если больше одной), палитру и толщину. Состояние описывается `TileSelection`: `layoutId`, `paletteId`, `selectedColorsBySlot`, `thicknessMm`/`variantId`.
+
+*   Если у плитки одна раскладка — блок «Раскладка» скрыт.
+*   Палитры отображаются в блоке «Цвета» (palette selector).
+*   `onTryInAr()` передаёт `TileSelection`, а не только `tileId/colorId`.
+
+`selectedVariant` определяется доминирующим `colorId` из палитры и выбранной толщиной.
 
 ### Какие характеристики откуда берутся
 

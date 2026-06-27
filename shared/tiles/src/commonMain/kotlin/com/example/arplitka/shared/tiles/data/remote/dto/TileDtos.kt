@@ -21,6 +21,7 @@ data class TileDto(
     val photos: List<String>,
     val colors: List<TileColorDto>,
     val variants: List<TileVariantDto>,
+    val layouts: List<TileLayoutDto> = emptyList(),
     val websiteUrl: String? = null,
     val usageWays: List<String> = emptyList(),
     val features: List<String> = emptyList(),

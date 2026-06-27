@@ -22,6 +22,7 @@
     <string name="tiles_per_box">В упаковке</string>
     <string name="in_stock">В наличии</string>
     <string name="colors">Цвета</string>
+    <string name="layout">Раскладка</string>
     <string name="price_unit_suffix">/ %1$s</string>
     <string name="size_format">%1$dx%2$d мм</string>
     <string name="thickness_format">%1$d мм</string>

@@ -6,6 +6,8 @@ import com.example.arplitka.shared.tiles.data.repository.TilesRepositoryImpl
 import com.example.arplitka.shared.tiles.domain.repository.TilesRepository
 import com.example.arplitka.shared.tiles.domain.usecase.GetTilesUseCase
 import com.example.arplitka.shared.tiles.domain.usecase.GetTileByIdUseCase
+import com.example.arplitka.shared.tiles.domain.usecase.BuildArTileTextureUseCase
+import com.example.arplitka.shared.tiles.domain.usecase.CalculateTileEstimateUseCase
 import org.koin.dsl.module
 
 val tilesModule = module {
@@ -13,4 +15,6 @@ val tilesModule = module {
     single<TilesRepository> { TilesRepositoryImpl(api = get()) }
     factory { GetTilesUseCase(repository = get()) }
     factory { GetTileByIdUseCase(repository = get()) }
+    factory { BuildArTileTextureUseCase() }
+    factory { CalculateTileEstimateUseCase() }
 }

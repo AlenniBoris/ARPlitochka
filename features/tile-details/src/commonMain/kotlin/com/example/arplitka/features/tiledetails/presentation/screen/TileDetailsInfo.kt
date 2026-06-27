@@ -12,20 +12,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.arplitka.features.tiledetails.presentation.screen.components.TileDetailsColorSelector
+import com.example.arplitka.features.tiledetails.presentation.screen.components.TileDetailsLayoutSelector
+import com.example.arplitka.features.tiledetails.presentation.screen.components.TileDetailsPaletteSelector
 import com.example.arplitka.features.tiledetails.presentation.screen.components.TileDetailsExpandableDescription
 import com.example.arplitka.features.tiledetails.presentation.screen.components.TileDetailsGallery
 import com.example.arplitka.features.tiledetails.presentation.screen.components.TileDetailsPriceRow
 import com.example.arplitka.features.tiledetails.presentation.screen.components.TileDetailsSpecsTable
 import com.example.arplitka.features.tiledetails.presentation.screen.components.TileDetailsThicknessSelector
-import com.example.arplitka.features.tiledetails.presentation.model.TileColorOptionUi
+import com.example.arplitka.features.tiledetails.presentation.model.TileLayoutOptionUi
+import com.example.arplitka.features.tiledetails.presentation.model.TilePaletteOptionUi
 import com.example.arplitka.features.tiledetails.presentation.model.TileThicknessOptionUi
 import com.example.arplitka.features.tiledetails.presentation.viewmodel.TileDetailsUiState
 
 @Composable
 internal fun TileDetailsInfo(
     state: TileDetailsUiState.Content,
-    onColorSelected: (TileColorOptionUi) -> Unit,
+    onLayoutSelected: (TileLayoutOptionUi) -> Unit,
+    onPaletteSelected: (TilePaletteOptionUi) -> Unit,
     onThicknessSelected: (TileThicknessOptionUi) -> Unit,
     onToggleDescriptionExpanded: () -> Unit,
     modifier: Modifier = Modifier
@@ -58,9 +61,17 @@ internal fun TileDetailsInfo(
                 modifier = Modifier.padding(top = 12.dp)
             )
 
-            TileDetailsColorSelector(
-                colorOptions = state.colorOptions,
-                onColorSelected = onColorSelected,
+            if (state.showLayoutSelector) {
+                TileDetailsLayoutSelector(
+                    layoutOptions = state.layoutOptions,
+                    onLayoutSelected = onLayoutSelected,
+                    modifier = Modifier.padding(top = 24.dp)
+                )
+            }
+
+            TileDetailsPaletteSelector(
+                paletteOptions = state.paletteOptions,
+                onPaletteSelected = onPaletteSelected,
                 modifier = Modifier.padding(top = 24.dp)
             )
 

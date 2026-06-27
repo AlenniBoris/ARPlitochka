@@ -27,6 +27,7 @@ fun TileDto.toDomain(): Tile {
         photos = photos,
         colors = colors.map(TileColorDto::toDomain),
         variants = variants.map(TileVariantDto::toDomain),
+        layouts = resolveLayouts(),
         websiteUrl = websiteUrl,
         usageWays = usageWays.mapNotNull { it.toTileUsageWay() },
         features = features.mapNotNull { it.toTileFeature() },
