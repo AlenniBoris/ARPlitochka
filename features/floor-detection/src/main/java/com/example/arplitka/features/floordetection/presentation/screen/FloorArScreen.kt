@@ -31,6 +31,7 @@ import com.example.arplitka.features.floordetection.presentation.components.ArSc
 import com.example.arplitka.features.floordetection.presentation.components.ArStatusOverlay
 import com.example.arplitka.features.floordetection.presentation.viewmodel.FloorArViewModel
 import com.example.arplitka.features.floordetection.presentation.utils.decodePavingBitmap
+import com.example.arplitka.features.floordetection.presentation.utils.loadTileTextureBitmap
 import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
 import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.shared.ui.kit.ar.ArTopBar
@@ -49,7 +50,12 @@ import kotlin.math.roundToInt
 @Composable
 fun FloorArScreen(
     navigator: AppNavigator,
-    viewModel: FloorArViewModel = koinViewModel()
+    initialTileId: Long? = null,
+    initialLayoutId: String? = null,
+    initialPaletteId: String? = null,
+    viewModel: FloorArViewModel = koinViewModel {
+        org.koin.core.parameter.parametersOf(initialTileId, initialLayoutId, initialPaletteId)
+    }
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val event by remember { mutableStateOf(viewModel.event) }
@@ -57,7 +63,7 @@ fun FloorArScreen(
     LaunchedEffect(event) {
         launch {
             event.filterIsInstance<FloorArEvent.NavigateBack>()
-                .collect { navigator.back() }
+                .collect { navigator.backFromAr(it.returnToTileId) }
         }
     }
 
@@ -101,18 +107,26 @@ private fun FloorArContent(
     val context = LocalContext.current
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var sessionErrorMessage by remember { mutableStateOf<String?>(null) }
-    var pavingBitmap by remember(uiState.selectedTileType) { mutableStateOf<Bitmap?>(null) }
+    var pavingBitmap by remember(uiState.arTileTexture, uiState.selectedTileType, uiState.stage) {
+        mutableStateOf<Bitmap?>(null)
+    }
 
-    LaunchedEffect(uiState.selectedTileType, uiState.stage) {
+    LaunchedEffect(uiState.arTileTexture, uiState.selectedTileType, uiState.stage) {
         if (uiState.stage != FloorWorkflowStage.TILE_LAYOUT) {
             pavingBitmap = null
             return@LaunchedEffect
         }
+
+        val textureUrl = uiState.arTileTexture?.textureUrl
         pavingBitmap = withContext(Dispatchers.IO) {
-            try {
-                context.assets.open(uiState.selectedTileType.assetPath).use { decodePavingBitmap(it) }
-            } catch (e: Exception) {
-                null
+            if (!textureUrl.isNullOrBlank()) {
+                loadTileTextureBitmap(context, textureUrl)
+            } else {
+                try {
+                    context.assets.open(uiState.selectedTileType.assetPath).use { decodePavingBitmap(it) }
+                } catch (e: Exception) {
+                    null
+                }
             }
         }
     }
@@ -150,6 +164,7 @@ private fun FloorArContent(
 
         ArTopBar(
             onBack = onBack,
+            backTitle = uiState.selectedTileName,
             modifier = Modifier.align(Alignment.TopStart)
         )
 
@@ -196,7 +211,8 @@ private fun FloorArContent(
                     "Show lines" to if (uiState.showContourLines) "Yes" else "No",
                     "Show fill" to if (uiState.showSectionFill) "Yes" else "No",
                     "Tile" to if (uiState.stage == FloorWorkflowStage.TILE_LAYOUT) "On" else "Off",
-                    "Texture rotation" to (uiState.textureRotation.ordinal * 45).toString()
+                    "Texture" to (uiState.arTileTexture?.textureUrl ?: uiState.selectedTileType.assetPath),
+                    "Palette" to (uiState.tileSelection?.paletteId ?: "-"),
                 ),
                 modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
             )

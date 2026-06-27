@@ -31,22 +31,23 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.example.arplitka.features.catalog.presentation.screen.CatalogScreen
 import com.example.arplitka.features.tiledetails.presentation.screen.TileDetailsScreen
+import com.example.arplitka.shared.ui.navigation.ArRoute
 import com.example.arplitka.shared.ui.navigation.AppBottomBar
 import com.example.arplitka.shared.ui.navigation.AppNavigator
-import com.example.arplitka.shared.ui.navigation.ArRoute
+import com.example.arplitka.shared.tiles.domain.model.TileSelection
+import com.example.arplitka.shared.ui.navigation.toArNavigationArgs
 import com.example.arplitka.shared.ui.navigation.BottomBarValues
 import com.example.arplitka.shared.ui.navigation.CATALOG_ROUTE
 import com.example.arplitka.shared.ui.navigation.CatalogRoute
 import com.example.arplitka.shared.ui.navigation.TileDetailsRoute
 import com.example.arplitka.shared.ui.navigation.TransitionToArRoute
-import com.example.arplitka.shared.ui.navigation.TransitionToCatalogRoute
 import com.example.arplitka.shared.ui.navigation.toModelUi
 import kotlinx.coroutines.delay
 
 @Composable
 fun ArPlitkaSharedApp(
-    arContent: @Composable (navigator: AppNavigator) -> Unit = { navigator ->
-        SharedArPlaceholderScreen(onBack = { navigator.back() })
+    arContent: @Composable (navigator: AppNavigator, arRoute: ArRoute) -> Unit = { navigator, _ ->
+        SharedArPlaceholderScreen(onBack = { navigator.backFromAr() })
     }
 ) {
     val navController = rememberNavController()
@@ -76,15 +77,34 @@ fun ArPlitkaSharedApp(
                 }
             }
 
-            override fun openAr() {
+            override fun openAr(selection: TileSelection?) {
                 if (navController.currentBackStackEntry?.destination?.hasRoute<ArRoute>() == true) return
-                navController.navigate(TransitionToArRoute)
+                val args = selection?.toArNavigationArgs()
+                navController.navigate(
+                    TransitionToArRoute(
+                        tileId = args?.tileId,
+                        layoutId = args?.layoutId,
+                        paletteId = args?.paletteId
+                    )
+                )
             }
 
             override fun back() {
-                if (navController.currentBackStackEntry?.destination?.hasRoute<ArRoute>() == true) {
-                    navController.navigate(TransitionToCatalogRoute) {
+                navController.popBackStack()
+            }
+
+            override fun backFromAr(returnToTileId: Long?) {
+                val onArScreen =
+                    navController.currentBackStackEntry?.destination?.hasRoute<ArRoute>() == true
+                if (!onArScreen) {
+                    navController.popBackStack()
+                    return
+                }
+
+                if (returnToTileId != null) {
+                    navController.navigate(TileDetailsRoute(tileId = returnToTileId)) {
                         popUpTo<ArRoute> { inclusive = true }
+                        launchSingleTop = true
                     }
                 } else {
                     navController.popBackStack()
@@ -129,21 +149,17 @@ fun ArPlitkaSharedApp(
                         CatalogScreen(navigator = navigator)
                     }
 
-                    composable<TransitionToCatalogRoute> {
+                    composable<TransitionToArRoute> { backStackEntry ->
+                        val transitionRoute = backStackEntry.toRoute<TransitionToArRoute>()
                         SharedTransitionScreen(
                             onComplete = {
-                                navController.navigate(CatalogRoute) {
-                                    popUpTo(navController.graph.id) { inclusive = true }
-                                    launchSingleTop = true
-                                }
-                            }
-                        )
-                    }
-
-                    composable<TransitionToArRoute> {
-                        SharedTransitionScreen(
-                            onComplete = {
-                                navController.navigate(ArRoute) {
+                                navController.navigate(
+                                    ArRoute(
+                                        tileId = transitionRoute.tileId,
+                                        layoutId = transitionRoute.layoutId,
+                                        paletteId = transitionRoute.paletteId
+                                    )
+                                ) {
                                     popUpTo<TransitionToArRoute> { inclusive = true }
                                     launchSingleTop = true
                                 }
@@ -156,8 +172,9 @@ fun ArPlitkaSharedApp(
                         TileDetailsScreen(tileId = route.tileId, navigator = navigator)
                     }
 
-                    composable<ArRoute> {
-                        arContent(navigator)
+                    composable<ArRoute> { backStackEntry ->
+                        val arRoute = backStackEntry.toRoute<ArRoute>()
+                        arContent(navigator, arRoute)
                     }
                 }
             }

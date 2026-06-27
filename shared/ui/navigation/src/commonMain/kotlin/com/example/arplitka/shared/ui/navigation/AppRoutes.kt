@@ -6,13 +6,21 @@ import kotlinx.serialization.Serializable
 object CatalogRoute
 
 @Serializable
-object ArRoute
+data class ArRoute(
+    val tileId: Long? = null,
+    val layoutId: String? = null,
+    val paletteId: String? = null
+)
 
 @Serializable
 data class TileDetailsRoute(val tileId: Long)
 
 @Serializable
-object TransitionToCatalogRoute
+data class TransitionToCatalogRoute(val dummy: Int = 0)
 
 @Serializable
-object TransitionToArRoute
+data class TransitionToArRoute(
+    val tileId: Long? = null,
+    val layoutId: String? = null,
+    val paletteId: String? = null
+)

@@ -33,7 +33,7 @@ fun TileDetailsScreen(
     LaunchedEffect(event) {
         launch {
             event.filterIsInstance<TileDetailsEvent.OpenAr>()
-                .collect { navigator.openAr() }
+                .collect { navigator.openAr(it.selection) }
         }
         launch {
             event.filterIsInstance<TileDetailsEvent.NavigateBack>()

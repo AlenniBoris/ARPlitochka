@@ -37,10 +37,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun ArPlitkaApp() {
     ArPlitkaSharedApp(
-        arContent = { navigator ->
+        arContent = { navigator, arRoute ->
             CameraPermissionGate {
                 ArCoreAvailabilityGate {
-                    FloorArScreen(navigator = navigator)
+                    FloorArScreen(
+                        navigator = navigator,
+                        initialTileId = arRoute.tileId,
+                        initialLayoutId = arRoute.layoutId,
+                        initialPaletteId = arRoute.paletteId
+                    )
                 }
             }
         }

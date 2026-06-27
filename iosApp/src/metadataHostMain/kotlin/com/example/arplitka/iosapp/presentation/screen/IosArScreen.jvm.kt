@@ -15,7 +15,12 @@ import androidx.compose.ui.unit.dp
 import com.example.arplitka.shared.ui.navigation.AppNavigator
 
 @Composable
-actual fun IosArScreen(navigator: AppNavigator) {
+actual fun IosArScreen(
+    navigator: AppNavigator,
+    initialTileId: Long?,
+    initialLayoutId: String?,
+    initialPaletteId: String?
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()

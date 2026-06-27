@@ -2,8 +2,9 @@ package com.example.arplitka.features.floordetection.domain.model
 
 import com.example.arplitka.shared.ar.contracts.model.ArInstruction
 import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
+import com.example.arplitka.shared.ar.contracts.model.ArTileTexture
 import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
-import com.example.arplitka.shared.ar.domain.logic.FloorGeometry
+import com.example.arplitka.shared.tiles.domain.model.TileSelection
 import kotlin.math.sqrt
 import com.google.ar.core.Anchor
 import com.google.ar.core.HitResult
@@ -49,6 +50,10 @@ data class FloorUiState(
     val isTileVisible: Boolean = false,
     val textureRotation: TextureRotation = TextureRotation.DEGREES_0,
     val selectedTileType: TileType = TileType.MODERN,
+    val tileSelection: TileSelection? = null,
+    val arTileTexture: ArTileTexture? = null,
+    val pendingAutoApplyTile: Boolean = false,
+    val selectedTileName: String? = null,
     val currentHitPose: Pose? = null,
     val currentHitResult: HitResult? = null,
     val snappedPointIndex: Int? = null

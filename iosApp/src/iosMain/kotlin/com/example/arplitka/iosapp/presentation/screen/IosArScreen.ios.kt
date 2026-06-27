@@ -48,7 +48,12 @@ import com.example.arplitka.shared.ui.navigation.AppNavigator
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
-actual fun IosArScreen(navigator: AppNavigator) {
+actual fun IosArScreen(
+    navigator: AppNavigator,
+    initialTileId: Long?,
+    initialLayoutId: String?,
+    initialPaletteId: String?
+) {
     val model = remember { IosArScreenModel() }
     var showDebugPanel by remember { mutableStateOf(true) }
     val coordinator = model.coordinator
@@ -292,7 +297,8 @@ actual fun IosArScreen(navigator: AppNavigator) {
         }
 
         ArTopBar(
-            onBack = { navigator.back() },
+            onBack = { navigator.backFromAr(initialTileId) },
+            backTitle = null,
             modifier = Modifier.align(Alignment.TopStart)
         )
     }

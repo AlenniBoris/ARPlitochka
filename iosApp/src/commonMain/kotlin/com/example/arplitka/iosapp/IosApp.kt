@@ -20,8 +20,13 @@ fun IosApp() {
     
     KoinContext {
         ArPlitkaSharedApp(
-            arContent = { navigator ->
-                IosArScreen(navigator = navigator)
+            arContent = { navigator, arRoute ->
+                IosArScreen(
+                    navigator = navigator,
+                    initialTileId = arRoute.tileId,
+                    initialLayoutId = arRoute.layoutId,
+                    initialPaletteId = arRoute.paletteId
+                )
             }
         )
     }

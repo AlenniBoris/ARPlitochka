@@ -27,6 +27,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
+            implementation(project(":shared:tiles"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

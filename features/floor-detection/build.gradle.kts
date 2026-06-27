@@ -36,6 +36,8 @@ dependencies {
     implementation(project(":shared:ui:kit"))
     implementation(project(":shared:ui:core"))
     implementation(project(":shared:ui:navigation"))
+    implementation(project(":shared:tiles"))
+    implementation(project(":mock:core"))
 
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))
