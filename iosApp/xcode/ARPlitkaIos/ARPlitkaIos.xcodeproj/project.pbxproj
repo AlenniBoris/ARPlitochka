@@ -321,7 +321,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "COMPOSE_SRC=\"${PROJECT_DIR}/ComposeBundleResources/composeResources\"\nCOMPOSE_DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/compose-resources/composeResources\"\nif [ -d \"${COMPOSE_SRC}\" ]; then\n  mkdir -p \"${COMPOSE_DEST}\"\n  cp -R \"${COMPOSE_SRC}/.\" \"${COMPOSE_DEST}/\"\n  echo \"Copied Compose resources to ${COMPOSE_DEST}\"\nfi\n\nMOCK_SRC=\"${PROJECT_DIR}/Resources/mock\"\nMOCK_DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/mock\"\nif [ -d \"${MOCK_SRC}\" ]; then\n  mkdir -p \"${MOCK_DEST}\"\n  cp -R \"${MOCK_SRC}/.\" \"${MOCK_DEST}/\"\n  echo \"Copied Mock assets to ${MOCK_DEST}\"\nfi\n";
+			shellScript = "COMPOSE_SRC=\"${PROJECT_DIR}/ComposeBundleResources/composeResources\"\nCOMPOSE_DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/compose-resources/composeResources\"\nif [ -d \"${COMPOSE_SRC}\" ]; then\n  mkdir -p \"${COMPOSE_DEST}\"\n  cp -R \"${COMPOSE_SRC}/.\" \"${COMPOSE_DEST}/\"\n  echo \"Copied Compose resources to ${COMPOSE_DEST}\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
