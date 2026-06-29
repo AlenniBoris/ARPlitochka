@@ -180,6 +180,10 @@ internal class IosArSessionCoordinator(
         sceneView = null
     }
 
+    fun setExternalTileTexture(texture: com.example.arplitka.shared.ar.contracts.model.ArTileTexture?) {
+        contourRenderer.setExternalTileTexture(texture)
+    }
+
     fun rescanSession() {
         val view = sceneView ?: return
         dispatchEvent(FloorArEvent.Reset)

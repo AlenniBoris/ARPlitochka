@@ -1,4 +1,4 @@
-package com.example.arplitka.features.floordetection.domain.logic
+package com.example.arplitka.shared.tiles.domain.logic
 
 import com.example.arplitka.shared.ar.contracts.model.ArTileTexture
 import com.example.arplitka.shared.tiles.domain.model.Tile

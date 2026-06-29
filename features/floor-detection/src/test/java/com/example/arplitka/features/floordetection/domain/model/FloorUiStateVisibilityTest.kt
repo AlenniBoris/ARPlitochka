@@ -1,5 +1,6 @@
 package com.example.arplitka.features.floordetection.domain.model
 
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.google.ar.core.Anchor
 import com.google.ar.core.Pose
 import com.google.ar.core.TrackingState
@@ -27,6 +28,7 @@ class FloorUiStateVisibilityTest {
     @Test
     fun `closed before confirm shows fill points and lines`() {
         val state = FloorUiState(
+            stage = FloorWorkflowStage.CONTOUR_CLOSED,
             points = listOf(point(), point(), point()),
             isPolygonClosed = true,
             isContourConfirmed = false
@@ -39,6 +41,7 @@ class FloorUiStateVisibilityTest {
     @Test
     fun `confirmed without tile keeps points lines and fill`() {
         val state = FloorUiState(
+            stage = FloorWorkflowStage.CONTOUR_CONFIRMED,
             points = listOf(point(), point(), point()),
             isPolygonClosed = true,
             isContourConfirmed = true,
@@ -53,6 +56,7 @@ class FloorUiStateVisibilityTest {
     @Test
     fun `tile mode hides contour geometry`() {
         val state = FloorUiState(
+            stage = FloorWorkflowStage.TILE_LAYOUT,
             points = listOf(point(), point(), point()),
             isPolygonClosed = true,
             isContourConfirmed = true,

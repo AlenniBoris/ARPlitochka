@@ -5,7 +5,6 @@ import com.example.arplitka.features.floordetection.domain.repository.IFloorDete
 import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFrameUseCase
 import com.example.arplitka.features.floordetection.presentation.viewmodel.FloorArViewModel
 import com.example.arplitka.shared.tiles.domain.usecase.BuildArTileTextureUseCase
-import com.example.arplitka.shared.tiles.domain.usecase.GetTileByIdUseCase
 import com.example.arplitka.shared.tiles.domain.usecase.GetTilesUseCase
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -16,7 +15,6 @@ val floorDetectionModule = module {
     viewModel { (initialTileId: Long?, initialLayoutId: String?, initialPaletteId: String?) ->
         FloorArViewModel(
             processArFrameUseCase = get(),
-            getTileByIdUseCase = get(),
             getTilesUseCase = get(),
             buildArTileTextureUseCase = get(),
             initialTileId = initialTileId,

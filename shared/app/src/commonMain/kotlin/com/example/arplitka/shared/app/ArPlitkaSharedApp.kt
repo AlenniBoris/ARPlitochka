@@ -102,12 +102,20 @@ fun ArPlitkaSharedApp(
                 }
 
                 if (returnToTileId != null) {
+                    val launchedFromTileDetails =
+                        navController.previousBackStackEntry?.destination?.hasRoute<TileDetailsRoute>() == true
                     navController.navigate(TileDetailsRoute(tileId = returnToTileId)) {
-                        popUpTo<ArRoute> { inclusive = true }
-                        launchSingleTop = true
+                        if (launchedFromTileDetails) {
+                            popUpTo<TileDetailsRoute> { inclusive = true }
+                        } else {
+                            popUpTo<ArRoute> { inclusive = true }
+                        }
                     }
                 } else {
-                    navController.popBackStack()
+                    navController.navigate(CatalogRoute) {
+                        popUpTo(navController.graph.startDestinationId)
+                        launchSingleTop = true
+                    }
                 }
             }
         }

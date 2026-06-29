@@ -9,9 +9,13 @@ import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.features.floordetection.domain.model.TextureRotation
 import com.example.arplitka.features.floordetection.domain.model.TileType
 import com.example.arplitka.features.floordetection.domain.usecase.ProcessArFrameUseCase
+import com.example.arplitka.shared.core.domain.model.CustomResultModelDomain
+import com.example.arplitka.shared.tiles.domain.usecase.BuildArTileTextureUseCase
+import com.example.arplitka.shared.tiles.domain.usecase.GetTilesUseCase
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -29,14 +33,24 @@ import org.junit.Test
 class FloorArViewModelTest {
 
     private val processArFrameUseCase: ProcessArFrameUseCase = mockk()
+    private val getTilesUseCase: GetTilesUseCase = mockk(relaxed = true)
+    private val buildArTileTextureUseCase: BuildArTileTextureUseCase = mockk(relaxed = true)
     private lateinit var viewModel: FloorArViewModel
-    
+
     private val testDispatcher = StandardTestDispatcher()
 
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
-        viewModel = FloorArViewModel(processArFrameUseCase)
+        coEvery { getTilesUseCase() } returns CustomResultModelDomain.Success(emptyList())
+        viewModel = FloorArViewModel(
+            processArFrameUseCase = processArFrameUseCase,
+            getTilesUseCase = getTilesUseCase,
+            buildArTileTextureUseCase = buildArTileTextureUseCase,
+            initialTileId = null,
+            initialLayoutId = null,
+            initialPaletteId = null
+        )
     }
 
     @After
@@ -60,7 +74,7 @@ class FloorArViewModelTest {
         val session: Session = mockk()
         val frame: Frame = mockk()
         val viewportSize = IntSize(1080, 1920)
-        
+
         val frameResult = ArFrameResult(
             trackingState = TrackingState.TRACKING,
             isFloorDetected = true,
@@ -86,8 +100,9 @@ class FloorArViewModelTest {
     }
 
     @Test
-    fun `changeTileType keeps selection when contour is open`() = runTest {
+    fun `changeTileType opens picker without crashing`() = runTest {
         viewModel.changeTileType()
-        assertEquals(TileType.MODERN, viewModel.uiState.value.selectedTileType)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(true, viewModel.uiState.value.tilePicker.isVisible)
     }
 }

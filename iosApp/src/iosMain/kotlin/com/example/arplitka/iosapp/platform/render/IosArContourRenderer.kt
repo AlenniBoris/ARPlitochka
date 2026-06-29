@@ -27,7 +27,8 @@ import platform.UIKit.UIColor
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.roundToInt
+import com.example.arplitka.shared.ui.kit.utils.textureRepeatMeters
+import com.example.arplitka.shared.ui.kit.utils.textureUrlToResourceStem
 
 private const val POINT_RADIUS_M = 0.016f
 private const val POINT_HEIGHT_M = 0.002f
@@ -67,6 +68,14 @@ internal class IosArContourRenderer {
         alpha = 0.58
     )
     private val tileMaterialCache = mutableMapOf<TileMaterialKey, SCNMaterial>()
+    private var externalTileTexture: com.example.arplitka.shared.ar.contracts.model.ArTileTexture? = null
+
+    fun setExternalTileTexture(texture: com.example.arplitka.shared.ar.contracts.model.ArTileTexture?) {
+        externalTileTexture = texture
+        tileMaterialCache.clear()
+        lastContourStateKey = Int.MIN_VALUE
+        lastFillBatchKey = Int.MIN_VALUE
+    }
 
     fun attach(sceneRoot: SCNNode) {
         if (rootNode != null) return
@@ -488,9 +497,38 @@ internal class IosArContourRenderer {
         aligned: AlignedSectionGeometry
     ): SCNMaterial {
         if (!state.isTileVisible) return fillMaterial
-        val cacheKey = TileMaterialKey(
-            tileType = state.selectedTileType
-        )
+
+        val external = externalTileTexture
+        if (external != null) {
+            val stem = textureUrlToResourceStem(external.textureUrl)
+            val widthM = textureRepeatMeters(external.repeatWidthMm)
+            val heightM = textureRepeatMeters(external.repeatLengthMm)
+            val rotation = state.textureRotation.degrees + external.rotationDegrees
+            val cacheKey = TileMaterialKey.External(
+                resourceStem = stem,
+                widthM = widthM,
+                heightM = heightM,
+                rotationDegrees = rotation
+            )
+            return tileMaterialCache.getOrPut(cacheKey) {
+                val image = pg_create_tile_section_pattern_image(stem, widthM, heightM, rotation)
+                if (image != null) {
+                    SCNMaterial().apply {
+                        diffuse.contents = image
+                        lightingModelName = platform.SceneKit.SCNLightingModelConstant
+                        doubleSided = true
+                        readsFromDepthBuffer = true
+                        writesToDepthBuffer = false
+                        diffuse.wrapS = SCNWrapModeRepeat
+                        diffuse.wrapT = SCNWrapModeRepeat
+                    }
+                } else {
+                    createTileMaterial(resourceName = state.selectedTileType.resourceName)
+                }
+            }
+        }
+
+        val cacheKey = TileMaterialKey.Legacy(tileType = state.selectedTileType)
         return tileMaterialCache.getOrPut(cacheKey) {
             createTileMaterial(
                 resourceName = state.selectedTileType.resourceName
@@ -561,9 +599,32 @@ internal class IosArContourRenderer {
 
     private fun quant(value: Float): Int = (value / POSITION_QUANT_M).roundToInt()
 
-    private data class TileMaterialKey(
-        val tileType: TileType
-    )
+    private data class TileMaterialKey private constructor(
+        val kind: Int,
+        val tileTypeOrdinal: Int = 0,
+        val resourceStem: String = "",
+        val widthM: Float = 0f,
+        val heightM: Float = 0f,
+        val rotationDegrees: Float = 0f
+    ) {
+        companion object {
+            fun Legacy(tileType: TileType): TileMaterialKey =
+                TileMaterialKey(kind = 0, tileTypeOrdinal = tileType.ordinal)
+
+            fun External(
+                resourceStem: String,
+                widthM: Float,
+                heightM: Float,
+                rotationDegrees: Float
+            ): TileMaterialKey = TileMaterialKey(
+                kind = 1,
+                resourceStem = resourceStem,
+                widthM = widthM,
+                heightM = heightM,
+                rotationDegrees = rotationDegrees
+            )
+        }
+    }
 
     private fun eulerDegreesToRadians(degrees: Float): Float = degrees * PI.toFloat() / 180f
 

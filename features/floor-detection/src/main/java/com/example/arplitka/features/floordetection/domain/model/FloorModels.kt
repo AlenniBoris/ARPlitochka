@@ -4,7 +4,12 @@ import com.example.arplitka.shared.ar.contracts.model.ArInstruction
 import com.example.arplitka.shared.ar.contracts.model.ArTrackingStatus
 import com.example.arplitka.shared.ar.contracts.model.ArTileTexture
 import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
+import com.example.arplitka.shared.tiles.domain.model.ArCatalogState
+import com.example.arplitka.shared.tiles.domain.model.Tile
 import com.example.arplitka.shared.tiles.domain.model.TileSelection
+import com.example.arplitka.shared.core.domain.model.CommonException
+import com.example.arplitka.shared.ui.kit.ar.ArPickerPaletteUi
+import com.example.arplitka.shared.ui.kit.ar.ArTilePickerState
 import kotlin.math.sqrt
 import com.google.ar.core.Anchor
 import com.google.ar.core.HitResult
@@ -54,6 +59,13 @@ data class FloorUiState(
     val arTileTexture: ArTileTexture? = null,
     val pendingAutoApplyTile: Boolean = false,
     val selectedTileName: String? = null,
+    val tilePicker: ArTilePickerState = ArTilePickerState(),
+    val colorRailPalettes: List<ArPickerPaletteUi> = emptyList(),
+    val showDebugPanel: Boolean = false,
+    val compactHint: String? = null,
+    val userException: CommonException? = null,
+    val catalogState: ArCatalogState = ArCatalogState.Initial,
+    val selectedTile: Tile? = null,
     val currentHitPose: Pose? = null,
     val currentHitResult: HitResult? = null,
     val snappedPointIndex: Int? = null
