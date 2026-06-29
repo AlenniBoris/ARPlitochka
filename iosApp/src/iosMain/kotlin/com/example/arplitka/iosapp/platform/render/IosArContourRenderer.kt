@@ -26,6 +26,7 @@ import platform.SceneKit.SCNWrapModeRepeat
 import platform.UIKit.UIColor
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import com.example.arplitka.shared.ui.kit.utils.textureRepeatMeters
 import com.example.arplitka.shared.ui.kit.utils.textureUrlToResourceStem

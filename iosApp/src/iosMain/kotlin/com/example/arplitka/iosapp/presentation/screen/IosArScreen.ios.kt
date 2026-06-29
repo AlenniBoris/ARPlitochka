@@ -36,6 +36,7 @@ import com.example.arplitka.shared.ui.kit.ar.ArColorRail
 import com.example.arplitka.shared.ui.kit.ar.ArContourActionButtons
 import com.example.arplitka.shared.ui.kit.ar.ArDebugTogglePanel
 import com.example.arplitka.shared.ui.kit.ar.ArTilePickerBottomSheet
+import com.example.arplitka.shared.ui.kit.ar.ArTopBar
 import com.example.arplitka.shared.ui.kit.ar.ArTransientMessage
 import com.example.arplitka.shared.ui.kit.ar.ArZoneResetButton
 import com.example.arplitka.shared.ui.kit.ar.CenterReticle

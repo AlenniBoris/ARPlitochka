@@ -37,8 +37,10 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            implementation(project(":shared:app"))
             implementation(project(":shared:tiles"))
             implementation(project(":shared:ui:kit"))
+            implementation(project(":shared:ui:navigation"))
             implementation(project(":shared:ar:contracts"))
             implementation(project(":shared:ar:domain"))
             implementation(project(":mock:core"))
