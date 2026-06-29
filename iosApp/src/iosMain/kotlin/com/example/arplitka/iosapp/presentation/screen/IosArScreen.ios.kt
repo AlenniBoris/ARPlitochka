@@ -40,6 +40,7 @@ import com.example.arplitka.shared.ui.kit.ar.ArTopBar
 import com.example.arplitka.shared.ui.kit.ar.ArTransientMessage
 import com.example.arplitka.shared.ui.kit.ar.ArZoneResetButton
 import com.example.arplitka.shared.ui.kit.ar.CenterReticle
+import com.example.arplitka.shared.ui.kit.utils.isDebugBuild
 import com.example.arplitka.shared.ui.core.model.toUiModel
 import com.example.arplitka.shared.ui.navigation.AppNavigator
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -165,6 +166,7 @@ actual fun IosArScreen(
                         .padding(bottom = 48.dp)
                 )
             }
+            else -> Unit
         }
 
         if (showContourRealignButton) {
