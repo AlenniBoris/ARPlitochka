@@ -295,13 +295,13 @@ private fun ArPickerPaletteSwatch(
                     imageUrl = swatchUrl,
                     contentDescription = palette.name,
                     modifier = Modifier
-                        .size(40.dp)
+                        .fillMaxSize()
                         .clip(CircleShape)
                 )
             } else {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .fillMaxSize()
                         .clip(CircleShape)
                         .background(Color.Gray)
                 )

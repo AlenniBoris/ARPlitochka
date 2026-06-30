@@ -4,8 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -108,18 +112,23 @@ actual fun IosArScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        ArTopBar(
-            onBack = { navigator.backFromAr(model.tileContext.tileSelection?.tileId) },
-            backTitle = model.selectedTileName,
-            modifier = Modifier.align(Alignment.TopStart)
-        )
-
-        ArZoneResetButton(
-            onClick = { coordinator.rescanSession() },
+        Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 56.dp, top = 56.dp)
-        )
+                .statusBarsPadding()
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ArTopBar(
+                onBack = { navigator.backFromAr(model.tileContext.tileSelection?.tileId) },
+                backTitle = model.selectedTileName
+            )
+
+            ArZoneResetButton(
+                onClick = { coordinator.rescanSession() },
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
 
         val hintText = compactHint
             ?: placementHint
@@ -148,25 +157,28 @@ actual fun IosArScreen(
             )
         )
 
-        when (contourState.stage) {
+        val showPlacementButtons = when (contourState.stage) {
             FloorWorkflowStage.PLACEMENT_EMPTY,
             FloorWorkflowStage.PLACEMENT_ACTIVE,
-            FloorWorkflowStage.CONTOUR_CLOSED -> {
-                ArContourActionButtons(
-                    hasCenterHit = contourState.hasCenterHit,
-                    isPolygonClosed = contourState.isPolygonClosed,
-                    hasPoints = contourState.placedPoints.isNotEmpty(),
-                    onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
-                    onUndoPoint = { coordinator.dispatchEvent(FloorArEvent.UndoPoint) },
-                    addContentDescription = "Добавить точку",
-                    undoContentDescription = "Отменить",
-                    okContentDescription = "Готово",
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 48.dp)
-                )
-            }
-            else -> Unit
+            FloorWorkflowStage.CONTOUR_CLOSED -> true
+            FloorWorkflowStage.SEARCHING_FLOOR -> contourState.placedPoints.isNotEmpty()
+            else -> false
+        }
+
+        if (showPlacementButtons) {
+            ArContourActionButtons(
+                hasCenterHit = contourState.hasCenterHit,
+                isPolygonClosed = contourState.isPolygonClosed,
+                hasPoints = contourState.placedPoints.isNotEmpty(),
+                onAddPoint = { coordinator.dispatchEvent(FloorArEvent.AddPoint) },
+                onUndoPoint = { coordinator.dispatchEvent(FloorArEvent.UndoPoint) },
+                addContentDescription = "Добавить точку",
+                undoContentDescription = "Отменить",
+                okContentDescription = "Готово",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 48.dp)
+            )
         }
 
         if (showContourRealignButton) {

@@ -68,13 +68,13 @@ private fun ArColorRailSwatch(
                 imageUrl = swatchUrl,
                 contentDescription = palette.name,
                 modifier = Modifier
-                    .size(36.dp)
+                    .fillMaxSize()
                     .clip(CircleShape)
             )
         } else {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .fillMaxSize()
                     .clip(CircleShape)
                     .background(Color.Gray)
             )

@@ -109,16 +109,18 @@ internal class IosArScreenModel(
     fun onPickerLayoutSelected(layoutId: String) {
         tileContext.onPickerLayoutSelected(layoutId, ::applyTileToContour)
         syncTileTextureToRenderer()
+        refreshTileUi()
     }
 
     fun onPickerPaletteSelected(paletteId: String) {
         tileContext.onPickerPaletteSelected(paletteId, ::applyTileToContour)
         syncTileTextureToRenderer()
+        refreshTileUi()
     }
 
     fun toggleTileVisibility() {
         if (contourState.isTileVisible) {
-            removeTileFill()
+            openTilePicker()
             return
         }
         if (tileContext.arTileTexture != null) {
