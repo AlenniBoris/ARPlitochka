@@ -48,7 +48,8 @@ internal class IosArSessionCoordinator(
     private val onTrackingNameChanged: (String) -> Unit,
     private val onPlaneDebugMetricsChanged: (IosPlaneDebugMetrics) -> Unit,
     private val onPlacementHintChanged: (String?) -> Unit,
-    private val onContourRealignAvailableChanged: (Boolean) -> Unit
+    private val onContourRealignAvailableChanged: (Boolean) -> Unit,
+    private val onTileTextureApplied: (Int) -> Unit = {}
 ) : NSObject(), ARSCNViewDelegateProtocol, ARSessionDelegateProtocol {
 
     private var sceneView: ARSCNView? = null
@@ -108,6 +109,7 @@ internal class IosArSessionCoordinator(
     private var lastContourSyncSourceLabel: String = "-"
     private var lastSyncAnchorOrigin: ArPoint3D? = null
     private var lastSyncAnchorOriginSeconds: Double = 0.0
+    private var pendingTileApplyRequestKey: Int? = null
 
     fun attach(sceneView: ARSCNView) {
         val now = currentTimeSeconds()
@@ -180,8 +182,19 @@ internal class IosArSessionCoordinator(
         sceneView = null
     }
 
-    fun setExternalTileTexture(texture: com.example.arplitka.shared.ar.contracts.model.ArTileTexture?) {
+    fun setExternalTileTexture(
+        texture: com.example.arplitka.shared.ar.contracts.model.ArTileTexture?,
+        applyRequestKey: Int = 0
+    ) {
         contourRenderer.setExternalTileTexture(texture)
+        if (texture != null && floorArController.currentState().isTileVisible) {
+            pendingTileApplyRequestKey = applyRequestKey
+        }
+        syncContourRenderer(
+            source = ContourRenderSyncSource.TAP,
+            frame = sceneView?.session?.currentFrame,
+            updatedPoints = floorArController.currentState().placedPoints
+        )
     }
 
     fun rescanSession() {
@@ -1032,6 +1045,13 @@ internal class IosArSessionCoordinator(
         }
 
         contourRenderer.syncIfChanged(effectiveState, lockedAlignedGeometry, anchorOrigin)
+            .also { applied ->
+                val pendingKey = pendingTileApplyRequestKey
+                if (applied && pendingKey != null && effectiveState.isTileVisible) {
+                    pendingTileApplyRequestKey = null
+                    onTileTextureApplied(pendingKey)
+                }
+            }
         
         if (source != ContourRenderSyncSource.DELEGATE) {
             lastFinalizedContourRenderSyncSeconds = now

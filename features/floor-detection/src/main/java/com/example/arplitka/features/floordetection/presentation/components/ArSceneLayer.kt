@@ -43,6 +43,7 @@ fun ArSceneLayer(
     onSessionUpdated: (Session, Frame) -> Unit,
     onSessionFailed: (Exception) -> Unit,
     onSizeChanged: (IntSize) -> Unit,
+    onTileTextureApplied: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val engine = rememberEngine()
@@ -135,6 +136,22 @@ fun ArSceneLayer(
 
             val textureMaterial = if (useTexture) sectionMaterials[uiState.textureRotation] else null
             val material = textureMaterial ?: if (!useTexture) fillMaterial else null
+
+            LaunchedEffect(
+                uiState.isTileApplying,
+                uiState.tileApplyRequestKey,
+                textureMaterial,
+                useTexture
+            ) {
+                if (
+                    uiState.isTileApplying &&
+                    useTexture &&
+                    textureMaterial != null
+                ) {
+                    onTileTextureApplied(uiState.tileApplyRequestKey)
+                }
+            }
+
             if (material != null) {
                 key(
                     aligned.boundsWidthM,

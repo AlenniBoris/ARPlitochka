@@ -68,7 +68,10 @@ data class FloorUiState(
     val selectedTile: Tile? = null,
     val currentHitPose: Pose? = null,
     val currentHitResult: HitResult? = null,
-    val snappedPointIndex: Int? = null
+    val snappedPointIndex: Int? = null,
+    val isTileApplying: Boolean = false,
+    val tileApplyRequestKey: Int = 0,
+    val arSessionResetKey: Int = 0
 ) {
     /** Android parity with shared `FloorContourUiState`: points stay until tile mode. */
     val showContourPoints: Boolean

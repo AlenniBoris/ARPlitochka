@@ -13,6 +13,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,6 +35,7 @@ import com.example.arplitka.shared.ar.contracts.model.ArPoint3D
 import com.example.arplitka.shared.ar.domain.geometry.buildAlignedSectionGeometry
 import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.shared.ui.kit.ar.ArActionRail
+import com.example.arplitka.shared.ui.kit.ar.ArApplyingOverlay
 import com.example.arplitka.shared.ui.kit.ar.ArCompactHint
 import com.example.arplitka.shared.ui.kit.ar.ArColorRail
 import com.example.arplitka.shared.ui.kit.ar.ArContourActionButtons
@@ -100,7 +102,8 @@ fun FloorArScreen(
         onRotateTexture = viewModel::rotateTexture,
         onToggleDebugPanel = viewModel::toggleDebugPanel,
         onClearUserMessage = viewModel::clearUserMessage,
-        onRetryCatalogLoad = viewModel::retryCatalogLoad
+        onRetryCatalogLoad = viewModel::retryCatalogLoad,
+        onTileTextureApplied = viewModel::onTileTextureApplied
     )
 }
 
@@ -123,7 +126,8 @@ private fun FloorArContent(
     onRotateTexture: () -> Unit,
     onToggleDebugPanel: () -> Unit,
     onClearUserMessage: () -> Unit,
-    onRetryCatalogLoad: () -> Unit
+    onRetryCatalogLoad: () -> Unit,
+    onTileTextureApplied: (Int) -> Unit
 ) {
     val context = LocalContext.current
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
@@ -164,18 +168,21 @@ private fun FloorArContent(
             .fillMaxSize()
             .onSizeChanged { viewportSize = it }
     ) {
-        ArSceneLayer(
-            uiState = uiState,
-            pavingBitmap = pavingBitmap,
-            onSessionUpdated = { session, frame ->
-                onSessionUpdated(session, frame, viewportSize)
-            },
-            onSessionFailed = { exception ->
-                sessionErrorMessage = exception.localizedMessage ?: "AR session failed"
-            },
-            onSizeChanged = { viewportSize = it },
-            modifier = Modifier.fillMaxSize()
-        )
+        key(uiState.arSessionResetKey) {
+            ArSceneLayer(
+                uiState = uiState,
+                pavingBitmap = pavingBitmap,
+                onSessionUpdated = { session, frame ->
+                    onSessionUpdated(session, frame, viewportSize)
+                },
+                onSessionFailed = { exception ->
+                    sessionErrorMessage = exception.localizedMessage ?: "AR session failed"
+                },
+                onSizeChanged = { viewportSize = it },
+                onTileTextureApplied = onTileTextureApplied,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -323,6 +330,11 @@ private fun FloorArContent(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp)
+        )
+
+        ArApplyingOverlay(
+            visible = uiState.isTileApplying,
+            modifier = Modifier.fillMaxSize()
         )
     }
 }

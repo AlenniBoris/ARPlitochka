@@ -43,6 +43,11 @@ internal class IosArScreenModel(
     var userException by mutableStateOf<CommonException?>(null)
         private set
 
+    var isTileApplying by mutableStateOf(false)
+        private set
+
+    private var tileApplyRequestKey = 0
+
     val tileContext = IosArTileContext(
         getTilesUseCase = getTilesUseCase,
         buildArTileTextureUseCase = buildArTileTextureUseCase,
@@ -58,7 +63,8 @@ internal class IosArScreenModel(
         onTrackingNameChanged = { trackingStateName = it },
         onPlaneDebugMetricsChanged = { planeDebugMetrics = it },
         onPlacementHintChanged = { placementHint = it },
-        onContourRealignAvailableChanged = { showContourRealignButton = it }
+        onContourRealignAvailableChanged = { showContourRealignButton = it },
+        onTileTextureApplied = ::onTileTextureApplied
     )
 
     fun loadInitialSelection(tileId: Long?, layoutId: String?, paletteId: String?) {
@@ -82,6 +88,10 @@ internal class IosArScreenModel(
     }
 
     fun onPickerTileSelected(tileId: Long) {
+        if (isTileApplying) return
+        val willApply = contourState.isTileVisible || tileContext.pendingAutoApply
+        if (willApply) beginTileApply()
+
         tileContext.onPickerTileSelected(
             tileId = tileId,
             isTileVisible = contourState.isTileVisible,
@@ -100,6 +110,7 @@ internal class IosArScreenModel(
     }
 
     fun deselectTile() {
+        isTileApplying = false
         removeTileFill()
         tileContext.clearTileSelection()
         syncTileTextureToRenderer()
@@ -107,23 +118,31 @@ internal class IosArScreenModel(
     }
 
     fun onPickerLayoutSelected(layoutId: String) {
+        if (isTileApplying) return
+        if (contourState.isFinalized) beginTileApply()
+
         tileContext.onPickerLayoutSelected(layoutId, ::applyTileToContour)
         syncTileTextureToRenderer()
         refreshTileUi()
     }
 
     fun onPickerPaletteSelected(paletteId: String) {
+        if (isTileApplying) return
+        if (contourState.isTileVisible) beginTileApply()
+
         tileContext.onPickerPaletteSelected(paletteId, ::applyTileToContour)
         syncTileTextureToRenderer()
         refreshTileUi()
     }
 
     fun toggleTileVisibility() {
+        if (isTileApplying) return
         if (contourState.isTileVisible) {
             openTilePicker()
             return
         }
         if (tileContext.arTileTexture != null) {
+            beginTileApply()
             applyTileToContour()
             compactHint = "Плитка наложена"
             return
@@ -151,6 +170,7 @@ internal class IosArScreenModel(
     fun onContourConfirmedWithAutoApply() {
         if (tileContext.pendingAutoApply && tileContext.arTileTexture != null) {
             tileContext.pendingAutoApply = false
+            beginTileApply()
             applyTileToContour()
             compactHint = "Плитка наложена"
         } else if (contourState.isFinalized) {
@@ -163,7 +183,17 @@ internal class IosArScreenModel(
     }
 
     fun syncTileTextureToRenderer() {
-        coordinator.setExternalTileTexture(tileContext.arTileTexture)
+        coordinator.setExternalTileTexture(tileContext.arTileTexture, tileApplyRequestKey)
+    }
+
+    private fun beginTileApply() {
+        tileApplyRequestKey += 1
+        isTileApplying = true
+    }
+
+    private fun onTileTextureApplied(requestKey: Int) {
+        if (!isTileApplying || requestKey != tileApplyRequestKey) return
+        isTileApplying = false
     }
 
     fun clearUserMessage() {

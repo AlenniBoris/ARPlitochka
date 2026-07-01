@@ -35,6 +35,7 @@ import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.shared.tiles.domain.usecase.BuildArTileTextureUseCase
 import com.example.arplitka.shared.tiles.domain.usecase.GetTilesUseCase
 import com.example.arplitka.shared.ui.kit.ar.ArActionRail
+import com.example.arplitka.shared.ui.kit.ar.ArApplyingOverlay
 import com.example.arplitka.shared.ui.kit.ar.ArCompactHint
 import com.example.arplitka.shared.ui.kit.ar.ArColorRail
 import com.example.arplitka.shared.ui.kit.ar.ArContourActionButtons
@@ -255,6 +256,11 @@ actual fun IosArScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp)
+        )
+
+        ArApplyingOverlay(
+            visible = model.isTileApplying,
+            modifier = Modifier.fillMaxSize()
         )
     }
 }

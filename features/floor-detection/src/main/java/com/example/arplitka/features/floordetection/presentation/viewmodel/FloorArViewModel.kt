@@ -243,6 +243,7 @@ class FloorArViewModel(
             if (state.stage != FloorWorkflowStage.CONTOUR_CLOSED) return@update state
 
             if (state.pendingAutoApplyTile && state.arTileTexture != null) {
+                beginTileApply()
                 val applied = applyTileTexture(state)
                 return@update applied.copy(
                     isContourConfirmed = true,
@@ -305,6 +306,7 @@ class FloorArViewModel(
 
     fun onPickerTileSelected(tileId: Long) {
         val state = _uiState.value
+        if (state.isTileApplying) return
         if (state.tileSelection?.tileId == tileId) {
             deselectTile()
             return
@@ -317,23 +319,30 @@ class FloorArViewModel(
             return
         }
 
+        val applyImmediately = state.stage.ordinal >= FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
+        if (applyImmediately) beginTileApply()
+
         applySelectedTile(
             tile = tile,
             layoutId = null,
             paletteId = null,
             autoApplyOnConfirm = false,
-            applyImmediately = state.stage.ordinal >= FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
+            applyImmediately = applyImmediately
         )
         refreshPickerState()
     }
 
     fun onPickerLayoutSelected(layoutId: String) {
+        if (_uiState.value.isTileApplying) return
         val tile = _uiState.value.selectedTile ?: return
         val selection = _uiState.value.tileSelection ?: return
         if (selection.layoutId == layoutId) return
 
         val layout = tile.layouts.find { it.id == layoutId } ?: return
         val palette = layout.palettes.firstOrNull() ?: return
+        val applyImmediately = _uiState.value.stage.ordinal >= FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
+        if (applyImmediately) beginTileApply()
+
         applySelection(
             tile = tile,
             selection = TileSelection(
@@ -342,25 +351,29 @@ class FloorArViewModel(
                 paletteId = palette.id,
                 selectedColorsBySlot = palette.selectedColorsBySlot
             ),
-            applyImmediately = _uiState.value.stage.ordinal >= FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
+            applyImmediately = applyImmediately
         )
         refreshPickerState()
     }
 
     fun onPickerPaletteSelected(paletteId: String) {
+        if (_uiState.value.isTileApplying) return
         val tile = _uiState.value.selectedTile ?: return
         val selection = _uiState.value.tileSelection ?: return
         if (selection.paletteId == paletteId) return
 
         val layout = tile.layouts.find { it.id == selection.layoutId } ?: tile.layouts.firstOrNull() ?: return
         val palette = layout.palettes.find { it.id == paletteId } ?: return
+        val applyImmediately = _uiState.value.isTileVisible
+        if (applyImmediately) beginTileApply()
+
         applySelection(
             tile = tile,
             selection = selection.copy(
                 paletteId = palette.id,
                 selectedColorsBySlot = palette.selectedColorsBySlot
             ),
-            applyImmediately = _uiState.value.isTileVisible
+            applyImmediately = applyImmediately
         )
         refreshPickerState()
     }
@@ -396,6 +409,7 @@ class FloorArViewModel(
                     pendingAutoApplyTile = false,
                     compactHint = "Плитка убрана",
                     isTileVisible = false,
+                    isTileApplying = false,
                     stage = FloorWorkflowStage.CONTOUR_CONFIRMED,
                     tilePicker = buildPickerState(
                         state = state,
@@ -527,7 +541,8 @@ class FloorArViewModel(
                 pendingAutoApplyTile = state.pendingAutoApplyTile,
                 colorRailPalettes = state.colorRailPalettes,
                 catalogState = state.catalogState,
-                selectedTile = state.selectedTile
+                selectedTile = state.selectedTile,
+                arSessionResetKey = state.arSessionResetKey + 1
             )
             val nextStage = calculateNextStage(newState)
             applyContourPhaseUi(newState.copy(stage = nextStage))
@@ -567,6 +582,7 @@ class FloorArViewModel(
     fun toggleTileVisibility() {
         val state = _uiState.value
         if (state.stage.ordinal < FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal) return
+        if (state.isTileApplying) return
 
         if (state.isTileVisible) {
             removeTileFill()
@@ -574,6 +590,7 @@ class FloorArViewModel(
         }
 
         if (state.arTileTexture != null) {
+            beginTileApply()
             _uiState.update {
                 applyTileTexture(it).copy(
                     compactHint = "Плитка наложена"
@@ -583,6 +600,21 @@ class FloorArViewModel(
         }
 
         openTilePicker()
+    }
+
+    fun onTileTextureApplied(requestKey: Int) {
+        val state = _uiState.value
+        if (!state.isTileApplying || state.tileApplyRequestKey != requestKey) return
+        _uiState.update { it.copy(isTileApplying = false) }
+    }
+
+    private fun beginTileApply() {
+        _uiState.update {
+            it.copy(
+                isTileApplying = true,
+                tileApplyRequestKey = it.tileApplyRequestKey + 1
+            )
+        }
     }
 
     fun reset() {
