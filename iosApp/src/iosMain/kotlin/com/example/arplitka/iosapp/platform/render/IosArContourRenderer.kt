@@ -28,7 +28,6 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
-import com.example.arplitka.shared.ui.kit.utils.textureRepeatMeters
 import com.example.arplitka.shared.ui.kit.utils.textureUrlToResourceStem
 
 private const val POINT_RADIUS_M = 0.016f
@@ -502,17 +501,24 @@ internal class IosArContourRenderer {
         val external = externalTileTexture
         if (external != null) {
             val stem = textureUrlToResourceStem(external.textureUrl)
-            val widthM = textureRepeatMeters(external.repeatWidthMm)
-            val heightM = textureRepeatMeters(external.repeatLengthMm)
+            val sectionWidthM = aligned.boundsWidthM
+            val sectionHeightM = aligned.boundsHeightM
             val rotation = state.textureRotation.degrees + external.rotationDegrees
             val cacheKey = TileMaterialKey.External(
                 resourceStem = stem,
-                widthM = widthM,
-                heightM = heightM,
+                sectionWidthM = sectionWidthM,
+                sectionHeightM = sectionHeightM,
+                repeatWidthMm = external.repeatWidthMm,
+                repeatLengthMm = external.repeatLengthMm,
                 rotationDegrees = rotation
             )
             return tileMaterialCache.getOrPut(cacheKey) {
-                val image = pg_create_tile_section_pattern_image(stem, widthM, heightM, rotation)
+                val image = pg_create_tile_section_pattern_image(
+                    stem,
+                    sectionWidthM,
+                    sectionHeightM,
+                    rotation
+                )
                 if (image != null) {
                     SCNMaterial().apply {
                         diffuse.contents = image
@@ -555,8 +561,16 @@ internal class IosArContourRenderer {
         key = key * 31 + textureRotation.ordinal
 
         if (aligned != null) {
-            // Rotation is critical for the batch key
             key = key * 31 + (aligned.rotationYDegrees * 100f).roundToInt()
+            key = key * 31 + (aligned.boundsWidthM * precision).roundToInt()
+            key = key * 31 + (aligned.boundsHeightM * precision).roundToInt()
+        }
+
+        externalTileTexture?.let { external ->
+            key = key * 31 + textureUrlToResourceStem(external.textureUrl).hashCode()
+            key = key * 31 + external.repeatWidthMm
+            key = key * 31 + external.repeatLengthMm
+            key = key * 31 + (external.rotationDegrees * 100f).roundToInt()
         }
         
         if (anchorOrigin != null) {
@@ -604,8 +618,10 @@ internal class IosArContourRenderer {
         val kind: Int,
         val tileTypeOrdinal: Int = 0,
         val resourceStem: String = "",
-        val widthM: Float = 0f,
-        val heightM: Float = 0f,
+        val sectionWidthM: Float = 0f,
+        val sectionHeightM: Float = 0f,
+        val repeatWidthMm: Int = 0,
+        val repeatLengthMm: Int = 0,
         val rotationDegrees: Float = 0f
     ) {
         companion object {
@@ -614,14 +630,18 @@ internal class IosArContourRenderer {
 
             fun External(
                 resourceStem: String,
-                widthM: Float,
-                heightM: Float,
+                sectionWidthM: Float,
+                sectionHeightM: Float,
+                repeatWidthMm: Int,
+                repeatLengthMm: Int,
                 rotationDegrees: Float
             ): TileMaterialKey = TileMaterialKey(
                 kind = 1,
                 resourceStem = resourceStem,
-                widthM = widthM,
-                heightM = heightM,
+                sectionWidthM = sectionWidthM,
+                sectionHeightM = sectionHeightM,
+                repeatWidthMm = repeatWidthMm,
+                repeatLengthMm = repeatLengthMm,
                 rotationDegrees = rotationDegrees
             )
         }
