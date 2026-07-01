@@ -1855,6 +1855,50 @@ static const CGFloat PG_TILE_TEXTURE_WIDTH_M = 0.78f;
 static const CGFloat PG_TILE_TEXTURE_HEIGHT_M = 1.04f;
 static const int PG_MIN_SECTION_TEXTURE_PX = 64;
 static const int PG_MAX_SECTION_TEXTURE_PX = 2048;
+static const int PG_MAX_SECTION_PATTERN_DRAWS = 16384;
+
+static BOOL PGIsFinitePositive(CGFloat value) {
+    return isfinite(value) && value > 0.0;
+}
+
+static void PGAdjustTileDrawSizeForBudget(
+    CGRect drawRect,
+    CGFloat *tileW,
+    CGFloat *tileH
+) {
+    if (tileW == NULL || tileH == NULL) {
+        return;
+    }
+    CGFloat width = *tileW;
+    CGFloat height = *tileH;
+    if (width <= 0.0 || height <= 0.0) {
+        return;
+    }
+
+    CGFloat drawWidth = drawRect.size.width;
+    CGFloat drawHeight = drawRect.size.height;
+    if (drawWidth <= 0.0 || drawHeight <= 0.0) {
+        return;
+    }
+
+    int columns = (int)ceil(drawWidth / width);
+    int rows = (int)ceil(drawHeight / height);
+    if (columns < 1) {
+        columns = 1;
+    }
+    if (rows < 1) {
+        rows = 1;
+    }
+
+    long long totalDraws = (long long)columns * (long long)rows;
+    if (totalDraws <= PG_MAX_SECTION_PATTERN_DRAWS) {
+        return;
+    }
+
+    CGFloat scale = sqrt((CGFloat)totalDraws / (CGFloat)PG_MAX_SECTION_PATTERN_DRAWS);
+    *tileW = width * scale;
+    *tileH = height * scale;
+}
 
 UIImage *pg_create_tile_section_pattern_image(
     const char *resourceName,
@@ -1863,7 +1907,10 @@ UIImage *pg_create_tile_section_pattern_image(
     float rotationDegrees
 ) {
     UIImage *source = PGLoadTileTextureSource(resourceName);
-    if (source == nil || widthMeters <= 0.0f || heightMeters <= 0.0f) {
+    if (source == nil ||
+        !PGIsFinitePositive((CGFloat)widthMeters) ||
+        !PGIsFinitePositive((CGFloat)heightMeters) ||
+        !isfinite(rotationDegrees)) {
         return nil;
     }
     CGImageRef sourceImage = source.CGImage;
@@ -1882,6 +1929,9 @@ UIImage *pg_create_tile_section_pattern_image(
     if (outH < PG_MIN_SECTION_TEXTURE_PX) outH = PG_MIN_SECTION_TEXTURE_PX;
     if (outW > PG_MAX_SECTION_TEXTURE_PX) outW = PG_MAX_SECTION_TEXTURE_PX;
     if (outH > PG_MAX_SECTION_TEXTURE_PX) outH = PG_MAX_SECTION_TEXTURE_PX;
+    if (outW <= 0 || outH <= 0) {
+        return nil;
+    }
 
     CGSize outputSize = CGSizeMake((CGFloat)outW, (CGFloat)outH);
     UIGraphicsBeginImageContextWithOptions(outputSize, NO, 1.0);
@@ -1894,6 +1944,12 @@ UIImage *pg_create_tile_section_pattern_image(
 
         CGFloat tileW = PG_TILE_TEXTURE_WIDTH_M * outputSize.width / (CGFloat)widthMeters;
         CGFloat tileH = PG_TILE_TEXTURE_HEIGHT_M * outputSize.height / (CGFloat)heightMeters;
+        if (tileW <= 0.0) {
+            tileW = 1.0;
+        }
+        if (tileH <= 0.0) {
+            tileH = 1.0;
+        }
         CGFloat diagonal = sqrt(
             outputSize.width * outputSize.width + outputSize.height * outputSize.height
         );
@@ -1903,6 +1959,7 @@ UIImage *pg_create_tile_section_pattern_image(
             outputSize.width + diagonal * 2.0,
             outputSize.height + diagonal * 2.0
         );
+        PGAdjustTileDrawSizeForBudget(drawRect, &tileW, &tileH);
         for (CGFloat y = drawRect.origin.y; y < drawRect.origin.y + drawRect.size.height; y += tileH) {
             for (CGFloat x = drawRect.origin.x; x < drawRect.origin.x + drawRect.size.width; x += tileW) {
                 [source drawInRect:CGRectMake(x, y, tileW, tileH)];

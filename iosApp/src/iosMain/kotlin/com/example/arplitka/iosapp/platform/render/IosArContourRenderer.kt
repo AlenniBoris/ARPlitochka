@@ -42,6 +42,7 @@ private const val LOD_LINE_WIDTH_SCALE = 0.80f
 private const val POSITION_QUANT_M = 0.005f // Increased to 5mm to ignore sensor noise
 private const val TILE_WIDTH_M = 0.78f
 private const val TILE_HEIGHT_M = 1.04f
+private const val MAX_SECTION_BOUNDS_M = 100f
 
 @OptIn(ExperimentalForeignApi::class)
 internal class IosArContourRenderer {
@@ -492,6 +493,11 @@ internal class IosArContourRenderer {
         return key
     }
 
+    private fun isValidSectionBounds(widthM: Float, heightM: Float): Boolean =
+        widthM.isFinite() && heightM.isFinite() &&
+            widthM > 0f && heightM > 0f &&
+            widthM <= MAX_SECTION_BOUNDS_M && heightM <= MAX_SECTION_BOUNDS_M
+
     private fun resolveFillMaterial(
         state: FloorContourUiState,
         aligned: AlignedSectionGeometry
@@ -504,6 +510,9 @@ internal class IosArContourRenderer {
             val sectionWidthM = aligned.boundsWidthM
             val sectionHeightM = aligned.boundsHeightM
             val rotation = state.textureRotation.degrees + external.rotationDegrees
+            if (!isValidSectionBounds(sectionWidthM, sectionHeightM)) {
+                return createTileMaterial(resourceName = state.selectedTileType.resourceName)
+            }
             val cacheKey = TileMaterialKey.External(
                 resourceStem = stem,
                 sectionWidthM = sectionWidthM,
