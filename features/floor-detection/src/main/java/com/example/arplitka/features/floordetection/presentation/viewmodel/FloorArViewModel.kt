@@ -526,7 +526,7 @@ class FloorArViewModel(
     fun clearSection() {
         _uiState.update { state ->
             state.points.forEach { point -> point.anchor.detach() }
-            val newState = FloorUiState(
+            val baseState = FloorUiState(
                 trackingState = state.trackingState,
                 horizontalPlaneCount = state.horizontalPlaneCount,
                 selectedArea = state.selectedArea,
@@ -535,17 +535,22 @@ class FloorArViewModel(
                 status = state.status,
                 instruction = state.instruction,
                 detectionState = state.detectionState,
-                tileSelection = state.tileSelection,
-                arTileTexture = state.arTileTexture,
-                selectedTileName = state.selectedTileName,
-                pendingAutoApplyTile = state.pendingAutoApplyTile,
-                colorRailPalettes = state.colorRailPalettes,
                 catalogState = state.catalogState,
-                selectedTile = state.selectedTile,
+                showDebugPanel = state.showDebugPanel,
                 arSessionResetKey = state.arSessionResetKey + 1
             )
-            val nextStage = calculateNextStage(newState)
-            applyContourPhaseUi(newState.copy(stage = nextStage))
+            val nextStage = calculateNextStage(baseState)
+            val stagedState = baseState.copy(stage = nextStage)
+            applyContourPhaseUi(
+                stagedState.copy(
+                    tilePicker = buildPickerState(
+                        state = stagedState,
+                        isVisible = state.tilePicker.isVisible,
+                        selectedTile = null,
+                        selection = null
+                    )
+                )
+            )
         }
     }
 

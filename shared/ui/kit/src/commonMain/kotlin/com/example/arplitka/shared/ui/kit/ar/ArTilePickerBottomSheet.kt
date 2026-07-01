@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +27,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -133,12 +135,23 @@ internal fun ArTilePickerSheetContent(
     onPaletteSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val tileListState = rememberLazyListState()
+
+    LaunchedEffect(state.isVisible, state.selectedTileId, state.tiles) {
+        if (!state.isVisible) return@LaunchedEffect
+        val selectedIndex = state.tiles.indexOfFirst { it.id == state.selectedTileId }
+        if (selectedIndex >= 0) {
+            tileListState.scrollToItem(selectedIndex)
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(bottom = 24.dp)
     ) {
         LazyRow(
+            state = tileListState,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {

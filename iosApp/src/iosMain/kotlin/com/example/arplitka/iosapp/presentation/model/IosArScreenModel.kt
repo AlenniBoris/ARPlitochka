@@ -186,6 +186,15 @@ internal class IosArScreenModel(
         showDebugPanel = !showDebugPanel
     }
 
+    fun resetArSessionAndSelection() {
+        isTileApplying = false
+        tileContext.clearTileSelection()
+        coordinator.rescanSession()
+        syncTileTextureToRenderer()
+        compactHint = null
+        refreshTileUi()
+    }
+
     fun syncTileTextureToRenderer() {
         coordinator.setExternalTileTexture(tileContext.arTileTexture, tileApplyRequestKey)
     }

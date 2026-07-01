@@ -126,7 +126,7 @@ actual fun IosArScreen(
             )
 
             ArZoneResetButton(
-                onClick = { coordinator.rescanSession() },
+                onClick = model::resetArSessionAndSelection,
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
