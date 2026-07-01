@@ -111,7 +111,7 @@ internal class IosArTileContext(
 
     fun onPickerTileSelected(
         tileId: Long,
-        isTileVisible: Boolean,
+        applyImmediately: Boolean,
         onDeselect: () -> Unit,
         onApply: () -> Unit
     ) {
@@ -133,7 +133,7 @@ internal class IosArTileContext(
             paletteId = null,
             autoApplyOnConfirm = false
         )
-        if (pendingAutoApply || isTileVisible) {
+        if (applyImmediately || pendingAutoApply) {
             onApply()
             pendingAutoApply = false
         }

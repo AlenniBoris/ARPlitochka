@@ -8,6 +8,7 @@ import com.example.arplitka.iosapp.platform.ar.IosArSessionCoordinator
 import com.example.arplitka.shared.core.domain.model.CommonException
 import com.example.arplitka.shared.ar.domain.FloorArController
 import com.example.arplitka.shared.ar.domain.model.FloorContourUiState
+import com.example.arplitka.shared.ar.domain.model.FloorWorkflowStage
 import com.example.arplitka.shared.tiles.domain.usecase.BuildArTileTextureUseCase
 import com.example.arplitka.shared.tiles.domain.usecase.GetTilesUseCase
 import com.example.arplitka.shared.ui.kit.ar.ArTilePickerState
@@ -89,12 +90,13 @@ internal class IosArScreenModel(
 
     fun onPickerTileSelected(tileId: Long) {
         if (isTileApplying) return
-        val willApply = contourState.isTileVisible || tileContext.pendingAutoApply
-        if (willApply) beginTileApply()
+        val applyImmediately =
+            contourState.stage.ordinal >= FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
+        if (applyImmediately) beginTileApply()
 
         tileContext.onPickerTileSelected(
             tileId = tileId,
-            isTileVisible = contourState.isTileVisible,
+            applyImmediately = applyImmediately,
             onDeselect = ::deselectTile,
             onApply = ::applyTileToContour
         )
@@ -119,7 +121,9 @@ internal class IosArScreenModel(
 
     fun onPickerLayoutSelected(layoutId: String) {
         if (isTileApplying) return
-        if (contourState.isFinalized) beginTileApply()
+        val applyImmediately =
+            contourState.stage.ordinal >= FloorWorkflowStage.CONTOUR_CONFIRMED.ordinal
+        if (applyImmediately) beginTileApply()
 
         tileContext.onPickerLayoutSelected(layoutId, ::applyTileToContour)
         syncTileTextureToRenderer()
